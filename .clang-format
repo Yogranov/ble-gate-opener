@@ -1,0 +1,29 @@
+IndentWidth: 4
+ColumnLimit: 0
+AccessModifierOffset: 0
+NamespaceIndentation: None
+BinPackParameters: true
+BinPackArguments: true
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterEnum: true
+  AfterStruct: true
+  AfterClass: true
+  SplitEmptyFunction: true
+  AfterControlStatement: false
+  AfterNamespace: false
+  AfterFunction: false
+  AfterUnion: true
+  AfterExternBlock: false
+  BeforeCatch: false
+  BeforeElse: false
+  SplitEmptyRecord: true
+  SplitEmptyNamespace: true
+IndentCaseLabels: false
+SpacesBeforeTrailingComments: 3
+Cpp11BracedListStyle: false
+AlignTrailingComments: true
+AlignConsecutiveMacros: true
+ExperimentalAutoDetectBinPacking: true
+AllowAllParametersOfDeclarationOnNextLine: false
+SortIncludes: false
