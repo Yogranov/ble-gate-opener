@@ -10,8 +10,8 @@
 #define ESP32DK_LED                    2
 #define REMOTE_CONTROLLER_GPIO         18
 #define TRANSMIT_DURATION_SEC          2
-#define TRANSMIT_COOLDOWN_DURATION_SEC 10
-#define MIN_RSSI                       -90
+#define TRANSMIT_COOLDOWN_DURATION_SEC 20
+#define MIN_RSSI                       0   // 0 means no limit, otherwise it should be a negative number
 #define IBEACON_MAC_ADDRESS            "c5:b0:e6:53:59:02"
 #define IBEACON_UUID                   "fda50693-a4e2-4fb1-afcf-c6eb07647825"
 #define SEC_TO_MS(x)                   ((x) * 1000)
@@ -54,8 +54,10 @@ void loop() {
 
 #if DEBUG == false
 void ibeacon_founded(BLEAdvertisedDevice &device) {
+#if MIN_RSSI != 0
     if (device.haveRSSI() == false || device.getRSSI() < MIN_RSSI)
         return;
+#endif
 
     digitalWrite(REMOTE_CONTROLLER_GPIO, HIGH);
     digitalWrite(ESP32DK_LED, HIGH);
