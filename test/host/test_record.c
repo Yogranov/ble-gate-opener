@@ -223,6 +223,28 @@ static void reader_skips_garbage_to_the_next_record(void) {
     CHECK(!yg_record_next(raw, sizeof(raw), &pos, &back));
 }
 
+static void every_record_ends_in_a_byte_that_cannot_look_blank(void) {
+    /* After a restart the write position is found by looking for blank flash. */
+    for (uint32_t i = 0; i < 70000; i++) {
+        yg_rec_press(&r, i, i * 7, YG_PRESS_AUTO, (int8_t)-80, i, YG_SET_POINT_ANY);
+        size_t n = yg_record_encode(&r, raw);
+        if (raw[n - 1] == 0xFF) {
+            CHECK(raw[n - 1] != 0xFF);
+            break;
+        }
+    }
+    CHECK_INT(raw[0], 0xA5);
+}
+
+static void a_record_without_its_end_mark_does_not_count(void) {
+    yg_rec_first_heard(&r, 1, 2, -91);
+    memset(raw, 0xFF, sizeof(raw));
+    size_t n = yg_record_encode(&r, raw);
+    raw[n - 1] = 0xFF;
+    size_t pos = 0;
+    CHECK(!yg_record_next(raw, sizeof(raw), &pos, &back));
+}
+
 static void small_buffer_reports_overflow(void) {
     yg_rec_first_heard(&r, 1, 2, -91);
     char tiny[8];
@@ -236,6 +258,8 @@ int main(void) {
     RUN(capture_records);
     RUN(flipped_bit_is_rejected);
     RUN(reader_skips_garbage_to_the_next_record);
+    RUN(every_record_ends_in_a_byte_that_cannot_look_blank);
+    RUN(a_record_without_its_end_mark_does_not_count);
     RUN(small_buffer_reports_overflow);
     return TEST_RESULT();
 }

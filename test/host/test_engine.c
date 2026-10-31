@@ -94,6 +94,16 @@ static void run(uint32_t ms, float accel, float yaw, uint32_t advert_ms, int8_t 
 }
 
 static void still(uint32_t ms, uint32_t advert_ms, int8_t rssi) { run(ms, 0, 0, advert_ms, rssi); }
+
+/* The sensor stops answering. */
+static void sensor_down(uint32_t ms, bool absent, uint32_t advert_ms, int8_t rssi) {
+    for (uint32_t t = 0; t < ms; t += 20) {
+        yg_engine_on_imu_failed(e, now, absent);
+        if (advert_ms && t % advert_ms == 0) yg_engine_on_advert(e, now, &GATE, rssi, &ib);
+        if (t % 100 == 0) yg_engine_tick(e, now);
+        now += 20;
+    }
+}
 static void pull_out(uint32_t ms, uint32_t advert_ms, int8_t rssi) { run(ms, 0.1f, 0, advert_ms, rssi); }
 
 static int count_records(uint8_t type) {
@@ -226,7 +236,7 @@ static void sensor_failure_falls_back_to_the_threshold(void) {
     setup(true);
     still(SEC(3), 0, 0);
     CHECK_INT(fake.last_led, YG_LED_OFF);
-    for (int i = 0; i < 10; i++) yg_engine_on_imu_failed(e, now);
+    sensor_down(SEC(6), false, 0, 0);
     CHECK_INT(count_records(YG_REC_ERROR), 1);
     CHECK_INT(fake.last_led, YG_LED_SENSOR_FAILED);
     yg_engine_on_advert(e, now, &GATE, -95, &ib);
@@ -239,18 +249,68 @@ static void sensor_failure_falls_back_to_the_threshold(void) {
 }
 
 static void absent_sensor_falls_back_at_boot(void) {
+    /* Not at the first advert: only once it has really been missing for a while. */
     setup(true);
-    yg_engine_on_imu_absent(e, now);
+    sensor_down(4800, true, 300, -85);
+    CHECK_INT(fake.presses, 0);
+    CHECK_INT(count_records(YG_REC_ERROR), 0);
+    sensor_down(400, true, 0, 0);
     CHECK_INT(count_records(YG_REC_ERROR), 1);
     CHECK_INT(fake.last_led, YG_LED_SENSOR_FAILED);
     yg_engine_on_advert(e, now, &GATE, -85, &ib);
     CHECK_INT(fake.presses, 1);
 }
 
+static void short_sensor_dropouts_never_press_a_parked_car(void) {
+    setup(true);
+    still(SEC(3), 300, -85);
+    for (int i = 0; i < 5; i++) {
+        sensor_down(200, false, 300, -85);
+        still(SEC(130), 300, -85);
+    }
+    CHECK_INT(fake.presses, 0);
+    CHECK_INT(count_records(YG_REC_ERROR), 0);
+}
+
+static void a_fallback_press_stays_single_after_the_sensor_recovers(void) {
+    setup(true);
+    still(SEC(3), 300, -85);
+    sensor_down(SEC(6), false, 300, -85);
+    CHECK_INT(fake.presses, 1);
+    still(SEC(300), 300, -85);
+    CHECK_INT(fake.presses, 1);
+    CHECK_INT(count_records(YG_REC_REARM), 0);
+    still(SEC(70), 0, 0);
+    CHECK_INT(count_records(YG_REC_REARM), 1);
+    still(SEC(5), 300, -85);
+    CHECK_INT(fake.presses, 1);
+}
+
+static void the_motion_estimate_starts_over_after_an_outage(void) {
+    /* The unit may have been moved while the sensor was gone. */
+    setup(true);
+    still(SEC(3), 0, 0);
+    sensor_down(SEC(6), false, 0, 0);
+    run(SEC(20), 0.1f, 0, 0, 0);
+    CHECK_INT(count_records(YG_REC_MOTION), 0);
+    run(SEC(5), 0.1f, 0, 300, -85);
+    CHECK_INT(fake.presses, 0);
+}
+
+static void set_point_here_forgets_the_old_beacon(void) {
+    setup(true);
+    for (int i = 0; i < 5; i++) yg_engine_on_advert(e, now, &GATE, -40, &ib);
+    yg_engine_pair_set(e, now, OTHER.addr, OTHER.type);
+    CHECK(!yg_engine_setpoint_here(e, now));
+    yg_engine_on_advert(e, now, &OTHER, -80, &ib);
+    CHECK(yg_engine_setpoint_here(e, now));
+    CHECK_INT(s.set_point_dbm, -80);
+}
+
 static void sensor_recovery_is_logged_and_restores_the_rule(void) {
     setup(true);
     still(SEC(3), 0, 0);
-    for (int i = 0; i < 10; i++) yg_engine_on_imu_failed(e, now);
+    sensor_down(SEC(6), false, 0, 0);
     still(SEC(6), 0, 0);
     CHECK_INT(count_records(YG_REC_ERROR), 2);
     CHECK_INT(fake.last_led, YG_LED_OFF);
@@ -365,6 +425,8 @@ static void set_point_by_value_and_any(void) {
     CHECK(yg_engine_setpoint_dbm(e, now, YG_SET_POINT_ANY));
     CHECK_INT(s.set_point_dbm, YG_SET_POINT_ANY);
     CHECK(!yg_engine_setpoint_dbm(e, now, -20));
+    CHECK(!yg_engine_setpoint_dbm(e, now, 200));
+    CHECK(!yg_engine_setpoint_dbm(e, now, 256));
     CHECK_INT(s.set_point_dbm, YG_SET_POINT_ANY);
 }
 
@@ -611,7 +673,7 @@ static void debug_view_shows_raw_sensor_values(void) {
     still(SEC(3), 0, 0);
     static char buf[512];
     CHECK(yg_engine_debug_json(e, now, buf, sizeof(buf)) > 0);
-    CHECK_HAS(buf, "\"az\":1.0");
+    CHECK_HAS(buf, "\"az_mg\":1000");
     CHECK_HAS(buf, "\"gravity\":[");
     CHECK_HAS(buf, "\"bias\":[");
     CHECK_HAS(buf, "\"near_miss\":false");
@@ -631,6 +693,10 @@ int main(void) {
     RUN(other_devices_never_count_as_the_beacon);
     RUN(sensor_failure_falls_back_to_the_threshold);
     RUN(absent_sensor_falls_back_at_boot);
+    RUN(short_sensor_dropouts_never_press_a_parked_car);
+    RUN(a_fallback_press_stays_single_after_the_sensor_recovers);
+    RUN(the_motion_estimate_starts_over_after_an_outage);
+    RUN(set_point_here_forgets_the_old_beacon);
     RUN(sensor_recovery_is_logged_and_restores_the_rule);
     RUN(unpaired_never_auto_presses_and_does_not_scan);
     RUN(pairing_by_holding_close_saves_and_returns_to_filtered_scan);

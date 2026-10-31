@@ -28,14 +28,14 @@ typedef struct
     yg_sensor_err_t err;
     uint16_t start_n;
     float start_sum;
-    uint8_t read_fails;
+    uint32_t last_good;
     bool has_last;
     yg_imu_sample_t last;
     uint32_t last_change;
     uint16_t good_run;
 } yg_sensor_health_t;
 
-void yg_sensor_health_init(yg_sensor_health_t *h);
-void yg_sensor_health_absent(yg_sensor_health_t *h);
+void yg_sensor_health_init(yg_sensor_health_t *h, uint32_t now);
 void yg_sensor_health_on_sample(yg_sensor_health_t *h, uint32_t now, const yg_imu_sample_t *s);
-void yg_sensor_health_on_read_failed(yg_sensor_health_t *h);
+/* absent means the sensor did not answer on the bus at all. */
+void yg_sensor_health_on_read_failed(yg_sensor_health_t *h, uint32_t now, bool absent);

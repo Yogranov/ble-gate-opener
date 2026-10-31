@@ -214,7 +214,19 @@ static void a_full_table_replaces_the_oldest(void) {
     CHECK_HAS(buf, "c0:00:00:00:00:13");
 }
 
+static void only_addresses_that_stay_can_be_paired(void) {
+    const yg_addr_t typed = { { 0x45, 0, 0, 0, 0, 1 }, YG_ADDR_TYPE_ANY };
+    const yg_addr_t public_addr = { { 0x45, 0, 0, 0, 0, 1 }, YG_ADDR_TYPE_PUBLIC };
+    const yg_addr_t strange = { { 0xC5, 0, 0, 0, 0, 1 }, 7 };
+    CHECK(yg_addr_can_pair(&A));
+    CHECK(yg_addr_can_pair(&typed));
+    CHECK(yg_addr_can_pair(&public_addr));
+    CHECK(!yg_addr_can_pair(&ROTATING));
+    CHECK(!yg_addr_can_pair(&strange));
+}
+
 int main(void) {
+    RUN(only_addresses_that_stay_can_be_paired);
     RUN(parses_a_real_ibeacon_frame);
     RUN(rejects_frames_that_are_not_ibeacons);
     RUN(classifies_addresses);

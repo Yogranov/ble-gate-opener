@@ -298,6 +298,132 @@ static void opening_the_glove_box_is_ignored(void) {
     }
 }
 
+static void shove(rig_t *r, float g) {
+    for (uint32_t t = 0; t < 200; t += DT_MS) {
+        float k = expf(-(float)t / 50.0f);
+        float a[3] = { 0, g * k, 0 };
+        const float rot[3] = { 0, 0, 0 };
+        step(r, a, rot);
+    }
+}
+
+static void lean_then_door_shut_is_not_motion(void) {
+    /* Someone sits down and the car leans, then a door shuts just after. */
+    static const float LEANS[] = { 1.5f, 2.0f, 2.2f, 2.6f, 3.5f, 5.0f };
+    static const uint32_t GAPS[] = { 500, 1000, 2000 };
+    for (int o = 0; o < ORIENTATIONS; o++) {
+        for (size_t l = 0; l < sizeof(LEANS) / sizeof(LEANS[0]); l++) {
+            for (size_t g = 0; g < sizeof(GAPS) / sizeof(GAPS[0]); g++) {
+                static rig_t r;
+                rig_init(&r, orientation(o));
+                still(&r, 5000);
+                tilt(&r, LEANS[l], 500, o % 2);
+                still(&r, GAPS[g]);
+                shove(&r, 0.15f);
+                still(&r, 5000);
+                CHECK_INT(r.first_cause, YG_MOTION_NONE);
+            }
+        }
+    }
+}
+
+static void slow_glove_box_is_ignored(void) {
+    /* Below the rate that counts as tilting. */
+    static const uint32_t TIMES[] = { 6000, 14000, 30000 };
+    for (int o = 0; o < ORIENTATIONS; o++) {
+        for (size_t i = 0; i < sizeof(TIMES) / sizeof(TIMES[0]); i++) {
+            for (int axis = 0; axis < 2; axis++) {
+                static rig_t r;
+                rig_init(&r, orientation(o));
+                still(&r, 5000);
+                tilt(&r, 42.0f, TIMES[i], axis);
+                still(&r, 10000);
+                tilt(&r, -42.0f, TIMES[i], axis);
+                still(&r, 10000);
+                CHECK_INT(r.first_cause, YG_MOTION_NONE);
+            }
+        }
+    }
+}
+
+static void motion_ends_soon_after_the_car_stops(void) {
+    for (int o = 0; o < ORIENTATIONS; o++) {
+        static rig_t r;
+        rig_init(&r, orientation(o));
+        still(&r, 5000);
+        const float a[3] = { -0.2f, 0, 0 };
+        const float g[3] = { 0, 0, 0 };
+        for (int i = 0; i < 200; i++) step(&r, a, g);
+        CHECK_INT(r.first_cause, YG_MOTION_ACCEL);
+        still(&r, 1000);
+        reset_seen(&r);
+        still(&r, 20000);
+        CHECK_INT(r.first_cause, YG_MOTION_NONE);
+    }
+}
+
+static void booting_in_a_steady_bend_heals_once_parked(void) {
+    /* Calibrating during a steady turn takes the turn for sensor bias. */
+    static rig_t r;
+    rig_init(&r, orientation(1));
+    const float a[3] = { 0, 0, 0 };
+    const float g[3] = { 0, 0, 6.0f };
+    for (int i = 0; i < 250; i++) step(&r, a, g);
+    CHECK(r.out.calibrated);
+    still(&r, 35000);
+    reset_seen(&r);
+    still(&r, 30000);
+    CHECK_INT(r.first_cause, YG_MOTION_NONE);
+    const float turn[3] = { 0, 0, 25.0f };
+    for (int i = 0; i < 75; i++) step(&r, a, turn);
+    CHECK_INT(r.first_cause, YG_MOTION_YAW);
+}
+
+static void slow_sensor_drift_is_followed(void) {
+    /* The gyro's zero moves as the car warms up. */
+    for (int o = 0; o < ORIENTATIONS; o++) {
+        static rig_t r;
+        rig_init(&r, orientation(o));
+        still(&r, 5000);
+        const float a[3] = { 0, 0, 0 };
+        for (uint32_t t = 0; t < 300000; t += DT_MS) {
+            float d = 3.0f * (float)t / 300000.0f;
+            const float g[3] = { d, -d, d / 2.0f };
+            step(&r, a, g);
+        }
+        CHECK_INT(r.first_cause, YG_MOTION_NONE);
+    }
+}
+
+static void a_small_shift_of_the_gyro_zero_is_ignored(void) {
+    for (int o = 0; o < ORIENTATIONS; o++) {
+        static rig_t r;
+        rig_init(&r, orientation(o));
+        still(&r, 5000);
+        const float a[3] = { 0, 0, 0 };
+        const float g[3] = { 0.8f, 0, 0 };
+        for (int i = 0; i < 3000; i++) step(&r, a, g);
+        CHECK_INT(r.first_cause, YG_MOTION_NONE);
+    }
+}
+
+static void drift_is_followed_even_with_the_engine_shaking(void) {
+    /* The shake leaves no quiet second to start over from. */
+    for (int o = 0; o < ORIENTATIONS; o++) {
+        static rig_t r;
+        rig_init(&r, orientation(o));
+        still(&r, 5000);
+        for (uint32_t t = 0; t < 300000; t += DT_MS) {
+            float phase = 2 * PI * 23.0f * (float)t / 1000.0f;
+            float d = 3.0f * (float)t / 300000.0f;
+            float a[3] = { 0.03f * sinf(phase), 0.03f * cosf(phase), 0.03f * sinf(phase + 1) };
+            float g[3] = { d + 2.0f * sinf(phase), -d + 2.0f * cosf(phase), 2.0f * sinf(phase + 2) };
+            step(&r, a, g);
+        }
+        CHECK_INT(r.first_cause, YG_MOTION_NONE);
+    }
+}
+
 static void turn_is_still_detected_after_the_glove_box_moved(void) {
     static rig_t r;
     rig_init(&r, identity());
@@ -379,6 +505,13 @@ int main(void) {
     RUN(door_slam_is_a_near_miss_not_motion);
     RUN(passenger_getting_in_is_ignored);
     RUN(opening_the_glove_box_is_ignored);
+    RUN(lean_then_door_shut_is_not_motion);
+    RUN(slow_glove_box_is_ignored);
+    RUN(motion_ends_soon_after_the_car_stops);
+    RUN(booting_in_a_steady_bend_heals_once_parked);
+    RUN(slow_sensor_drift_is_followed);
+    RUN(a_small_shift_of_the_gyro_zero_is_ignored);
+    RUN(drift_is_followed_even_with_the_engine_shaking);
     RUN(turn_is_still_detected_after_the_glove_box_moved);
     RUN(already_moving_at_boot_detects_later_turns);
     RUN(thresholds_come_from_settings);

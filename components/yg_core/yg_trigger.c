@@ -11,8 +11,12 @@ static uint32_t later(uint32_t a, uint32_t b) {
     return (int32_t)(a - b) > 0 ? a : b;
 }
 
-static void start_press(yg_trigger_t *t, uint32_t now) {
+/* A press uses up the motion before it, and so does the car coming to rest: otherwise
+ * a parked car could press again, however the moved window and timers are set. */
+static void start_press(yg_trigger_t *t, uint32_t now, bool until_gone) {
     t->state = YG_TRIG_PRESSING;
+    t->motion_unused = false;
+    t->until_gone = until_gone;
     t->press_time = now;
 }
 
@@ -45,6 +49,7 @@ void yg_trigger_set_sensor_ok(yg_trigger_t *t, bool ok) {
 
 void yg_trigger_on_motion(yg_trigger_t *t, uint32_t now) {
     t->has_motion = true;
+    t->motion_unused = true;
     t->last_motion = now;
 }
 
@@ -63,7 +68,7 @@ int8_t yg_trigger_effective_set_point(const yg_trigger_t *t, const yg_settings_t
 }
 
 bool yg_trigger_moved_recently(const yg_trigger_t *t, const yg_settings_t *s, uint32_t now) {
-    return t->has_motion && elapsed(now, t->last_motion) <= (uint32_t)s->moved_window_s * 1000u;
+    return t->motion_unused && elapsed(now, t->last_motion) <= (uint32_t)s->moved_window_s * 1000u;
 }
 
 yg_press_reason_t yg_trigger_on_advert(yg_trigger_t *t, const yg_settings_t *s, uint32_t now, int8_t rssi) {
@@ -77,13 +82,13 @@ yg_press_reason_t yg_trigger_on_advert(yg_trigger_t *t, const yg_settings_t *s, 
         return YG_PRESS_NONE;
     }
     if (yg_trigger_fallback_active(t, s)) {
-        start_press(t, now);
+        start_press(t, now, true);
         return YG_PRESS_FALLBACK;
     }
     if (!yg_trigger_moved_recently(t, s, now)) {
         return YG_PRESS_NONE;
     }
-    start_press(t, now);
+    start_press(t, now, false);
     return YG_PRESS_AUTO;
 }
 
@@ -91,7 +96,7 @@ yg_press_reason_t yg_trigger_manual(yg_trigger_t *t, uint32_t now, yg_press_reas
     if (t->state == YG_TRIG_PRESSING) {
         return YG_PRESS_NONE;
     }
-    start_press(t, now);
+    start_press(t, now, false);
     return reason;
 }
 
@@ -110,12 +115,13 @@ yg_rearm_reason_t yg_trigger_tick(yg_trigger_t *t, const yg_settings_t *s, uint3
         t->state = YG_TRIG_ARMED;
         return YG_REARM_GONE;
     }
-    if (yg_trigger_fallback_active(t, s)) {
+    if (t->until_gone || yg_trigger_fallback_active(t, s)) {
         return YG_REARM_NONE;
     }
     uint32_t moved = t->has_motion ? later(t->last_motion, t->press_time) : t->press_time;
     if (elapsed(now, moved) >= (uint32_t)s->still_s * 1000u) {
         t->state = YG_TRIG_ARMED;
+        t->motion_unused = false;
         return YG_REARM_STILL;
     }
     return YG_REARM_NONE;

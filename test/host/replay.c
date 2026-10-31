@@ -6,6 +6,7 @@
  *   A,<t>,<rssi>                advert from the paired beacon
  *   M,<t>                       motion, for traces that hold no raw samples
  *   I,<t>,ax,ay,az,gx,gy,gz     raw motion sample in g and degrees per second
+ *   F,<t> and R,<t>             the log says the sensor failed, or recovered
  *   T,<t>                       time passes, runs the 100 ms tick
  *
  * Output: PRESS,<t>,<reason> and REARM,<t>,<reason> and MOTION,<t>,<cause>
@@ -99,6 +100,8 @@ int main(void) {
             if (sscanf(line + 1, ",%u,%f,%f,%f,%f,%f,%f", &t, &s.ax, &s.ay, &s.az, &s.gx, &s.gy, &s.gz) == 7) {
                 yg_engine_on_imu(&engine, t, &s, 25.0f);
             }
+        } else if (kind == 'F' || kind == 'R') {
+            yg_trigger_set_sensor_ok(&engine.trigger, kind == 'R');
         } else if (kind == 'T') {
             yg_engine_tick(&engine, t);
         }

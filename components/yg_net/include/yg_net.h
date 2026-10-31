@@ -15,5 +15,5 @@ bool yg_net_hotspot_running(void);
 void yg_net_env_start(void);
 void yg_net_env_finish(yg_env_t *out);
 
-/* Adds the "api" and "wifi-join" console commands. */
+/* Adds the "api", "ota-self" and "wifi-join" console commands. */
 void yg_net_console_register(void);

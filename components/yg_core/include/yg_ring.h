@@ -41,6 +41,17 @@ bool yg_ring_sector_at(const yg_ring_t *r, uint32_t age, uint32_t *sector, uint3
  * this looks for a sector that began before it, or else the oldest sector. */
 uint32_t yg_ring_age_for_trip(const yg_ring_t *r, uint32_t trip);
 
+/* Sector sequence numbers only grow, so a reader that walks them cannot skip or
+ * repeat a sector when new records move the head on. */
+bool yg_ring_oldest_seq(const yg_ring_t *r, uint32_t *seq);
+bool yg_ring_newest_seq(const yg_ring_t *r, uint32_t *seq);
+bool yg_ring_sector_for_seq(const yg_ring_t *r, uint32_t seq, uint32_t *sector, uint32_t *first_trip);
+
+/* Clearing in steps, so that a caller can release its lock between sectors. Returns
+ * 1 if it erased something, 0 if the sector held nothing, or -1 on failure. */
+int yg_ring_clear_sector(yg_ring_t *r, uint32_t sector);
+void yg_ring_reset(yg_ring_t *r);
+
 /* Reads a whole sector into `buf`, which must hold YG_RING_SECTOR bytes. */
 int yg_ring_read_sector(const yg_ring_t *r, uint32_t sector, uint8_t *buf);
 

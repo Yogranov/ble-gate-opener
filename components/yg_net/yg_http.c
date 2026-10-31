@@ -11,6 +11,7 @@
 #include "yg_app.h"
 #include "yg_http_internal.h"
 #include "yg_io.h"
+#include "yg_json.h"
 #include "yg_log.h"
 #include "yg_nvs.h"
 
@@ -18,6 +19,10 @@
 #define BODY_MAX      1024
 #define CHUNK_SIZE    2048
 #define OTA_BUF_SIZE  4096
+#define OTA_MAX_TIMEOUTS 3
+#define BODY_MAX_DEPTH 8
+#define META_SIZE     384
+#define GUARD_HEADER  "X-YogiGate"
 
 static const char *TAG = "yg_net";
 
@@ -40,13 +45,20 @@ static esp_err_t send_ok(httpd_req_t *req) {
 }
 
 static esp_err_t send_error(httpd_req_t *req, const char *status, const char *message) {
-    char body[128];
-    snprintf(body, sizeof(body), "{\"ok\":false,\"error\":\"%s\"}", message);
+    char body[160];
+    yg_jw_t w;
+    yg_jw_init(&w, body, sizeof(body));
+    yg_jw_raw(&w, "{\"ok\":false,\"error\":");
+    yg_jw_string(&w, message);
+    yg_jw_raw(&w, "}");
+    if (yg_jw_finish(&w) < 0) {
+        strcpy(body, "{\"ok\":false}");
+    }
     httpd_resp_set_status(req, status);
     return send_json(req, body);
 }
 
-/* Returns the parsed body, or NULL after sending an error. */
+/* Returns the parsed body, which is always a JSON object, or NULL after sending an error. */
 static cJSON *read_body(httpd_req_t *req) {
     if (req->content_len == 0 || req->content_len > BODY_MAX) {
         send_error(req, "400 Bad Request", "body size");
@@ -63,9 +75,17 @@ static cJSON *read_body(httpd_req_t *req) {
         got += (size_t)n;
     }
     body[got] = 0;
+    if (!yg_json_depth_ok(body, BODY_MAX_DEPTH)) {
+        send_error(req, "400 Bad Request", "too deep");
+        return NULL;
+    }
     cJSON *root = cJSON_Parse(body);
     if (root == NULL) {
         send_error(req, "400 Bad Request", "bad json");
+    } else if (!cJSON_IsObject(root)) {
+        cJSON_Delete(root);
+        root = NULL;
+        send_error(req, "400 Bad Request", "expected an object");
     }
     return root;
 }
@@ -237,7 +257,7 @@ static void fn_setpoint(yg_engine_t *e, uint32_t now, void *arg) {
     } else if (cJSON_IsTrue(cJSON_GetObjectItem(a->root, "any"))) {
         a->ok = yg_engine_setpoint_dbm(e, now, YG_SET_POINT_ANY);
     } else if (cJSON_IsNumber(dbm) && dbm->valueint != YG_SET_POINT_ANY) {
-        a->ok = yg_engine_setpoint_dbm(e, now, (int8_t)dbm->valueint);
+        a->ok = yg_engine_setpoint_dbm(e, now, dbm->valueint);
     }
 }
 
@@ -312,14 +332,8 @@ static esp_err_t get_candidates(httpd_req_t *req) {
     return send_json(req, s_json);
 }
 
-typedef struct
-{
-    uint8_t addr[YG_ADDR_LEN];
-    uint8_t type;
-} pair_arg_t;
-
 static void fn_pair_set(yg_engine_t *e, uint32_t now, void *arg) {
-    pair_arg_t *a = arg;
+    const yg_addr_t *a = arg;
     yg_engine_pair_set(e, now, a->addr, a->type);
 }
 
@@ -328,16 +342,17 @@ static esp_err_t post_pair_set(httpd_req_t *req) {
     if (root == NULL) {
         return ESP_OK;
     }
-    pair_arg_t arg = { .type = YG_ADDR_TYPE_ANY };
+    yg_addr_t arg = { .type = YG_ADDR_TYPE_ANY };
     const cJSON *mac = cJSON_GetObjectItem(root, "mac");
     const cJSON *type = cJSON_GetObjectItem(root, "type");
     bool ok = cJSON_IsString(mac) && yg_addr_parse(mac->valuestring, arg.addr);
     if (cJSON_IsNumber(type)) {
+        ok = ok && type->valueint >= 0 && type->valueint <= UINT8_MAX;
         arg.type = (uint8_t)type->valueint;
     }
     cJSON_Delete(root);
-    if (!ok) {
-        return send_error(req, "400 Bad Request", "bad mac");
+    if (!ok || !yg_addr_can_pair(&arg)) {
+        return send_error(req, "400 Bad Request", "bad address");
     }
     yg_app_call(fn_pair_set, &arg);
     return send_ok(req);
@@ -364,9 +379,12 @@ static esp_err_t get_trip_list(httpd_req_t *req) {
     char head[48];
     snprintf(head, sizeof(head), "{\"current\":%u,\"trips\":[", (unsigned)current);
     httpd_resp_send_chunk(req, head, HTTPD_RESP_USE_STRLEN);
-    yg_log_trip_list(query_u32(req, "before", current + 1), query_u32(req, "limit", 20), stream_line, &s);
+    uint32_t next_before = 0;
+    yg_log_trip_list(query_u32(req, "before", current + 1), query_u32(req, "limit", 20), &next_before, stream_line, &s);
     stream_flush(&s);
-    httpd_resp_send_chunk(req, "]}", 2);
+    char tail[32];
+    snprintf(tail, sizeof(tail), "],\"next_before\":%u}", (unsigned)next_before);
+    httpd_resp_send_chunk(req, tail, HTTPD_RESP_USE_STRLEN);
     return stream_end(&s);
 }
 
@@ -414,8 +432,14 @@ static esp_err_t post_rating(httpd_req_t *req) {
 
 static void fn_meta(yg_engine_t *e, uint32_t now, void *arg) {
     (void)now;
-    snprintf(arg, 256, "{\"k\":\"meta\",\"format\":1,\"fw\":\"%s\",\"current_trip\":%u,\"ssid\":\"%s\"}",
-             e->fw, (unsigned)e->trip, e->s->hotspot_ssid);
+    yg_jw_t w;
+    yg_jw_init(&w, arg, META_SIZE);
+    yg_jw_raw(&w, "{\"k\":\"meta\",\"format\":1,\"fw\":");
+    yg_jw_string(&w, e->fw);
+    yg_jw_raw(&w, ",\"current_trip\":%u,\"ssid\":", (unsigned)e->trip);
+    yg_jw_string(&w, e->s->hotspot_ssid);
+    yg_jw_raw(&w, "}");
+    yg_jw_finish(&w);
 }
 
 static esp_err_t get_export(httpd_req_t *req) {
@@ -425,7 +449,7 @@ static esp_err_t get_export(httpd_req_t *req) {
     }
     httpd_resp_set_type(req, "application/x-ndjson");
     httpd_resp_set_hdr(req, "Content-Disposition", "attachment; filename=\"yogigate-logs.ndjson\"");
-    static char meta[256];
+    static char meta[META_SIZE];
     yg_app_call(fn_meta, meta);
     stream_line(meta, strlen(meta), &s);
     yg_log_export(query_u32(req, "captures", 1) != 0, stream_line, &s);
@@ -497,15 +521,19 @@ static esp_err_t post_ota(httpd_req_t *req) {
     }
     char *buf = malloc(OTA_BUF_SIZE);
     size_t left = req->content_len;
+    int timeouts = 0;
     while (buf != NULL && left > 0) {
         int n = httpd_req_recv(req, buf, left < OTA_BUF_SIZE ? left : OTA_BUF_SIZE);
-        if (n == HTTPD_SOCK_ERR_TIMEOUT) {
+        /* A phone that drops off Wi-Fi never says so. Waiting for ever would hold up
+         * every other request, and stop the hotspot from turning off. */
+        if (n == HTTPD_SOCK_ERR_TIMEOUT && ++timeouts < OTA_MAX_TIMEOUTS) {
             continue;
         }
         if (n <= 0) {
             err = ESP_FAIL;
             break;
         }
+        timeouts = 0;
         err = esp_ota_write(ota, buf, (size_t)n);
         if (err != ESP_OK) {
             break;
@@ -539,8 +567,9 @@ static esp_err_t post_reboot(httpd_req_t *req) {
 }
 
 static esp_err_t post_factory_reset(httpd_req_t *req) {
-    yg_log_clear();
+    /* Settings first: erasing full logs takes much longer. */
     yg_nvs_factory_reset();
+    yg_log_clear();
     send_ok(req);
     schedule_restart();
     return ESP_OK;
@@ -617,6 +646,18 @@ static const httpd_uri_t ROUTES[] = {
     { .uri = "/api/debug/live", .method = HTTP_GET, .handler = get_live },
 };
 
+/* A page on another site can POST to this address, if the phone has cellular data
+ * alongside the hotspot. A browser will not let it add a custom header. */
+static esp_err_t guarded_post(httpd_req_t *req) {
+    const httpd_uri_t *route = req->user_ctx;
+    char value[4];
+    if (httpd_req_get_hdr_value_str(req, GUARD_HEADER, value, sizeof(value)) != ESP_OK || strcmp(value, "1") != 0) {
+        return send_error(req, "403 Forbidden", "missing " GUARD_HEADER " header");
+    }
+    req->user_ctx = route->user_ctx;
+    return route->handler(req);
+}
+
 bool yg_http_start(void) {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.max_uri_handlers = sizeof(ROUTES) / sizeof(ROUTES[0]);
@@ -626,6 +667,10 @@ bool yg_http_start(void) {
     config.max_open_sockets = 5;
     config.recv_wait_timeout = 10;
     config.send_wait_timeout = 20;
+    config.keep_alive_enable = true;
+    config.keep_alive_idle = 5;
+    config.keep_alive_interval = 5;
+    config.keep_alive_count = 3;
     esp_err_t err = httpd_start(&s_server, &config);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Web server failed: %s", esp_err_to_name(err));
@@ -633,7 +678,12 @@ bool yg_http_start(void) {
         return false;
     }
     for (size_t i = 0; i < sizeof(ROUTES) / sizeof(ROUTES[0]); i++) {
-        httpd_register_uri_handler(s_server, &ROUTES[i]);
+        httpd_uri_t route = ROUTES[i];
+        if (route.method == HTTP_POST) {
+            route.handler = guarded_post;
+            route.user_ctx = (void *)&ROUTES[i];
+        }
+        httpd_register_uri_handler(s_server, &route);
     }
     return true;
 }

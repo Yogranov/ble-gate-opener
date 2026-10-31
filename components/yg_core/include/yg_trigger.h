@@ -38,6 +38,8 @@ typedef struct
     bool sensor_ok;
     bool has_motion;
     bool has_advert;
+    bool motion_unused;    /* Motion since the last press or the car coming to rest. */
+    bool until_gone;       /* The last press came from the fixed threshold. */
     uint32_t last_motion;
     uint32_t last_advert;
     uint32_t press_time;

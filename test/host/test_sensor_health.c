@@ -19,9 +19,16 @@ static void feed(float g, int n) {
     }
 }
 
+static void reads_fail(uint32_t ms, bool absent) {
+    for (uint32_t t = 0; t < ms; t += 20) {
+        yg_sensor_health_on_read_failed(&h, now, absent);
+        now += 20;
+    }
+}
+
 static void setup(void) {
-    yg_sensor_health_init(&h);
     now = 1000;
+    yg_sensor_health_init(&h, now);
 }
 
 static void good_start_becomes_ok(void) {
@@ -45,15 +52,24 @@ static void wrong_gravity_at_start_fails(void) {
     CHECK_INT(h.state, YG_SENSOR_OK);
 }
 
-static void ten_read_failures_fail_but_nine_do_not(void) {
+static void short_dropouts_change_nothing(void) {
+    /* A loose wire must not hand control to the fixed threshold. */
     setup();
     feed(1.0f, 30);
-    for (int i = 0; i < 9; i++) yg_sensor_health_on_read_failed(&h);
+    for (int i = 0; i < 5; i++) {
+        reads_fail(4800, false);
+        CHECK_INT(h.state, YG_SENSOR_OK);
+        feed(1.0f, 1);
+    }
+    CHECK_INT(h.err, YG_SENSOR_ERR_NONE);
+}
+
+static void five_seconds_with_no_good_read_fails(void) {
+    setup();
+    feed(1.0f, 30);
+    reads_fail(4900, false);
     CHECK_INT(h.state, YG_SENSOR_OK);
-    feed(1.0f, 1);
-    for (int i = 0; i < 9; i++) yg_sensor_health_on_read_failed(&h);
-    CHECK_INT(h.state, YG_SENSOR_OK);
-    yg_sensor_health_on_read_failed(&h);
+    reads_fail(200, false);
     CHECK_INT(h.state, YG_SENSOR_FAILED);
     CHECK_INT(h.err, YG_SENSOR_ERR_READS);
 }
@@ -78,7 +94,7 @@ static void identical_samples_for_five_seconds_fail(void) {
 static void recovers_after_good_changing_samples(void) {
     setup();
     feed(1.0f, 30);
-    for (int i = 0; i < 10; i++) yg_sensor_health_on_read_failed(&h);
+    reads_fail(5100, false);
     CHECK_INT(h.state, YG_SENSOR_FAILED);
     feed(1.0f, 249);
     CHECK_INT(h.state, YG_SENSOR_FAILED);
@@ -87,21 +103,40 @@ static void recovers_after_good_changing_samples(void) {
     CHECK_INT(h.err, YG_SENSOR_ERR_NONE);
 }
 
-static void absent_sensor_stays_failed(void) {
+static void missing_sensor_fails_after_five_seconds(void) {
     setup();
-    yg_sensor_health_absent(&h);
+    reads_fail(4900, true);
+    CHECK_INT(h.state, YG_SENSOR_STARTING);
+    reads_fail(200, true);
     CHECK_INT(h.state, YG_SENSOR_FAILED);
     CHECK_INT(h.err, YG_SENSOR_ERR_ABSENT);
-    feed(1.0f, 500);
-    CHECK_INT(h.state, YG_SENSOR_FAILED);
+}
+
+static void sensor_found_late_still_recovers(void) {
+    setup();
+    reads_fail(6000, true);
+    CHECK_INT(h.err, YG_SENSOR_ERR_ABSENT);
+    feed(1.0f, 250);
+    CHECK_INT(h.state, YG_SENSOR_OK);
+    CHECK_INT(h.err, YG_SENSOR_ERR_NONE);
+}
+
+static void sensor_found_soon_after_power_on_is_fine(void) {
+    setup();
+    reads_fail(1000, true);
+    feed(1.0f, 30);
+    CHECK_INT(h.state, YG_SENSOR_OK);
 }
 
 int main(void) {
     RUN(good_start_becomes_ok);
     RUN(wrong_gravity_at_start_fails);
-    RUN(ten_read_failures_fail_but_nine_do_not);
+    RUN(short_dropouts_change_nothing);
+    RUN(five_seconds_with_no_good_read_fails);
     RUN(identical_samples_for_five_seconds_fail);
     RUN(recovers_after_good_changing_samples);
-    RUN(absent_sensor_stays_failed);
+    RUN(missing_sensor_fails_after_five_seconds);
+    RUN(sensor_found_late_still_recovers);
+    RUN(sensor_found_soon_after_power_on_is_fine);
     return TEST_RESULT();
 }

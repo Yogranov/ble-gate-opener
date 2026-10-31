@@ -100,7 +100,9 @@ typedef struct
     uint8_t payload[YG_RECORD_MAX_PAYLOAD];
 } yg_record_t;
 
-/* Writes the flash form, padded to 4 bytes. `out` must hold YG_RECORD_MAX_ENCODED. */
+/* Writes the flash form, padded to 4 bytes with a last byte that is never 0xFF, so
+ * that the end of a record can be told from blank flash. `out` must hold
+ * YG_RECORD_MAX_ENCODED. */
 size_t yg_record_encode(const yg_record_t *r, uint8_t *out);
 
 /* Reads the next valid record from a sector, skipping torn or blank space. */

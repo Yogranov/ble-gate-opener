@@ -5,8 +5,8 @@
 
 #define START_SAMPLES   25
 #define GRAVITY_TOLERANCE 0.3f
-#define MAX_READ_FAILS  10
 #define STUCK_MS        5000u
+#define SILENT_MS       5000u
 #define RECOVERY_RUN    250
 
 static float magnitude(const yg_imu_sample_t *s) {
@@ -23,20 +23,14 @@ static void fail(yg_sensor_health_t *h, yg_sensor_err_t err) {
     h->good_run = 0;
 }
 
-void yg_sensor_health_init(yg_sensor_health_t *h) {
+void yg_sensor_health_init(yg_sensor_health_t *h, uint32_t now) {
     memset(h, 0, sizeof(*h));
     h->state = YG_SENSOR_STARTING;
-}
-
-void yg_sensor_health_absent(yg_sensor_health_t *h) {
-    fail(h, YG_SENSOR_ERR_ABSENT);
+    h->last_good = now;
 }
 
 void yg_sensor_health_on_sample(yg_sensor_health_t *h, uint32_t now, const yg_imu_sample_t *s) {
-    if (h->err == YG_SENSOR_ERR_ABSENT) {
-        return;
-    }
-    h->read_fails = 0;
+    h->last_good = now;
 
     bool changed = !h->has_last || !same_sample(&h->last, s);
     if (changed) {
@@ -73,15 +67,9 @@ void yg_sensor_health_on_sample(yg_sensor_health_t *h, uint32_t now, const yg_im
     }
 }
 
-void yg_sensor_health_on_read_failed(yg_sensor_health_t *h) {
-    if (h->err == YG_SENSOR_ERR_ABSENT) {
-        return;
-    }
+void yg_sensor_health_on_read_failed(yg_sensor_health_t *h, uint32_t now, bool absent) {
     h->good_run = 0;
-    if (h->read_fails < MAX_READ_FAILS) {
-        h->read_fails++;
-    }
-    if (h->read_fails >= MAX_READ_FAILS && h->state != YG_SENSOR_FAILED) {
-        fail(h, YG_SENSOR_ERR_READS);
+    if (h->state != YG_SENSOR_FAILED && now - h->last_good >= SILENT_MS) {
+        fail(h, absent ? YG_SENSOR_ERR_ABSENT : YG_SENSOR_ERR_READS);
     }
 }

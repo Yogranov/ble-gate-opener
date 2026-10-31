@@ -43,6 +43,11 @@ bool yg_addr_is_stable(const yg_addr_t *a) {
     return true;
 }
 
+bool yg_addr_can_pair(const yg_addr_t *a) {
+    bool known = a->type == YG_ADDR_TYPE_PUBLIC || a->type == YG_ADDR_TYPE_RANDOM || a->type == YG_ADDR_TYPE_ANY;
+    return known && yg_addr_is_stable(a);
+}
+
 static int hex_digit(char c) {
     if (c >= '0' && c <= '9') return c - '0';
     if (c >= 'a' && c <= 'f') return c - 'a' + 10;

@@ -1,5 +1,7 @@
 #include "yg_imu.h"
 
+#include <string.h>
+
 #include "driver/i2c_master.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
@@ -18,11 +20,17 @@
 #define ACCEL_LSB_PER_G  16384.0f   /* 2 g range */
 #define GYRO_LSB_PER_DPS 131.0f     /* 250 deg/s range */
 #define SAMPLE_PERIOD_MS 20
+#define WAKE_MS          100         /* The sensor's readings are not good before this. */
 #define REINIT_EVERY_FAILS 50
+#define REINIT_EVERY_FROZEN 50       /* A sensor reset by a power glitch sleeps, and repeats itself. */
+#define SEARCH_EVERY_SAMPLES 10      /* Looks for a missing sensor 5 times a second. */
+#define RAW_FRAME_SIZE   14
 
 static const char *TAG = "yg_imu";
 
+static i2c_master_bus_handle_t s_bus;
 static i2c_master_dev_handle_t s_dev;
+static volatile uint8_t s_id;
 static yg_imu_sample_cb_t s_on_sample;
 static yg_imu_failed_cb_t s_on_failed;
 
@@ -42,8 +50,38 @@ static esp_err_t configure(void) {
     return err;
 }
 
-bool yg_imu_init(uint8_t *id) {
-    *id = 0;
+static bool find_sensor(void) {
+    uint16_t address;
+    if (i2c_master_probe(s_bus, 0x68, I2C_TIMEOUT_MS) == ESP_OK) {
+        address = 0x68;
+    } else if (i2c_master_probe(s_bus, 0x69, I2C_TIMEOUT_MS) == ESP_OK) {
+        address = 0x69;
+    } else {
+        return false;
+    }
+    const i2c_device_config_t dev_config = {
+        .dev_addr_length = I2C_ADDR_BIT_LEN_7,
+        .device_address = address,
+        .scl_speed_hz = I2C_HZ,
+    };
+    if (i2c_master_bus_add_device(s_bus, &dev_config, &s_dev) != ESP_OK) {
+        s_dev = NULL;
+        return false;
+    }
+    const uint8_t reg = REG_WHO_AM_I;
+    uint8_t id = 0;
+    i2c_master_transmit_receive(s_dev, &reg, 1, &id, 1, I2C_TIMEOUT_MS);
+    s_id = id;
+    ESP_LOGI(TAG, "Sensor at 0x%02x, WHO_AM_I 0x%02x", (unsigned)address, id);
+    configure();
+    return true;
+}
+
+uint8_t yg_imu_id(void) {
+    return s_id;
+}
+
+bool yg_imu_init(void) {
     const i2c_master_bus_config_t bus_config = {
         .i2c_port = I2C_NUM_0,
         .sda_io_num = CONFIG_YG_PIN_SDA,
@@ -52,33 +90,17 @@ bool yg_imu_init(uint8_t *id) {
         .glitch_ignore_cnt = 7,
         .flags.enable_internal_pullup = true,
     };
-    i2c_master_bus_handle_t bus;
-    esp_err_t err = i2c_new_master_bus(&bus_config, &bus);
+    esp_err_t err = i2c_new_master_bus(&bus_config, &s_bus);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "I2C bus failed: %s", esp_err_to_name(err));
+        s_bus = NULL;
         return false;
     }
-    uint16_t address = 0;
-    if (i2c_master_probe(bus, 0x68, I2C_TIMEOUT_MS) == ESP_OK) {
-        address = 0x68;
-    } else if (i2c_master_probe(bus, 0x69, I2C_TIMEOUT_MS) == ESP_OK) {
-        address = 0x69;
-    } else {
-        ESP_LOGW(TAG, "No MPU6050 found on SDA %d, SCL %d", CONFIG_YG_PIN_SDA, CONFIG_YG_PIN_SCL);
+    if (!find_sensor()) {
+        ESP_LOGW(TAG, "No MPU6050 found yet on SDA %d, SCL %d", CONFIG_YG_PIN_SDA, CONFIG_YG_PIN_SCL);
         return false;
     }
-    const i2c_device_config_t dev_config = {
-        .dev_addr_length = I2C_ADDR_BIT_LEN_7,
-        .device_address = address,
-        .scl_speed_hz = I2C_HZ,
-    };
-    if (i2c_master_bus_add_device(bus, &dev_config, &s_dev) != ESP_OK) {
-        return false;
-    }
-    const uint8_t reg = REG_WHO_AM_I;
-    i2c_master_transmit_receive(s_dev, &reg, 1, id, 1, I2C_TIMEOUT_MS);
-    ESP_LOGI(TAG, "Sensor at 0x%02x, WHO_AM_I 0x%02x", (unsigned)address, *id);
-    return configure() == ESP_OK;
+    return true;
 }
 
 static int16_t be16(const uint8_t *p) {
@@ -87,27 +109,49 @@ static int16_t be16(const uint8_t *p) {
 
 static void imu_task(void *arg) {
     (void)arg;
-    /* The sensor needs a moment after waking before its readings are good. */
-    vTaskDelay(pdMS_TO_TICKS(100));
+    vTaskDelay(pdMS_TO_TICKS(WAKE_MS));
+    uint32_t searches = 0;
     uint32_t fails = 0;
+    uint32_t frozen = 0;
+    uint8_t last[RAW_FRAME_SIZE] = { 0 };
     TickType_t wake = xTaskGetTickCount();
     for (;;) {
         vTaskDelayUntil(&wake, pdMS_TO_TICKS(SAMPLE_PERIOD_MS));
+        if (s_dev == NULL) {
+            if (++searches % SEARCH_EVERY_SAMPLES != 0) {
+                continue;
+            }
+            if (s_bus == NULL || !find_sensor()) {
+                s_on_failed(true);
+                continue;
+            }
+            vTaskDelay(pdMS_TO_TICKS(WAKE_MS));
+            wake = xTaskGetTickCount();
+            continue;
+        }
         const uint8_t reg = REG_ACCEL_OUT;
-        uint8_t data[14];
+        uint8_t data[RAW_FRAME_SIZE];
         if (i2c_master_transmit_receive(s_dev, &reg, 1, data, sizeof(data), I2C_TIMEOUT_MS) != ESP_OK) {
             fails++;
-            s_on_failed();
-            /* A power glitch can reset the sensor to its sleeping defaults. */
+            s_on_failed(false);
             if (fails % REINIT_EVERY_FAILS == 0) {
                 configure();
             }
             continue;
         }
-        if (fails >= REINIT_EVERY_FAILS) {
+        /* Whatever broke the reads may have reset the sensor to its sleeping defaults. */
+        if (fails > 0) {
             configure();
+            fails = 0;
         }
-        fails = 0;
+        if (memcmp(data, last, sizeof(data)) == 0) {
+            if (++frozen % REINIT_EVERY_FROZEN == 0) {
+                configure();
+            }
+        } else {
+            frozen = 0;
+            memcpy(last, data, sizeof(data));
+        }
         yg_imu_sample_t s = {
             .ax = (float)be16(data) / ACCEL_LSB_PER_G,
             .ay = (float)be16(data + 2) / ACCEL_LSB_PER_G,

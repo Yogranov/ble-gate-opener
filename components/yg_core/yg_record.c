@@ -10,6 +10,8 @@
 #define RECORD_MAGIC  0xA5
 #define HEADER_SIZE   12
 #define CRC_SIZE      2
+#define END_SIZE      1
+#define END_MARK      0
 
 static size_t bounded_len(const char *text, size_t max) {
     size_t n = 0;
@@ -61,9 +63,9 @@ size_t yg_record_encode(const yg_record_t *r, uint8_t *out) {
     size_t used = HEADER_SIZE + r->len;
     put_u16(out + used, yg_crc16(out, used));
     used += CRC_SIZE;
-    while (used % 4) {
-        out[used++] = 0xFF;
-    }
+    do {
+        out[used++] = END_MARK;
+    } while (used % 4);
     return used;
 }
 
@@ -73,14 +75,17 @@ bool yg_record_next(const uint8_t *data, size_t size, size_t *pos, yg_record_t *
         if (data[p] == RECORD_MAGIC) {
             size_t len = data[p + 2];
             size_t used = HEADER_SIZE + len;
-            if (len <= YG_RECORD_MAX_PAYLOAD && p + used + CRC_SIZE <= size
+            /* Without its end mark a record was cut short, even if the checksum matches:
+             * the next record may have been written over the place the mark belongs. */
+            if (len <= YG_RECORD_MAX_PAYLOAD && p + used + CRC_SIZE + END_SIZE <= size
+                && data[p + used + CRC_SIZE] == END_MARK
                 && yg_get_u16(data + p + used) == yg_crc16(data + p, used)) {
                 out->type = data[p + 1];
                 out->len = (uint8_t)len;
                 out->trip = yg_get_u32(data + p + 4);
                 out->uptime_ms = yg_get_u32(data + p + 8);
                 memcpy(out->payload, data + p + HEADER_SIZE, len);
-                size_t total = used + CRC_SIZE;
+                size_t total = used + CRC_SIZE + END_SIZE;
                 *pos = p + ((total + 3) & ~(size_t)3);
                 return true;
             }

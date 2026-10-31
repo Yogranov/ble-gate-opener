@@ -8,17 +8,19 @@
 #define STILL_GYRO_SPREAD    3.0f      /* degrees per second, peak to peak */
 #define STILL_ACCEL_SPREAD   0.02f     /* g, peak to peak */
 #define CALIBRATE_DEADLINE   10000u    /* ms: calibrate anyway after this */
+#define REST_WINDOWS         30        /* Still seconds in a row before trusting the sensor again. */
 #define TILT_RATE            8.0f      /* degrees per second */
 #define TILT_HOLD_MS         1000u
-#define ACCEL_RELEASE        0.7f      /* Fraction of the threshold that ends a detection. */
 #define HORIZONTAL_TAU_S     0.08f     /* About 2 Hz. */
 #define GRAVITY_TAU_S        10.0f
+#define GRAVITY_TAU_ABOVE_S  30.0f     /* While above the threshold: braking must not look like a tilt after. */
 #define GRAVITY_ALPHA_TILT   0.1f
 #define BIAS_TAU_S           10.0f
-#define BIAS_QUIET_GYRO      1.5f      /* degrees per second */
-#define BIAS_QUIET_MG        15.0f
+#define DRIFT_RATE           1.0f      /* degrees per second: slower is sensor drift, not rotation. */
 #define NEAR_MISS_FRACTION   0.5f
 #define BUCKET_MS            100u
+#define WINDOW_S             1.0f      /* STILL_SAMPLES at 50 Hz. */
+#define DEG_TO_RAD           0.017453293f
 
 static float dot(const float a[3], const float b[3]) {
     return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
@@ -46,32 +48,41 @@ static void set_calibration(yg_motion_t *m, const float mean[6]) {
     m->calibrated = true;
 }
 
-/* Finds gravity and gyro bias: from 1 s of stillness, or from a 2 s average if
- * stillness never comes before the deadline. */
-static void calibrate(yg_motion_t *m, uint32_t now, const float v[6]) {
+/* Adds a sample to the 1 s window. When the window fills, returns true and gives
+ * its mean, and whether it was quiet. */
+static bool window_add(yg_motion_t *m, const float v[6], float mean[6], bool *still) {
     for (int i = 0; i < 6; i++) {
         m->still_sum[i] += v[i];
         m->still_min[i] = v[i] < m->still_min[i] ? v[i] : m->still_min[i];
         m->still_max[i] = v[i] > m->still_max[i] ? v[i] : m->still_max[i];
-        m->avg_sum[i] += v[i];
     }
     m->still_n++;
-    m->avg_n++;
-
-    if (m->still_n >= STILL_SAMPLES) {
-        bool still = true;
-        float mean[6];
-        for (int i = 0; i < 6; i++) {
-            float spread = m->still_max[i] - m->still_min[i];
-            still = still && spread < (i < 3 ? STILL_ACCEL_SPREAD : STILL_GYRO_SPREAD);
-            mean[i] = m->still_sum[i] / (float)m->still_n;
-        }
-        reset_still_window(m);
-        if (still) {
-            set_calibration(m, mean);
-            return;
-        }
+    if (m->still_n < STILL_SAMPLES) {
+        return false;
     }
+    *still = true;
+    for (int i = 0; i < 6; i++) {
+        float spread = m->still_max[i] - m->still_min[i];
+        *still = *still && spread < (i < 3 ? STILL_ACCEL_SPREAD : STILL_GYRO_SPREAD);
+        mean[i] = m->still_sum[i] / (float)m->still_n;
+    }
+    reset_still_window(m);
+    return true;
+}
+
+/* Finds gravity and gyro bias: from 1 s of stillness, or from a 2 s average if
+ * stillness never comes before the deadline. */
+static void calibrate(yg_motion_t *m, uint32_t now, const float v[6]) {
+    float mean[6];
+    bool still;
+    if (window_add(m, v, mean, &still) && still) {
+        set_calibration(m, mean);
+        return;
+    }
+    for (int i = 0; i < 6; i++) {
+        m->avg_sum[i] += v[i];
+    }
+    m->avg_n++;
     if (m->avg_n >= AVERAGE_SAMPLES) {
         for (int i = 0; i < 6; i++) {
             m->avg_last[i] = m->avg_sum[i] / (float)m->avg_n;
@@ -82,6 +93,58 @@ static void calibrate(yg_motion_t *m, uint32_t now, const float v[6]) {
     }
     if (m->avg_valid && now - m->first_ms >= CALIBRATE_DEADLINE) {
         set_calibration(m, m->avg_last);
+    }
+}
+
+/* The gyro's zero moves as the car warms up. Over a whole second the engine's shake
+ * averages out, and what little is left is that drift. */
+static void follow_drift(yg_motion_t *m, const float mean[6]) {
+    float rot[3];
+    for (int i = 0; i < 3; i++) {
+        rot[i] = mean[i + 3] - m->bias[i];
+    }
+    if (length(rot) < DRIFT_RATE) {
+        for (int i = 0; i < 3; i++) {
+            m->bias[i] += rot[i] * WINDOW_S / BIAS_TAU_S;
+        }
+    }
+}
+
+/* A unit at rest for a long time tells the truth about gravity and gyro bias, whatever
+ * went wrong before, such as calibrating in a bend. Real rotation, however slow, shows
+ * as gravity moving between windows, and so does not count as rest. */
+static void watch_for_rest(yg_motion_t *m, const float v[6]) {
+    float mean[6];
+    bool still;
+    if (!window_add(m, v, mean, &still)) {
+        return;
+    }
+    follow_drift(m, mean);
+    if (!still) {
+        m->rest_windows = 0;
+        return;
+    }
+    bool same = m->rest_windows > 0;
+    for (int i = 0; i < 3 && same; i++) {
+        same = fabsf(mean[i] - m->rest_gravity[i]) < STILL_ACCEL_SPREAD;
+    }
+    if (!same) {
+        memcpy(m->rest_gravity, mean, sizeof(m->rest_gravity));
+        m->rest_windows = 0;
+    }
+    m->rest_windows++;
+    if (m->rest_windows >= REST_WINDOWS) {
+        set_calibration(m, mean);
+        m->rest_windows = 0;
+    }
+}
+
+/* The vertical is fixed in the world, so in the sensor's frame it turns the other way. */
+static void turn_gravity(float g[3], const float rot[3], float dt) {
+    const float w[3] = { rot[0] * DEG_TO_RAD * dt, rot[1] * DEG_TO_RAD * dt, rot[2] * DEG_TO_RAD * dt };
+    const float c[3] = { w[1] * g[2] - w[2] * g[1], w[2] * g[0] - w[0] * g[2], w[0] * g[1] - w[1] * g[0] };
+    for (int i = 0; i < 3; i++) {
+        g[i] -= c[i];
     }
 }
 
@@ -113,6 +176,7 @@ void yg_motion_update(yg_motion_t *m, const yg_settings_t *s, uint32_t now, cons
     memset(out, 0, sizeof(*out));
     const float accel[3] = { in->ax, in->ay, in->az };
     const float gyro[3] = { in->gx, in->gy, in->gz };
+    const float v[6] = { in->ax, in->ay, in->az, in->gx, in->gy, in->gz };
 
     if (!m->started) {
         m->started = true;
@@ -121,7 +185,6 @@ void yg_motion_update(yg_motion_t *m, const yg_settings_t *s, uint32_t now, cons
         m->bucket_start = now;
     }
     if (!m->calibrated) {
-        const float v[6] = { in->ax, in->ay, in->az, in->gx, in->gy, in->gz };
         calibrate(m, now, v);
         m->last_ms = now;
         m->bucket_start = now;
@@ -135,14 +198,19 @@ void yg_motion_update(yg_motion_t *m, const yg_settings_t *s, uint32_t now, cons
         dt = 0.02f;
     }
 
-    float glen = length(m->gravity);
-    float down[3] = { m->gravity[0] / glen, m->gravity[1] / glen, m->gravity[2] / glen };
-
-    /* Split rotation into yaw, around the vertical, and tilt, around anything else. */
     float rot[3];
     for (int i = 0; i < 3; i++) {
         rot[i] = gyro[i] - m->bias[i];
     }
+    float rot_rate = length(rot);
+    if (rot_rate >= DRIFT_RATE) {
+        turn_gravity(m->gravity, rot, dt);
+    }
+
+    float glen = length(m->gravity);
+    float down[3] = { m->gravity[0] / glen, m->gravity[1] / glen, m->gravity[2] / glen };
+
+    /* Split rotation into yaw, around the vertical, and tilt, around anything else. */
     float yaw_rate = dot(rot, down);
     float tilt_vec[3];
     for (int i = 0; i < 3; i++) {
@@ -162,9 +230,11 @@ void yg_motion_update(yg_motion_t *m, const yg_settings_t *s, uint32_t now, cons
         m->horizontal[i] += alpha * (h - m->horizontal[i]);
     }
     float horizontal_mg = length(m->horizontal) * 1000.0f;
+    float threshold = (float)s->motion_accel_mg;
+    bool above = !tilting && horizontal_mg >= threshold;
 
     /* Gravity follows slowly, or quickly while the unit itself is being tilted. */
-    float g_alpha = tilting ? GRAVITY_ALPHA_TILT : dt / GRAVITY_TAU_S;
+    float g_alpha = tilting ? GRAVITY_ALPHA_TILT : dt / (above ? GRAVITY_TAU_ABOVE_S : GRAVITY_TAU_S);
     for (int i = 0; i < 3; i++) {
         m->gravity[i] += g_alpha * (accel[i] - m->gravity[i]);
     }
@@ -173,27 +243,14 @@ void yg_motion_update(yg_motion_t *m, const yg_settings_t *s, uint32_t now, cons
             m->horizontal[i] = 0;
         }
         horizontal_mg = 0;
-        m->above = false;
-    }
-
-    float rot_rate = length(rot);
-    if (!tilting && rot_rate < BIAS_QUIET_GYRO && horizontal_mg < BIAS_QUIET_MG) {
-        for (int i = 0; i < 3; i++) {
-            m->bias[i] += dt / BIAS_TAU_S * rot[i];
-        }
     }
 
     float yaw_sum = yaw_window_sum(m, s, now, yaw_rate * dt);
 
-    float threshold = (float)s->motion_accel_mg;
-    if (!tilting && horizontal_mg >= threshold) {
-        if (!m->above) {
-            m->above = true;
-            m->above_since = now;
-        }
-    } else if (horizontal_mg < threshold * ACCEL_RELEASE) {
-        m->above = false;
+    if (above && !m->above) {
+        m->above_since = now;
     }
+    m->above = above;
 
     out->calibrated = true;
     out->tilting = tilting;
@@ -213,6 +270,8 @@ void yg_motion_update(yg_motion_t *m, const yg_settings_t *s, uint32_t now, cons
     if (fabsf(yaw_rate) > m->peak_yaw_dps) {
         m->peak_yaw_dps = fabsf(yaw_rate);
     }
+
+    watch_for_rest(m, v);
 }
 
 void yg_motion_take_peaks(yg_motion_t *m, uint16_t *accel_mg, uint16_t *yaw_dps) {

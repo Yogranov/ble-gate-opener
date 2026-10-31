@@ -49,6 +49,29 @@ void yg_jw_tenths(yg_jw_t *w, int tenths) {
     yg_jw_raw(w, "%s%d.%d", tenths < 0 ? "-" : "", magnitude / 10, magnitude % 10);
 }
 
+bool yg_json_depth_ok(const char *text, int max_depth) {
+    int opened = 0;
+    bool in_string = false;
+    for (const char *p = text; *p; p++) {
+        if (in_string) {
+            if (*p == '\\' && p[1] != 0) {
+                p++;
+            } else if (*p == '"') {
+                in_string = false;
+            }
+        } else if (*p == '"') {
+            in_string = true;
+        } else if (*p == '[' || *p == '{') {
+            if (++opened > max_depth) {
+                return false;
+            }
+        } else if ((*p == ']' || *p == '}') && opened > 0) {
+            opened--;
+        }
+    }
+    return true;
+}
+
 int yg_jw_finish(yg_jw_t *w) {
     return w->overflow ? -1 : (int)w->pos;
 }

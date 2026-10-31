@@ -11,8 +11,8 @@
 esp_err_t yg_nvs_init(void);
 
 /* Fills in defaults, then stored values. On first boot this creates the hotspot
- * name and a random password. */
-void yg_nvs_load(yg_settings_t *s, yg_beacon_t *b);
+ * name and a random password. Returns false if the store could not be read. */
+bool yg_nvs_load(yg_settings_t *s, yg_beacon_t *b);
 
 /* Writes only what changed, to spare the flash. */
 void yg_nvs_save_settings(const yg_settings_t *s);

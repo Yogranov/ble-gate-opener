@@ -21,6 +21,7 @@
 #define QUEUE_LENGTH 64
 #define TICK_MS 100u
 #define OTA_DEADLINE_MS 30000u
+#define RARE_EVENT_WAIT pdMS_TO_TICKS(200)
 
 static const char *TAG = "yg_app";
 
@@ -53,6 +54,7 @@ typedef struct
         } imu;
         yg_gesture_t gesture;
         uint8_t clients;
+        bool absent;
         struct
         {
             yg_app_fn_t fn;
@@ -70,6 +72,7 @@ static QueueHandle_t s_queue;
 static volatile uint32_t s_dropped;
 static uint32_t s_dropped_logged;
 static volatile uint32_t s_trip;
+static bool s_settings_ok;
 static bool s_ota_pending;
 static bool s_test_fail_self_check;
 
@@ -77,9 +80,9 @@ static uint32_t now_ms(void) {
     return (uint32_t)(esp_timer_get_time() / 1000);
 }
 
-static void post(event_t *ev) {
+static void post(event_t *ev, TickType_t wait) {
     ev->t = now_ms();
-    if (xQueueSend(s_queue, ev, 0) != pdTRUE) {
+    if (xQueueSend(s_queue, ev, wait) != pdTRUE) {
         s_dropped++;
     }
 }
@@ -89,31 +92,32 @@ static void on_advert(const yg_addr_t *a, int8_t rssi, const yg_ibeacon_t *ib) {
     ev.advert.addr = *a;
     ev.advert.rssi = rssi;
     ev.advert.ib = *ib;
-    post(&ev);
+    post(&ev, 0);
 }
 
 static void on_imu_sample(const yg_imu_sample_t *s, float temp_c) {
     event_t ev = { .kind = EV_IMU };
     ev.imu.sample = *s;
     ev.imu.temp_c = temp_c;
-    post(&ev);
+    post(&ev, 0);
 }
 
-static void on_imu_failed(void) {
+static void on_imu_failed(bool absent) {
     event_t ev = { .kind = EV_IMU_FAILED };
-    post(&ev);
+    ev.absent = absent;
+    post(&ev, 0);
 }
 
 static void on_gesture(yg_gesture_t g) {
     event_t ev = { .kind = EV_GESTURE };
     ev.gesture = g;
-    post(&ev);
+    post(&ev, RARE_EVENT_WAIT);
 }
 
 void yg_app_post_clients(uint8_t clients) {
     event_t ev = { .kind = EV_CLIENTS };
     ev.clients = clients;
-    post(&ev);
+    post(&ev, RARE_EVENT_WAIT);
 }
 
 void yg_app_call(yg_app_fn_t fn, void *arg) {
@@ -198,7 +202,7 @@ static void check_new_firmware(uint32_t now) {
         return;
     }
     bool hotspot_ok = s_hooks.hotspot_running == NULL || s_hooks.hotspot_running();
-    if (yg_ble_is_scanning() && hotspot_ok && !s_test_fail_self_check) {
+    if (s_settings_ok && yg_ble_is_scanning() && hotspot_ok && !s_test_fail_self_check) {
         esp_ota_mark_app_valid_cancel_rollback();
         yg_engine_log_ota(&s_engine, now, YG_OTA_EVENT_CONFIRMED);
         ESP_LOGI(TAG, "New firmware passed its self-check");
@@ -215,10 +219,11 @@ static void handle(const event_t *ev) {
         yg_engine_on_advert(&s_engine, ev->t, &ev->advert.addr, ev->advert.rssi, &ev->advert.ib);
         break;
     case EV_IMU:
+        s_engine.sensor_id = yg_imu_id();
         yg_engine_on_imu(&s_engine, ev->t, &ev->imu.sample, ev->imu.temp_c);
         break;
     case EV_IMU_FAILED:
-        yg_engine_on_imu_failed(&s_engine, ev->t);
+        yg_engine_on_imu_failed(&s_engine, ev->t, ev->absent);
         break;
     case EV_GESTURE:
         yg_engine_on_gesture(&s_engine, ev->t, ev->gesture);
@@ -266,7 +271,7 @@ void yg_app_start(const yg_app_hooks_t *hooks) {
     s_hooks = *hooks;
     s_queue = xQueueCreate(QUEUE_LENGTH, sizeof(event_t));
 
-    yg_nvs_load(&s_settings, &s_beacon);
+    s_settings_ok = yg_nvs_load(&s_settings, &s_beacon);
     set_debug_logging(s_settings.debug);
     s_trip = yg_nvs_next_trip();
 
@@ -277,8 +282,7 @@ void yg_app_start(const yg_app_hooks_t *hooks) {
         s_test_fail_self_check = yg_nvs_take_test_flag();
     }
 
-    uint8_t sensor_id = 0;
-    bool sensor_found = yg_imu_init(&sensor_id);
+    bool sensor_found = yg_imu_init();
 
     yg_ble_start(on_advert);
 
@@ -286,18 +290,13 @@ void yg_app_start(const yg_app_hooks_t *hooks) {
         .trip = s_trip,
         .fw = esp_app_get_description()->version,
         .reset_reason = (uint8_t)esp_reset_reason(),
-        .sensor_id = sensor_id,
+        .sensor_id = yg_imu_id(),
         .force_hotspot = s_ota_pending,
     };
     yg_engine_init(&s_engine, &OPS, &s_settings, &s_beacon, &boot, now_ms());
-    if (!sensor_found) {
-        yg_engine_on_imu_absent(&s_engine, now_ms());
-    }
 
     yg_io_start(on_gesture);
-    if (sensor_found) {
-        yg_imu_start(on_imu_sample, on_imu_failed);
-    }
+    yg_imu_start(on_imu_sample, on_imu_failed);
     xTaskCreate(decision_task, "yg_app", 8192, NULL, 8, NULL);
-    ESP_LOGI(TAG, "Trip %u, firmware %s, sensor %s", (unsigned)s_trip, boot.fw, sensor_found ? "found" : "missing");
+    ESP_LOGI(TAG, "Trip %u, firmware %s, sensor %s", (unsigned)s_trip, boot.fw, sensor_found ? "found" : "not found yet");
 }

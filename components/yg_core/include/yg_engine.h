@@ -132,15 +132,14 @@ void yg_engine_init(yg_engine_t *e, const yg_engine_ops_t *ops, yg_settings_t *s
 
 void yg_engine_on_advert(yg_engine_t *e, uint32_t now, const yg_addr_t *a, int8_t rssi, const yg_ibeacon_t *ib);
 void yg_engine_on_imu(yg_engine_t *e, uint32_t now, const yg_imu_sample_t *s, float temp_c);
-void yg_engine_on_imu_failed(yg_engine_t *e, uint32_t now);
-void yg_engine_on_imu_absent(yg_engine_t *e, uint32_t now);
+void yg_engine_on_imu_failed(yg_engine_t *e, uint32_t now, bool absent);
 void yg_engine_on_gesture(yg_engine_t *e, uint32_t now, yg_gesture_t g);
 void yg_engine_on_clients(yg_engine_t *e, uint32_t now, uint8_t clients);
 void yg_engine_tick(yg_engine_t *e, uint32_t now);
 
 bool yg_engine_press(yg_engine_t *e, uint32_t now, yg_press_reason_t reason);
 bool yg_engine_setpoint_here(yg_engine_t *e, uint32_t now);
-bool yg_engine_setpoint_dbm(yg_engine_t *e, uint32_t now, int8_t dbm);   /* YG_SET_POINT_ANY for "any". */
+bool yg_engine_setpoint_dbm(yg_engine_t *e, uint32_t now, int dbm);   /* YG_SET_POINT_ANY for "any". */
 void yg_engine_pair_start(yg_engine_t *e, uint32_t now, yg_pair_mode_t mode);
 void yg_engine_pair_cancel(yg_engine_t *e, uint32_t now);
 void yg_engine_pair_set(yg_engine_t *e, uint32_t now, const uint8_t addr[YG_ADDR_LEN], uint8_t type);

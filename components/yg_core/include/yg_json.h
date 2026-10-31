@@ -17,3 +17,6 @@ void yg_jw_raw(yg_jw_t *w, const char *fmt, ...);
 void yg_jw_string(yg_jw_t *w, const char *text);   /* Writes "text" with escaping. */
 void yg_jw_tenths(yg_jw_t *w, int tenths);         /* Writes -185 as -18.5. */
 int yg_jw_finish(yg_jw_t *w);                      /* Returns the length, or -1 on overflow. */
+
+/* False if text nests deeper than max_depth. A JSON parser recurses, so check first. */
+bool yg_json_depth_ok(const char *text, int max_depth);

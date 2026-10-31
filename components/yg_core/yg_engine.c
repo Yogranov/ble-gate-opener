@@ -1,5 +1,6 @@
 #include "yg_engine.h"
 
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -105,6 +106,7 @@ static void sync_sensor(yg_engine_t *e, uint32_t now) {
         led(e, YG_LED_SENSOR_FAILED);
     } else if (e->health_seen == YG_SENSOR_FAILED) {
         yg_trigger_set_sensor_ok(&e->trigger, true);
+        yg_motion_init(&e->motion);
         yg_rec_error(&r, e->trip, now, YG_ERROR_SENSOR_RECOVERED, 0);
         log_record(e, &r);
         led_idle(e);
@@ -141,7 +143,7 @@ void yg_engine_init(yg_engine_t *e, const yg_engine_ops_t *ops, yg_settings_t *s
 
     yg_trigger_init(&e->trigger, beacon->paired);
     yg_motion_init(&e->motion);
-    yg_sensor_health_init(&e->health);
+    yg_sensor_health_init(&e->health, now);
     e->health_seen = e->health.state;
     yg_pairing_init(&e->pairing);
     yg_trace_init(&e->trace, now);
@@ -219,13 +221,8 @@ void yg_engine_on_imu(yg_engine_t *e, uint32_t now, const yg_imu_sample_t *s, fl
     }
 }
 
-void yg_engine_on_imu_failed(yg_engine_t *e, uint32_t now) {
-    yg_sensor_health_on_read_failed(&e->health);
-    sync_sensor(e, now);
-}
-
-void yg_engine_on_imu_absent(yg_engine_t *e, uint32_t now) {
-    yg_sensor_health_absent(&e->health);
+void yg_engine_on_imu_failed(yg_engine_t *e, uint32_t now, bool absent) {
+    yg_sensor_health_on_read_failed(&e->health, now, absent);
     sync_sensor(e, now);
 }
 
@@ -382,15 +379,15 @@ bool yg_engine_setpoint_here(yg_engine_t *e, uint32_t now) {
     return true;
 }
 
-bool yg_engine_setpoint_dbm(yg_engine_t *e, uint32_t now, int8_t dbm) {
+bool yg_engine_setpoint_dbm(yg_engine_t *e, uint32_t now, int dbm) {
     if (!yg_settings_set_int(e->s, "set_point_dbm", dbm)) {
         return false;
     }
-    char value[8];
+    char value[16];
     if (dbm == YG_SET_POINT_ANY) {
         strcpy(value, "any");
     } else {
-        snprintf(value, sizeof(value), "%d", (int)dbm);
+        snprintf(value, sizeof(value), "%d", dbm);
     }
     yg_engine_setting_changed(e, now, "set_point_dbm", value);
     return true;
@@ -421,6 +418,7 @@ void yg_engine_pair_set(yg_engine_t *e, uint32_t now, const uint8_t addr[YG_ADDR
     e->beacon.addr.type = type;
     e->heard_logged = false;
     e->has_advert = false;
+    e->recent_head = 0;
     e->recent_count = 0;
     e->ops->save_beacon(e->ops->ctx, &e->beacon);
     e->s->set_point_dbm = YG_SET_POINT_ANY;
@@ -442,6 +440,7 @@ void yg_engine_pair_forget(yg_engine_t *e, uint32_t now) {
     yg_pairing_cancel(&e->pairing);
     e->beacon.paired = false;
     e->has_advert = false;
+    e->recent_head = 0;
     e->recent_count = 0;
     e->ops->save_beacon(e->ops->ctx, &e->beacon);
     e->s->set_point_dbm = YG_SET_POINT_ANY;
@@ -590,13 +589,8 @@ int yg_engine_debug_json(const yg_engine_t *e, uint32_t now, char *buf, size_t l
     const yg_imu_sample_t *in = &e->last_sample;
     yg_jw_t w;
     yg_jw_init(&w, buf, len);
-    yg_jw_raw(&w, "{\"uptime_ms\":%u,\"ax\":", (unsigned)(now - e->boot_time));
-    yg_jw_tenths(&w, (int)(in->ax * 10.0f));
-    yg_jw_raw(&w, ",\"ay\":");
-    yg_jw_tenths(&w, (int)(in->ay * 10.0f));
-    yg_jw_raw(&w, ",\"az\":");
-    yg_jw_tenths(&w, (int)(in->az * 10.0f));
-    yg_jw_raw(&w, ",\"gx\":");
+    yg_jw_raw(&w, "{\"uptime_ms\":%u,\"ax_mg\":%d,\"ay_mg\":%d,\"az_mg\":%d,\"gx\":", (unsigned)(now - e->boot_time),
+              (int)lroundf(in->ax * 1000.0f), (int)lroundf(in->ay * 1000.0f), (int)lroundf(in->az * 1000.0f));
     yg_jw_tenths(&w, (int)(in->gx * 10.0f));
     yg_jw_raw(&w, ",\"gy\":");
     yg_jw_tenths(&w, (int)(in->gy * 10.0f));

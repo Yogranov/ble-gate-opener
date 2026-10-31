@@ -54,7 +54,15 @@ static void settings_change_what_happens(void) {
     CHECK_HAS(out, "PRESS,1600,auto");
 }
 
+static void a_sensor_failure_in_the_log_replays_as_fallback(void) {
+    static char out[1024];
+    compile_and_run("A,1000,-85\nT,1100\nF,2000\nA,2100,-85\nT,2200\n", out, sizeof(out));
+    CHECK_LACKS(out, "PRESS,1000");
+    CHECK_HAS(out, "PRESS,2100,fallback");
+}
+
 int main(void) {
+    RUN(a_sensor_failure_in_the_log_replays_as_fallback);
     RUN(a_recorded_trip_replays_to_one_press);
     RUN(settings_change_what_happens);
     return TEST_RESULT();

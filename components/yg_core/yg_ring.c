@@ -118,18 +118,29 @@ int yg_ring_append(yg_ring_t *r, const yg_record_t *rec) {
     return r->f.write(r->f.ctx, off, encoded, (uint32_t)n);
 }
 
-int yg_ring_clear(yg_ring_t *r) {
-    int result = 0;
-    for (uint32_t s = 0; s < r->sectors; s++) {
-        uint32_t seq, trip;
-        if (read_header(r, s, &seq, &trip) && r->f.erase(r->f.ctx, sector_offset(s)) != 0) {
-            result = -1;
-        }
+int yg_ring_clear_sector(yg_ring_t *r, uint32_t sector) {
+    uint32_t seq, trip;
+    if (!read_header(r, sector, &seq, &trip)) {
+        return 0;
     }
+    return r->f.erase(r->f.ctx, sector_offset(sector)) == 0 ? 1 : -1;
+}
+
+void yg_ring_reset(yg_ring_t *r) {
     r->any = false;
     r->head = 0;
     r->head_pos = 0;
     r->head_seq = 0;
+}
+
+int yg_ring_clear(yg_ring_t *r) {
+    int result = 0;
+    for (uint32_t s = 0; s < r->sectors; s++) {
+        if (yg_ring_clear_sector(r, s) < 0) {
+            result = -1;
+        }
+    }
+    yg_ring_reset(r);
     return result;
 }
 
@@ -157,6 +168,34 @@ uint32_t yg_ring_age_for_trip(const yg_ring_t *r, uint32_t trip) {
         age++;
     }
     return age;
+}
+
+bool yg_ring_newest_seq(const yg_ring_t *r, uint32_t *seq) {
+    if (!r->any) {
+        return false;
+    }
+    *seq = r->head_seq;
+    return true;
+}
+
+bool yg_ring_oldest_seq(const yg_ring_t *r, uint32_t *seq) {
+    uint32_t age = 0;
+    uint32_t sector, first_trip;
+    if (!yg_ring_sector_at(r, 0, &sector, &first_trip)) {
+        return false;
+    }
+    while (yg_ring_sector_at(r, age + 1, &sector, &first_trip)) {
+        age++;
+    }
+    *seq = r->head_seq - age;
+    return true;
+}
+
+bool yg_ring_sector_for_seq(const yg_ring_t *r, uint32_t seq, uint32_t *sector, uint32_t *first_trip) {
+    if (!r->any || (int32_t)(r->head_seq - seq) < 0) {
+        return false;
+    }
+    return yg_ring_sector_at(r, r->head_seq - seq, sector, first_trip);
 }
 
 int yg_ring_read_sector(const yg_ring_t *r, uint32_t sector, uint8_t *buf) {

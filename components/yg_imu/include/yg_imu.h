@@ -7,11 +7,15 @@
 #include "yg_motion.h"
 
 typedef void (*yg_imu_sample_cb_t)(const yg_imu_sample_t *s, float temp_c);
-typedef void (*yg_imu_failed_cb_t)(void);
+/* absent means the sensor has not been found on the bus. */
+typedef void (*yg_imu_failed_cb_t)(bool absent);
 
-/* Looks for the sensor and configures it. Returns false if it is not there.
- * id receives what WHO_AM_I said, which differs on clone chips. */
-bool yg_imu_init(uint8_t *id);
+/* Sets up the bus and looks for the sensor. Returns false if it is not there yet:
+ * sampling keeps looking for it. */
+bool yg_imu_init(void);
 
-/* Starts sampling. The callbacks run in the sampling task. */
+/* What WHO_AM_I said, which differs on clone chips. 0 until the sensor is found. */
+uint8_t yg_imu_id(void);
+
+/* Starts sampling, found or not. The callbacks run in the sampling task. */
 void yg_imu_start(yg_imu_sample_cb_t on_sample, yg_imu_failed_cb_t on_failed);

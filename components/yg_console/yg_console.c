@@ -6,6 +6,7 @@
 
 #include "esp_console.h"
 #include "esp_system.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "yg_app.h"
@@ -201,11 +202,73 @@ static int cmd_logs(int argc, char **argv) {
     return 0;
 }
 
+/* log-fill <sectors>: fills both logs with dummy records, to test a full log. */
+static int cmd_log_fill(int argc, char **argv) {
+    enum { RECORDS_PER_SECTOR = 16 };
+    int sectors = argc == 2 ? atoi(argv[1]) : 0;
+    if (sectors <= 0) {
+        printf("Usage: log-fill <sectors>\n");
+        return 1;
+    }
+    static yg_record_t r;
+    static const int16_t raw[6 * YG_CAP_IMU_PER_RECORD];
+    yg_rec_cap_imu(&r, yg_app_current_trip(), 0, 0, 0, YG_CAP_IMU_PER_RECORD, raw);
+    for (int i = 0; i < sectors * RECORDS_PER_SECTOR; i++) {
+        yg_log_trip(&r);
+        yg_log_capture(&r);
+        if (i % RECORDS_PER_SECTOR == 0) {
+            vTaskDelay(1);
+        }
+    }
+    printf("Filled\n");
+    return 0;
+}
+
+static volatile bool s_watching;
+static volatile uint32_t s_slowest_ms;
+
+static void log_something(yg_engine_t *e, uint32_t now, void *arg) {
+    (void)arg;
+    yg_engine_time_anchor(e, now, 0);
+}
+
+/* Times the decision task while it logs, as it would when deciding on a press. */
+static void watch_task(void *arg) {
+    (void)arg;
+    while (s_watching) {
+        int64_t start = esp_timer_get_time();
+        yg_app_call(log_something, NULL);
+        uint32_t ms = (uint32_t)((esp_timer_get_time() - start) / 1000);
+        if (ms > s_slowest_ms) {
+            s_slowest_ms = ms;
+        }
+        vTaskDelay(pdMS_TO_TICKS(50));
+    }
+    vTaskDelete(NULL);
+}
+
+/* log-clear: erases the logs and reports how long the decision task was held up. */
+static int cmd_log_clear(int argc, char **argv) {
+    (void)argc;
+    (void)argv;
+    s_watching = true;
+    s_slowest_ms = 0;
+    xTaskCreate(watch_task, "yg_watch", 3072, NULL, 5, NULL);
+    int64_t start = esp_timer_get_time();
+    int result = yg_log_clear();
+    uint32_t ms = (uint32_t)((esp_timer_get_time() - start) / 1000);
+    s_watching = false;
+    vTaskDelay(pdMS_TO_TICKS(200));
+    printf("{\"cleared\":%s,\"ms\":%u,\"slowest_ms\":%u}\n", result == 0 ? "true" : "false", (unsigned)ms, (unsigned)s_slowest_ms);
+    return result == 0 ? 0 : 1;
+}
+
 static int cmd_factory_reset(int argc, char **argv) {
     (void)argc;
     (void)argv;
-    yg_log_clear();
+    /* Settings first: erasing full logs takes much longer. */
     yg_nvs_factory_reset();
+    yg_log_clear();
     printf("Erased settings and logs. Restarting.\n");
     fflush(stdout);
     esp_restart();
@@ -237,6 +300,8 @@ void yg_console_start(void (*register_more)(void)) {
         { .command = "scan", .help = "List nearby iBeacons: scan start|list|stop", .func = cmd_scan },
         { .command = "devices", .help = "List every BLE device heard: devices [seconds]", .func = cmd_devices },
         { .command = "logs", .help = "Stream the logs as NDJSON: logs [nocapture]", .func = cmd_logs },
+        { .command = "log-fill", .help = "Fill both logs with dummy records: log-fill <sectors>", .func = cmd_log_fill },
+        { .command = "log-clear", .help = "Erase the logs and report the time taken", .func = cmd_log_clear },
         { .command = "factory-reset", .help = "Erase settings and logs", .func = cmd_factory_reset },
         { .command = "reboot", .help = "Restart", .func = cmd_reboot },
     };

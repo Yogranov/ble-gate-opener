@@ -7,6 +7,7 @@
 #include "esp_partition.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
+#include "freertos/task.h"
 #include "yg_ring.h"
 #include "yg_trips.h"
 
@@ -18,6 +19,7 @@ static yg_ring_t s_trips;
 static yg_ring_t s_captures;
 static bool s_trips_ok;
 static bool s_captures_ok;
+static bool s_clearing;
 static SemaphoreHandle_t s_lock;
 
 static int flash_read(void *ctx, uint32_t off, void *buf, uint32_t len) {
@@ -59,7 +61,7 @@ static void append(yg_ring_t *ring, bool ok, const yg_record_t *r) {
         return;
     }
     xSemaphoreTake(s_lock, portMAX_DELAY);
-    if (yg_ring_append(ring, r) != 0) {
+    if (!s_clearing && yg_ring_append(ring, r) != 0) {
         ESP_LOGW(TAG, "Log write failed");
     }
     xSemaphoreGive(s_lock);
@@ -84,12 +86,20 @@ static uint32_t sectors_used(const yg_ring_t *ring) {
     return used;
 }
 
-/* Reads the sector `age` steps back from the newest. */
-static bool read_at_age(const yg_ring_t *ring, uint32_t age, uint8_t *buf) {
+/* False if the ring is empty. */
+static bool seq_range(const yg_ring_t *ring, uint32_t *oldest, uint32_t *newest) {
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    bool ok = yg_ring_oldest_seq(ring, oldest) && yg_ring_newest_seq(ring, newest);
+    xSemaphoreGive(s_lock);
+    return ok;
+}
+
+/* Reads a sector by its sequence number. False if it has been overwritten since. */
+static bool read_seq(const yg_ring_t *ring, uint32_t seq, uint8_t *buf) {
     uint32_t sector, trip;
     bool ok = false;
     xSemaphoreTake(s_lock, portMAX_DELAY);
-    if (yg_ring_sector_at(ring, age, &sector, &trip)) {
+    if (yg_ring_sector_for_seq(ring, seq, &sector, &trip)) {
         ok = yg_ring_read_sector(ring, sector, buf) == 0;
     }
     xSemaphoreGive(s_lock);
@@ -116,10 +126,12 @@ static void work_free(work_t *w) {
     free(w->record);
 }
 
-/* Sends a ring's records as JSON, oldest first. Returns false if told to stop. */
-static bool send_ring(const yg_ring_t *ring, work_t *w, bool only_trip, uint32_t trip, uint32_t from_age, yg_log_line_cb_t cb, void *ctx) {
-    for (uint32_t age = from_age + 1; age-- > 0;) {
-        if (!read_at_age(ring, age, w->sector)) {
+/* Sends a ring's records as JSON, oldest first, up to the newest sector. New records
+ * moving the head on cannot make this skip or repeat a sector, as it walks sequence
+ * numbers. Returns false if told to stop. */
+static bool send_ring(const yg_ring_t *ring, work_t *w, bool only_trip, uint32_t trip, uint32_t from, uint32_t newest, yg_log_line_cb_t cb, void *ctx) {
+    for (uint32_t seq = from; (int32_t)(newest - seq) >= 0; seq++) {
+        if (!read_seq(ring, seq, w->sector)) {
             continue;
         }
         size_t pos = YG_RING_FIRST_RECORD;
@@ -143,25 +155,32 @@ int yg_log_export(bool captures, yg_log_line_cb_t cb, void *ctx) {
         return -1;
     }
     bool more = true;
-    uint32_t used = sectors_used(&s_trips);
-    if (used > 0) {
-        more = send_ring(&s_trips, &w, false, 0, used - 1, cb, ctx);
+    uint32_t oldest, newest;
+    if (seq_range(&s_trips, &oldest, &newest)) {
+        more = send_ring(&s_trips, &w, false, 0, oldest, newest, cb, ctx);
     }
-    if (more && captures) {
-        used = sectors_used(&s_captures);
-        if (used > 0) {
-            send_ring(&s_captures, &w, false, 0, used - 1, cb, ctx);
-        }
+    if (more && captures && seq_range(&s_captures, &oldest, &newest)) {
+        send_ring(&s_captures, &w, false, 0, oldest, newest, cb, ctx);
     }
     work_free(&w);
     return 0;
 }
 
-static uint32_t age_for_trip(uint32_t trip) {
+/* The sequence number of the sector to start from to find all of `trip`. */
+static uint32_t seq_for_trip(uint32_t trip, uint32_t newest) {
     xSemaphoreTake(s_lock, portMAX_DELAY);
     uint32_t age = yg_ring_age_for_trip(&s_trips, trip);
     xSemaphoreGive(s_lock);
-    return age;
+    return newest - age;
+}
+
+/* The trip that the oldest stored sector began in. */
+static uint32_t oldest_trip(uint32_t oldest) {
+    uint32_t sector, trip = 0;
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    yg_ring_sector_for_seq(&s_trips, oldest, &sector, &trip);
+    xSemaphoreGive(s_lock);
+    return trip;
 }
 
 int yg_log_trip_records(uint32_t trip, yg_log_line_cb_t cb, void *ctx) {
@@ -170,18 +189,21 @@ int yg_log_trip_records(uint32_t trip, yg_log_line_cb_t cb, void *ctx) {
         work_free(&w);
         return -1;
     }
-    if (sectors_used(&s_trips) > 0) {
-        send_ring(&s_trips, &w, true, trip, age_for_trip(trip), cb, ctx);
+    uint32_t oldest, newest;
+    if (seq_range(&s_trips, &oldest, &newest)) {
+        send_ring(&s_trips, &w, true, trip, seq_for_trip(trip, newest), newest, cb, ctx);
     }
     work_free(&w);
     return 0;
 }
 
-int yg_log_trip_list(uint32_t before, uint32_t limit, yg_log_line_cb_t cb, void *ctx) {
+int yg_log_trip_list(uint32_t before, uint32_t limit, uint32_t *next_before, yg_log_line_cb_t cb, void *ctx) {
+    *next_before = 0;
     if (limit == 0 || limit > MAX_LIST) {
         limit = MAX_LIST;
     }
-    if (before == 0 || sectors_used(&s_trips) == 0) {
+    uint32_t oldest, newest;
+    if (before <= 1 || !seq_range(&s_trips, &oldest, &newest)) {
         return 0;
     }
     uint32_t high = before - 1;
@@ -201,8 +223,8 @@ int yg_log_trip_list(uint32_t before, uint32_t limit, yg_log_line_cb_t cb, void 
         yg_trip_summary_init(&trips[i], low + i);
     }
     /* Read on to the newest sector, because ratings are stored in later trips. */
-    for (uint32_t age = age_for_trip(low) + 1; age-- > 0;) {
-        if (!read_at_age(&s_trips, age, w.sector)) {
+    for (uint32_t seq = seq_for_trip(low, newest); (int32_t)(newest - seq) >= 0; seq++) {
+        if (!read_seq(&s_trips, seq, w.sector)) {
             continue;
         }
         size_t pos = YG_RING_FIRST_RECORD;
@@ -228,20 +250,49 @@ int yg_log_trip_list(uint32_t before, uint32_t limit, yg_log_line_cb_t cb, void 
             break;
         }
     }
+    if (oldest_trip(oldest) < low) {
+        *next_before = low;
+    }
     work_free(&w);
     free(trips);
     return 0;
 }
 
-int yg_log_clear(void) {
+static int clear_ring(yg_ring_t *ring) {
     int result = 0;
+    for (uint32_t s = 0; s < ring->sectors; s++) {
+        xSemaphoreTake(s_lock, portMAX_DELAY);
+        int erased = yg_ring_clear_sector(ring, s);
+        xSemaphoreGive(s_lock);
+        if (erased < 0) {
+            result = -1;
+        } else if (erased > 0) {
+            vTaskDelay(1);
+        }
+    }
     xSemaphoreTake(s_lock, portMAX_DELAY);
-    if (s_trips_ok && yg_ring_clear(&s_trips) != 0) {
+    yg_ring_reset(ring);
+    xSemaphoreGive(s_lock);
+    return result;
+}
+
+int yg_log_clear(void) {
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    bool busy = s_clearing;
+    s_clearing = true;
+    xSemaphoreGive(s_lock);
+    if (busy) {
+        return -1;
+    }
+    int result = 0;
+    if (s_trips_ok && clear_ring(&s_trips) != 0) {
         result = -1;
     }
-    if (s_captures_ok && yg_ring_clear(&s_captures) != 0) {
+    if (s_captures_ok && clear_ring(&s_captures) != 0) {
         result = -1;
     }
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    s_clearing = false;
     xSemaphoreGive(s_lock);
     return result;
 }

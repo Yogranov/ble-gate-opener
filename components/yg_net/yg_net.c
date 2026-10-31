@@ -72,17 +72,22 @@ static void hotspot_on(void) {
     yg_app_call(read_config, &c);
 
     wifi_config_t ap = { 0 };
-    strlcpy((char *)ap.ap.ssid, c.ssid, sizeof(ap.ap.ssid));
+    /* A name of the full 32 bytes has no terminator, and is allowed. */
+    size_t ssid_len = strlen(c.ssid);
+    memcpy(ap.ap.ssid, c.ssid, ssid_len);
     strlcpy((char *)ap.ap.password, c.password, sizeof(ap.ap.password));
-    ap.ap.ssid_len = (uint8_t)strlen(c.ssid);
+    ap.ap.ssid_len = (uint8_t)ssid_len;
     ap.ap.channel = 6;
     ap.ap.max_connection = 2;
     ap.ap.authmode = WIFI_AUTH_WPA2_PSK;
 
     /* The station side is only there for the debug scan and bench tests. */
     esp_wifi_set_mode(c.debug || s_joined ? WIFI_MODE_APSTA : WIFI_MODE_AP);
-    esp_wifi_set_config(WIFI_IF_AP, &ap);
-    esp_err_t err = esp_wifi_start();
+    /* Starting after a failed config would bring the hotspot up open. */
+    esp_err_t err = esp_wifi_set_config(WIFI_IF_AP, &ap);
+    if (err == ESP_OK) {
+        err = esp_wifi_start();
+    }
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Wi-Fi start failed: %s", esp_err_to_name(err));
         return;
@@ -263,7 +268,8 @@ static int open_loopback(void) {
         if (sock >= 0) close(sock);
         return -1;
     }
-    struct timeval timeout = { .tv_sec = 20 };
+    /* Erasing full logs takes most of a minute before the first byte of the answer. */
+    struct timeval timeout = { .tv_sec = 90 };
     setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
     return sock;
 }
@@ -286,20 +292,22 @@ static void print_response(int sock) {
     close(sock);
 }
 
-/* api GET /api/status, or api POST /api/press {...} */
+/* api GET /api/status, or api POST /api/press {...}. NOGUARD is a POST without the
+ * header that the page sends, as a page on another site would. */
 static int cmd_api(int argc, char **argv) {
     if (argc < 3) {
-        printf("Usage: api GET|POST <path> [body]\n");
+        printf("Usage: api GET|POST|NOGUARD <path> [body]\n");
         return 1;
     }
+    bool guarded = strcmp(argv[1], "NOGUARD") != 0;
     int sock = open_loopback();
     if (sock < 0) {
         return 1;
     }
     const char *body = argc > 3 ? argv[3] : "";
     static char request[1024];
-    int n = snprintf(request, sizeof(request), "%s %s HTTP/1.1\r\nHost: yg\r\nContent-Length: %u\r\n\r\n%s",
-                     argv[1], argv[2], (unsigned)strlen(body), body);
+    int n = snprintf(request, sizeof(request), "%s %s HTTP/1.1\r\nHost: yg\r\n%sContent-Length: %u\r\n\r\n%s",
+                     guarded ? argv[1] : "POST", argv[2], guarded ? "X-YogiGate: 1\r\n" : "", (unsigned)strlen(body), body);
     send(sock, request, (size_t)n, 0);
     print_response(sock);
     return 0;
@@ -317,13 +325,15 @@ static bool send_all(int sock, const uint8_t *data, size_t len) {
     return true;
 }
 
-/* ota-self [corrupt|fail]: uploads the running firmware to this unit's own
+/* ota-self [corrupt|fail|abandon]: uploads the running firmware to this unit's own
  * /api/ota, to test updates and rollback with no Wi-Fi client. "corrupt" damages
  * the image, which must be refused. "fail" makes the new boot fail its self-check,
- * which must roll back. */
+ * which must roll back. "abandon" goes silent half way, like a phone that dropped
+ * off Wi-Fi, which must not hold up the web server for long. */
 static int cmd_ota_self(int argc, char **argv) {
     bool corrupt = argc == 2 && strcmp(argv[1], "corrupt") == 0;
     bool fail = argc == 2 && strcmp(argv[1], "fail") == 0;
+    bool abandon = argc == 2 && strcmp(argv[1], "abandon") == 0;
     const esp_partition_t *running = esp_ota_get_running_partition();
     const esp_partition_pos_t pos = { .offset = running->address, .size = running->size };
     esp_image_metadata_t image;
@@ -338,12 +348,12 @@ static int cmd_ota_self(int argc, char **argv) {
     if (fail) {
         yg_nvs_set_test_flag();
     }
-    char head[96];
-    int n = snprintf(head, sizeof(head), "POST /api/ota HTTP/1.1\r\nHost: yg\r\nContent-Length: %u\r\n\r\n", (unsigned)image.image_len);
+    char head[128];
+    int n = snprintf(head, sizeof(head), "POST /api/ota HTTP/1.1\r\nHost: yg\r\nX-YogiGate: 1\r\nContent-Length: %u\r\n\r\n", (unsigned)image.image_len);
     send_all(sock, (const uint8_t *)head, (size_t)n);
     uint8_t *buf = malloc(4096);
     uint32_t sent = 0;
-    while (buf != NULL && sent < image.image_len) {
+    while (buf != NULL && sent < image.image_len && !(abandon && sent >= image.image_len / 2)) {
         size_t chunk = image.image_len - sent < 4096 ? image.image_len - sent : 4096;
         if (esp_partition_read(running, sent, buf, chunk) != ESP_OK) {
             break;
@@ -378,9 +388,9 @@ static int cmd_wifi_join(int argc, char **argv) {
 }
 
 void yg_net_console_register(void) {
-    const esp_console_cmd_t api = { .command = "api", .help = "HTTP request to this unit: api GET|POST <path> [body]", .func = cmd_api };
+    const esp_console_cmd_t api = { .command = "api", .help = "HTTP request to this unit: api GET|POST|NOGUARD <path> [body]", .func = cmd_api };
     const esp_console_cmd_t join = { .command = "wifi-join", .help = "Join a LAN until restart, for bench tests", .func = cmd_wifi_join };
-    const esp_console_cmd_t ota_self = { .command = "ota-self", .help = "Upload this firmware to itself: ota-self [corrupt|fail]", .func = cmd_ota_self };
+    const esp_console_cmd_t ota_self = { .command = "ota-self", .help = "Upload this firmware to itself: ota-self [corrupt|fail|abandon]", .func = cmd_ota_self };
     ESP_ERROR_CHECK(esp_console_cmd_register(&api));
     ESP_ERROR_CHECK(esp_console_cmd_register(&ota_self));
     ESP_ERROR_CHECK(esp_console_cmd_register(&join));

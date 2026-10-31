@@ -22,6 +22,10 @@ void yg_ibeacon_uuid_str(const yg_ibeacon_t *ib, char out[37]);
 
 /* Public and random static addresses stay the same. Phones rotate theirs. */
 bool yg_addr_is_stable(const yg_addr_t *a);
+
+/* True if a beacon with this address could be heard again later: the type is one the
+ * radio reports, or unknown because the MAC was typed, and the address does not rotate. */
+bool yg_addr_can_pair(const yg_addr_t *a);
 bool yg_addr_parse(const char *text, uint8_t out[YG_ADDR_LEN]);
 void yg_addr_format(const uint8_t addr[YG_ADDR_LEN], char out[18]);
 

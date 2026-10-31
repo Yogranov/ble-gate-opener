@@ -206,14 +206,18 @@ pre { margin: 8px 0 0; font-size: 12.5px; white-space: pre-wrap; overflow-wrap: 
 const $ = id => document.getElementById(id);
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
 
-async function api(path, options) {
-  const r = await fetch(path, options);
-  const type = r.headers.get("content-type") || "";
-  const data = type.includes("application/json") ? await r.json() : await r.text();
-  if (!r.ok) throw new Error((data && data.error) || r.statusText);
-  return data;
+async function api(path, options, timeoutMs) {
+  const stop = new AbortController();
+  const timer = timeoutMs ? setTimeout(() => stop.abort(), timeoutMs) : 0;
+  try {
+    const r = await fetch(path, { ...options, signal: stop.signal });
+    const type = r.headers.get("content-type") || "";
+    const data = type.includes("application/json") ? await r.json() : await r.text();
+    if (!r.ok) throw new Error((data && data.error) || r.statusText);
+    return data;
+  } finally { clearTimeout(timer); }
 }
-const post = (path, body) => api(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || { go: 1 }) });
+const post = (path, body) => api(path, { method: "POST", headers: { "Content-Type": "application/json", "X-YogiGate": "1" }, body: JSON.stringify(body || { go: 1 }) });
 
 let toastTimer;
 function toast(text, bad) {
@@ -225,6 +229,10 @@ function toast(text, bad) {
 }
 const act = (fn, done) => async () => {
   try { await fn(); if (done) toast(done); } catch (e) { toast(e.message, true); }
+};
+const whilePaused = fn => async () => {
+  pollPaused++;
+  try { await fn(); } finally { pollPaused--; }
 };
 
 /* Tabs */
@@ -289,7 +297,8 @@ function chart(canvas, opts) {
 }
 
 /* Status */
-let st = null, livePoints = [], pollBusy = false;
+let st = null, livePoints = [], pollBusy = false, pollPaused = 0;
+const POLL_TIMEOUT_MS = 3000;
 const STATE = { armed: "Armed", pressing: "Pressing", hold: "Pressed", unpaired: "No beacon" };
 const dbm = v => v === null || v === undefined ? "-" : v === "any" ? "Any" : v + " dBm";
 const clock = s => s >= 60 ? Math.floor(s / 60) + "m " + (s % 60) + "s" : s + "s";
@@ -334,6 +343,8 @@ function render(s) {
   $("debugCard").hidden = !s.debug;
 
   const now = s.uptime_ms / 1000;
+  /* After a restart the unit's clock starts again. */
+  if (livePoints.length && now < livePoints[livePoints.length - 1].t) livePoints = [];
   if (!livePoints.length || now > livePoints[livePoints.length - 1].t) {
     livePoints.push({ t: now, v: s.rssi !== null && s.rssi_age_ms < 1500 ? s.rssi : null });
   }
@@ -351,13 +362,13 @@ function drawLive() {
 }
 
 async function poll() {
-  if (pollBusy || document.hidden) return;
+  if (pollBusy || pollPaused || document.hidden) return;
   pollBusy = true;
   try {
-    render(await api("/api/status"));
+    render(await api("/api/status", null, POLL_TIMEOUT_MS));
     $("lost").hidden = true;
-    if (tab === "beacon" && st.pair_mode === "list") renderCandidates(await api("/api/pair/candidates"));
-    if (tab === "system" && st.debug) $("dLive").textContent = JSON.stringify(await api("/api/debug/live"));
+    if (tab === "beacon" && st.pair_mode === "list") renderCandidates(await api("/api/pair/candidates", null, POLL_TIMEOUT_MS));
+    if (tab === "system" && st.debug) $("dLive").textContent = JSON.stringify(await api("/api/debug/live", null, POLL_TIMEOUT_MS));
   } catch (e) {
     $("lost").hidden = false;
     $("sub").textContent = "Not connected";
@@ -367,31 +378,43 @@ async function poll() {
 $("press").addEventListener("click", act(() => post("/api/press"), "Pressing the remote"));
 
 /* Beacon */
-let lastPairMode = "idle";
+let lastPairMode = "idle", pairStartBeacon = null;
+const candRows = new Map();
+function clearCandidates() { candRows.clear(); $("pList").textContent = ""; }
 function renderPairing(s) {
   const auto = s.pair_mode === "auto", list = s.pair_mode === "list";
   $("pAuto").textContent = auto ? "Cancel" : "Start";
   $("pScan").textContent = list ? "Stop" : "Scan";
   $("pAutoState").hidden = !auto;
   if (auto) $("pAutoState").textContent = "Listening. Hold the beacon against the unit.";
-  if (lastPairMode === "auto" && !auto) toast(s.paired ? "Pairing finished" : "No beacon saved", !s.paired);
-  if (!list) $("pList").textContent = "";
+  if (auto && lastPairMode !== "auto") pairStartBeacon = s.beacon;
+  if (lastPairMode === "auto" && !auto) toast(s.beacon !== pairStartBeacon ? "Beacon saved" : "No beacon saved", s.beacon === pairStartBeacon);
+  if (!list && lastPairMode === "list") clearCandidates();
   lastPairMode = s.pair_mode;
 }
+/* Rows stay where they first appeared, because they sit under the user's finger. */
 function renderCandidates(data) {
   const list = $("pList");
-  list.textContent = "";
-  if (!data.candidates.length) { list.append(el("p", "muted", "Listening. Nothing heard yet.")); return; }
+  const heard = new Set(data.candidates.map(c => c.mac));
+  candRows.forEach((row, mac) => { if (!heard.has(mac)) { row.el.remove(); candRows.delete(mac); } });
+  if (!data.candidates.length) {
+    if (!list.firstChild) list.append(el("p", "muted", "Listening. Nothing heard yet."));
+    return;
+  }
+  if (!candRows.size) list.textContent = "";
   data.candidates.forEach(c => {
-    const row = el("div", "cand");
-    const info = el("div");
-    info.append(el("code", "", c.mac));
-    info.append(el("small", "", c.rssi + " dBm · major " + c.major + ", minor " + c.minor));
-    info.append(el("small", "", c.uuid));
-    const use = el("button", "", "Use");
-    use.addEventListener("click", act(() => post("/api/pair/select", { mac: c.mac, type: c.type }), "Beacon saved"));
-    row.append(info, use);
-    list.append(row);
+    let row = candRows.get(c.mac);
+    if (!row) {
+      row = { el: el("div", "cand"), signal: el("small") };
+      const info = el("div");
+      info.append(el("code", "", c.mac), row.signal, el("small", "", c.uuid));
+      const use = el("button", "", "Use");
+      use.addEventListener("click", act(() => post("/api/pair/select", { mac: c.mac, type: c.type }), "Beacon saved"));
+      row.el.append(info, use);
+      candRows.set(c.mac, row);
+      list.append(row.el);
+    }
+    row.signal.textContent = c.rssi + " dBm · major " + c.major + ", minor " + c.minor;
   });
 }
 $("bForget").addEventListener("click", () => { if (confirm("Forget this beacon? The gate will stop opening until you pair again.")) act(() => post("/api/pair/forget"), "Beacon forgotten")(); });
@@ -438,8 +461,8 @@ let original = {}, inputs = {};
 function readInput(s) {
   const i = inputs[s.key];
   if (s.type === "bool") return i.checked;
-  if (s.type === "dbm_or_any") return i.any.checked ? "any" : Number(i.num.value);
-  if (s.type === "int") return Number(i.value);
+  if (s.type === "dbm_or_any") return i.any.checked ? "any" : i.num.value === "" ? s.value : Number(i.num.value);
+  if (s.type === "int") return i.value === "" ? s.value : Number(i.value);
   return i.value;
 }
 function changedSettings() {
@@ -474,7 +497,7 @@ function field(s) {
     const anyLabel = el("label");
     const any = el("input"); any.type = "checkbox"; any.checked = s.value === "any";
     anyLabel.append(any, el("span", "", "Any"));
-    const num = el("input"); num.type = "number"; num.min = s.min; num.max = s.max; num.inputMode = "numeric";
+    const num = el("input"); num.type = "number"; num.min = s.min; num.max = s.max;
     num.value = s.value === "any" ? "" : s.value; num.disabled = any.checked;
     any.addEventListener("change", () => { num.disabled = any.checked; if (!any.checked && num.value === "") num.value = -85; updateSave(); });
     num.addEventListener("input", updateSave);
@@ -488,8 +511,8 @@ function field(s) {
   } else {
     input = el("input");
     input.type = s.type === "int" ? "number" : s.type === "password" ? "password" : "text";
-    if (s.type === "int") { input.min = s.min; input.max = s.max; input.inputMode = "numeric"; }
-    else { input.maxLength = s.max; input.className = "long"; input.autocomplete = "off"; }
+    if (s.type === "int") { input.min = s.min; input.max = s.max; if (s.min >= 0) input.inputMode = "numeric"; }
+    else { input.maxLength = s.max; input.className = "long"; input.autocomplete = s.type === "password" ? "new-password" : "off"; }
     input.value = s.value === undefined ? "" : s.value;
     label.append(input); inputs[s.key] = input;
   }
@@ -524,7 +547,7 @@ $("setSave").addEventListener("click", act(async () => { await post("/api/settin
 
 /* Logs */
 const RATINGS = [["good", "Good"], ["too_early", "Too early"], ["too_late", "Too late"], ["did_not_open", "Didn't open"], ["no_reason", "Opened for no reason"]];
-let oldestTrip = null;
+let nextBefore = 0;
 
 function tripSummary(t) {
   const parts = [clock(Math.round(t.duration_ms / 1000))];
@@ -603,18 +626,23 @@ async function loadTripDetail(t, box, row) {
 }
 async function loadTrips(reset) {
   const list = $("tripList");
-  const query = reset ? "?limit=10" : "?limit=10&before=" + oldestTrip;
-  const data = await api("/api/trips" + query);
-  if (reset) list.textContent = "";
-  if (reset && !data.trips.length) list.append(el("p", "muted", "No trips yet."));
-  data.trips.forEach(t => { list.append(tripRow(t)); oldestTrip = t.trip; });
-  $("tripMore").hidden = data.trips.length < 10;
+  if (reset) nextBefore = 0;
+  /* Goes on past trip numbers with nothing stored, which a power cut can leave. */
+  let data;
+  do {
+    data = await api("/api/trips?limit=10" + (nextBefore ? "&before=" + nextBefore : ""));
+    if (reset) { list.textContent = ""; reset = false; }
+    data.trips.forEach(t => list.append(tripRow(t)));
+    nextBefore = data.next_before;
+  } while (!data.trips.length && nextBefore);
+  if (!list.firstChild) list.append(el("p", "muted", "No trips yet."));
+  $("tripMore").hidden = !nextBefore;
   const sys = await api("/api/system");
   const percent = (used, total) => total ? Math.round(used * 100 / total) : 0;
   $("logUse").textContent = "Trip log " + percent(sys.log_used, sys.log_total) + "% full, debug captures " + percent(sys.capture_used, sys.capture_total) + "% full. The oldest data is overwritten.";
 }
 $("tripMore").addEventListener("click", act(() => loadTrips(false)));
-$("logClear").addEventListener("click", () => { if (confirm("Erase all logs? This cannot be undone.")) act(async () => { await post("/api/logs/clear"); await loadTrips(true); }, "Logs erased")(); });
+$("logClear").addEventListener("click", () => { if (confirm("Erase all logs? This cannot be undone.")) { toast("Erasing. Full logs can take a minute."); act(whilePaused(async () => { await post("/api/logs/clear"); await loadTrips(true); }), "Logs erased")(); } });
 
 /* System */
 async function loadSystem() {
@@ -626,7 +654,7 @@ $("tBeep").addEventListener("click", act(() => post("/api/test/beep"), "Beeped, 
 $("dMotion").addEventListener("click", act(() => post("/api/debug/simulate-motion"), "Motion simulated"));
 $("dCapture").addEventListener("click", act(() => post("/api/debug/capture-now"), "Capturing for 30 seconds"));
 $("sReboot").addEventListener("click", () => { if (confirm("Restart the unit? The hotspot goes away for a moment.")) act(() => post("/api/reboot"), "Restarting")(); });
-$("sReset").addEventListener("click", () => { if (confirm("Erase all settings, the beacon and all logs? The hotspot gets a new password, which you can only read over USB.")) act(() => post("/api/factory-reset"), "Erased. Restarting")(); });
+$("sReset").addEventListener("click", () => { if (confirm("Erase all settings, the beacon and all logs? The hotspot gets a new password, which you can only read over USB.")) { toast("Erasing. Full logs can take a minute."); act(whilePaused(() => post("/api/factory-reset")), "Erased. Restarting")(); } });
 $("otaFile").addEventListener("change", () => { $("otaGo").disabled = !$("otaFile").files.length; });
 $("otaGo").addEventListener("click", () => {
   const file = $("otaFile").files[0];
@@ -634,9 +662,12 @@ $("otaGo").addEventListener("click", () => {
   const bar = $("otaBar"), state = $("otaState");
   bar.hidden = false; state.hidden = false; $("otaGo").disabled = true;
   state.textContent = "Uploading. Keep the power on.";
+  pollPaused++;
   const x = new XMLHttpRequest();
   x.open("POST", "/api/ota");
+  x.setRequestHeader("X-YogiGate", "1");
   x.upload.onprogress = e => { if (e.lengthComputable) bar.value = e.loaded * 100 / e.total; };
+  x.onloadend = () => { pollPaused--; };
   x.onload = () => {
     if (x.status === 200) state.textContent = "Uploaded. The unit is restarting. Keep the power on for 30 seconds while it checks the new firmware, then reconnect.";
     else state.textContent = "Upload failed: " + x.responseText;

@@ -246,7 +246,85 @@ static void timers_survive_clock_wrap(void) {
     CHECK_INT(yg_trigger_tick(&t, &s, base + SEC(90)), YG_REARM_GONE);
 }
 
+static void motion_from_before_a_press_does_not_count_after_it(void) {
+    /* A long moved window must not make a parked car press again and again. */
+    setup();
+    s.moved_window_s = 300;
+    s.still_s = 30;
+    yg_trigger_on_motion(&t, SEC(10));
+    CHECK_INT(yg_trigger_on_advert(&t, &s, SEC(12), -70), YG_PRESS_AUTO);
+    int presses = 0;
+    for (uint32_t now = SEC(13); now < SEC(290); now += 300) {
+        yg_trigger_tick(&t, &s, now);
+        if (yg_trigger_on_advert(&t, &s, now, -70) != YG_PRESS_NONE) presses++;
+    }
+    CHECK_INT(presses, 0);
+    CHECK_INT(t.state, YG_TRIG_ARMED);
+    yg_trigger_on_motion(&t, SEC(290));
+    CHECK_INT(yg_trigger_on_advert(&t, &s, SEC(291), -70), YG_PRESS_AUTO);
+}
+
+static void motion_before_a_press_does_not_count_after_gone_either(void) {
+    setup();
+    s.moved_window_s = 300;
+    yg_trigger_on_motion(&t, SEC(10));
+    CHECK_INT(yg_trigger_on_advert(&t, &s, SEC(12), -70), YG_PRESS_AUTO);
+    yg_trigger_tick(&t, &s, SEC(15));
+    CHECK_INT(yg_trigger_tick(&t, &s, SEC(72)), YG_REARM_GONE);
+    CHECK_INT(yg_trigger_on_advert(&t, &s, SEC(80), -70), YG_PRESS_NONE);
+}
+
+static void stillness_uses_up_motion_from_after_a_press(void) {
+    /* Still rolling when it pressed, then stopped, with a long moved window. */
+    setup();
+    s.moved_window_s = 300;
+    s.still_s = 30;
+    yg_trigger_on_motion(&t, SEC(8));
+    CHECK_INT(yg_trigger_on_advert(&t, &s, SEC(9), -70), YG_PRESS_AUTO);
+    yg_trigger_on_motion(&t, SEC(10));
+    int presses = 0;
+    for (uint32_t now = SEC(11); now < SEC(290); now += 300) {
+        yg_trigger_tick(&t, &s, now);
+        if (yg_trigger_on_advert(&t, &s, now, -70) != YG_PRESS_NONE) presses++;
+    }
+    CHECK_INT(presses, 0);
+    CHECK(!yg_trigger_moved_recently(&t, &s, SEC(290)));
+    yg_trigger_on_motion(&t, SEC(290));
+    CHECK(yg_trigger_moved_recently(&t, &s, SEC(291)));
+    CHECK_INT(yg_trigger_on_advert(&t, &s, SEC(291), -70), YG_PRESS_AUTO);
+}
+
+static void a_car_still_moving_when_the_beacon_goes_can_press_again(void) {
+    /* Driven away and back, all within the moved window. */
+    setup();
+    yg_trigger_on_motion(&t, SEC(8));
+    CHECK_INT(yg_trigger_on_advert(&t, &s, SEC(9), -70), YG_PRESS_AUTO);
+    yg_trigger_tick(&t, &s, SEC(12));
+    yg_trigger_on_motion(&t, SEC(40));
+    CHECK_INT(yg_trigger_tick(&t, &s, SEC(69)), YG_REARM_GONE);
+    CHECK_INT(yg_trigger_on_advert(&t, &s, SEC(70), -70), YG_PRESS_AUTO);
+}
+
+static void fallback_press_waits_for_the_beacon_to_go_even_after_recovery(void) {
+    setup();
+    yg_trigger_set_sensor_ok(&t, false);
+    CHECK_INT(yg_trigger_on_advert(&t, &s, SEC(1), -80), YG_PRESS_FALLBACK);
+    yg_trigger_set_sensor_ok(&t, true);
+    for (uint32_t now = SEC(2); now <= SEC(500); now += SEC(1)) {
+        yg_trigger_on_advert(&t, &s, now, -80);
+        CHECK_INT(yg_trigger_tick(&t, &s, now), YG_REARM_NONE);
+    }
+    CHECK_INT(t.state, YG_TRIG_HOLD);
+    CHECK_INT(yg_trigger_tick(&t, &s, SEC(561)), YG_REARM_GONE);
+    CHECK_INT(yg_trigger_on_advert(&t, &s, SEC(562), -80), YG_PRESS_NONE);
+}
+
 int main(void) {
+    RUN(motion_from_before_a_press_does_not_count_after_it);
+    RUN(motion_before_a_press_does_not_count_after_gone_either);
+    RUN(stillness_uses_up_motion_from_after_a_press);
+    RUN(a_car_still_moving_when_the_beacon_goes_can_press_again);
+    RUN(fallback_press_waits_for_the_beacon_to_go_even_after_recovery);
     RUN(ignition_in_spot_with_beacon_heard_never_presses);
     RUN(pulling_out_with_beacon_heard_presses_once);
     RUN(weak_day_presses_on_first_advert_after_motion);

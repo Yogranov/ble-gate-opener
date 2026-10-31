@@ -77,11 +77,12 @@ static void create_identity(yg_settings_t *s) {
     }
 }
 
-void yg_nvs_load(yg_settings_t *s, yg_beacon_t *b) {
+bool yg_nvs_load(yg_settings_t *s, yg_beacon_t *b) {
     yg_settings_defaults(s);
     memset(b, 0, sizeof(*b));
     nvs_handle_t h;
-    if (nvs_open(NAMESPACE, NVS_READWRITE, &h) == ESP_OK) {
+    bool opened = nvs_open(NAMESPACE, NVS_READWRITE, &h) == ESP_OK;
+    if (opened) {
         size_t count = 0;
         const yg_setting_desc_t *table = yg_settings_table(&count);
         for (size_t i = 0; i < count; i++) {
@@ -98,6 +99,7 @@ void yg_nvs_load(yg_settings_t *s, yg_beacon_t *b) {
     if (new_identity) {
         yg_nvs_save_settings(s);
     }
+    return opened;
 }
 
 void yg_nvs_save_settings(const yg_settings_t *s) {

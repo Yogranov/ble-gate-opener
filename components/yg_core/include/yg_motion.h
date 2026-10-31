@@ -52,6 +52,9 @@ typedef struct
     float bias[3];
     float horizontal[3];
 
+    uint16_t rest_windows;
+    float rest_gravity[3];
+
     bool above;
     uint32_t above_since;
     uint32_t tilt_until;
