@@ -3,7 +3,7 @@ idf_component_register(
     INCLUDE_DIRS "include"
     REQUIRES yg_core
     PRIV_REQUIRES yg_app yg_io yg_log yg_settings_nvs
-                  app_update console esp_http_server esp_netif esp_timer esp_wifi lwip log
+                  app_update bootloader_support console esp_http_server esp_netif esp_partition esp_timer esp_wifi lwip log
 )
 
 # The page is embedded gzipped, so a phone with no internet gets everything from the unit.

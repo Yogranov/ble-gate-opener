@@ -1,12 +1,16 @@
 #include "yg_net.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "esp_console.h"
 #include "esp_event.h"
+#include "esp_image_format.h"
 #include "esp_log.h"
 #include "esp_netif.h"
+#include "esp_ota_ops.h"
+#include "esp_partition.h"
 #include "esp_wifi.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
@@ -14,6 +18,7 @@
 #include "lwip/sockets.h"
 #include "yg_app.h"
 #include "yg_http_internal.h"
+#include "yg_nvs.h"
 
 #define SCAN_MAX_RECORDS 24
 
@@ -234,18 +239,13 @@ void yg_net_env_finish(yg_env_t *out) {
     }
 }
 
-/* api GET /api/status, or api POST /api/press {...}. Talks HTTP to the unit's own
- * server over loopback, so a PC with no Wi-Fi can test the API through USB. */
-static int cmd_api(int argc, char **argv) {
-    if (argc < 3) {
-        printf("Usage: api GET|POST <path> [body]\n");
-        return 1;
-    }
+/* A connection to this unit's own web server, so that a PC with no Wi-Fi can test
+ * the real HTTP code through USB. Returns -1 after printing why it failed. */
+static int open_loopback(void) {
     if (!yg_http_running()) {
         printf("The web server is not running. Use the wifi command first.\n");
-        return 1;
+        return -1;
     }
-    const char *body = argc > 3 ? argv[3] : "";
     int sock = socket(AF_INET, SOCK_STREAM, 0);
     struct sockaddr_in addr = {
         .sin_family = AF_INET,
@@ -255,28 +255,104 @@ static int cmd_api(int argc, char **argv) {
     if (sock < 0 || connect(sock, (struct sockaddr *)&addr, sizeof(addr)) != 0) {
         printf("Connect failed: %d\n", errno);
         if (sock >= 0) close(sock);
-        return 1;
+        return -1;
     }
     struct timeval timeout = { .tv_sec = 20 };
     setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+    return sock;
+}
+
+/* Prints the response. The server keeps the connection open, so a quiet moment
+ * after the first data means the end. */
+static void print_response(int sock) {
     static char buf[1024];
-    int n = snprintf(buf, sizeof(buf), "%s %s HTTP/1.1\r\nHost: yg\r\nContent-Length: %u\r\n\r\n%s",
-                     argv[1], argv[2], (unsigned)strlen(body), body);
-    send(sock, buf, (size_t)n, 0);
     for (;;) {
-        n = recv(sock, buf, sizeof(buf) - 1, 0);
+        int n = recv(sock, buf, sizeof(buf) - 1, 0);
         if (n <= 0) {
             break;
         }
         fwrite(buf, 1, (size_t)n, stdout);
         fflush(stdout);
-        /* The server keeps the connection open, so a quiet moment means the end. */
-        timeout.tv_sec = 0;
-        timeout.tv_usec = 700 * 1000;
+        struct timeval timeout = { .tv_usec = 700 * 1000 };
         setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
     }
     printf("\n");
     close(sock);
+}
+
+/* api GET /api/status, or api POST /api/press {...} */
+static int cmd_api(int argc, char **argv) {
+    if (argc < 3) {
+        printf("Usage: api GET|POST <path> [body]\n");
+        return 1;
+    }
+    int sock = open_loopback();
+    if (sock < 0) {
+        return 1;
+    }
+    const char *body = argc > 3 ? argv[3] : "";
+    static char request[1024];
+    int n = snprintf(request, sizeof(request), "%s %s HTTP/1.1\r\nHost: yg\r\nContent-Length: %u\r\n\r\n%s",
+                     argv[1], argv[2], (unsigned)strlen(body), body);
+    send(sock, request, (size_t)n, 0);
+    print_response(sock);
+    return 0;
+}
+
+static bool send_all(int sock, const uint8_t *data, size_t len) {
+    while (len > 0) {
+        int n = send(sock, data, len, 0);
+        if (n <= 0) {
+            return false;
+        }
+        data += n;
+        len -= (size_t)n;
+    }
+    return true;
+}
+
+/* ota-self [corrupt|fail]: uploads the running firmware to this unit's own
+ * /api/ota, to test updates and rollback with no Wi-Fi client. "corrupt" damages
+ * the image, which must be refused. "fail" makes the new boot fail its self-check,
+ * which must roll back. */
+static int cmd_ota_self(int argc, char **argv) {
+    bool corrupt = argc == 2 && strcmp(argv[1], "corrupt") == 0;
+    bool fail = argc == 2 && strcmp(argv[1], "fail") == 0;
+    const esp_partition_t *running = esp_ota_get_running_partition();
+    const esp_partition_pos_t pos = { .offset = running->address, .size = running->size };
+    esp_image_metadata_t image;
+    if (esp_image_get_metadata(&pos, &image) != ESP_OK) {
+        printf("Cannot read the running image\n");
+        return 1;
+    }
+    int sock = open_loopback();
+    if (sock < 0) {
+        return 1;
+    }
+    if (fail) {
+        yg_nvs_set_test_flag();
+    }
+    char head[96];
+    int n = snprintf(head, sizeof(head), "POST /api/ota HTTP/1.1\r\nHost: yg\r\nContent-Length: %u\r\n\r\n", (unsigned)image.image_len);
+    send_all(sock, (const uint8_t *)head, (size_t)n);
+    uint8_t *buf = malloc(4096);
+    uint32_t sent = 0;
+    while (buf != NULL && sent < image.image_len) {
+        size_t chunk = image.image_len - sent < 4096 ? image.image_len - sent : 4096;
+        if (esp_partition_read(running, sent, buf, chunk) != ESP_OK) {
+            break;
+        }
+        if (corrupt && sent == 8192) {
+            buf[100] ^= 0xFF;
+        }
+        if (!send_all(sock, buf, chunk)) {
+            break;
+        }
+        sent += (uint32_t)chunk;
+    }
+    free(buf);
+    printf("Sent %u of %u bytes\n", (unsigned)sent, (unsigned)image.image_len);
+    print_response(sock);
     return 0;
 }
 
@@ -298,6 +374,8 @@ static int cmd_wifi_join(int argc, char **argv) {
 void yg_net_console_register(void) {
     const esp_console_cmd_t api = { .command = "api", .help = "HTTP request to this unit: api GET|POST <path> [body]", .func = cmd_api };
     const esp_console_cmd_t join = { .command = "wifi-join", .help = "Join a LAN until restart, for bench tests", .func = cmd_wifi_join };
+    const esp_console_cmd_t ota_self = { .command = "ota-self", .help = "Upload this firmware to itself: ota-self [corrupt|fail]", .func = cmd_ota_self };
     ESP_ERROR_CHECK(esp_console_cmd_register(&api));
+    ESP_ERROR_CHECK(esp_console_cmd_register(&ota_self));
     ESP_ERROR_CHECK(esp_console_cmd_register(&join));
 }

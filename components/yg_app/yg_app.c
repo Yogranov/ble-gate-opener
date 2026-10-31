@@ -71,6 +71,7 @@ static volatile uint32_t s_dropped;
 static uint32_t s_dropped_logged;
 static volatile uint32_t s_trip;
 static bool s_ota_pending;
+static bool s_test_fail_self_check;
 
 static uint32_t now_ms(void) {
     return (uint32_t)(esp_timer_get_time() / 1000);
@@ -197,7 +198,7 @@ static void check_new_firmware(uint32_t now) {
         return;
     }
     bool hotspot_ok = s_hooks.hotspot_running == NULL || s_hooks.hotspot_running();
-    if (yg_ble_is_scanning() && hotspot_ok) {
+    if (yg_ble_is_scanning() && hotspot_ok && !s_test_fail_self_check) {
         esp_ota_mark_app_valid_cancel_rollback();
         yg_engine_log_ota(&s_engine, now, YG_OTA_EVENT_CONFIRMED);
         ESP_LOGI(TAG, "New firmware passed its self-check");
@@ -273,6 +274,7 @@ void yg_app_start(const yg_app_hooks_t *hooks) {
     if (esp_ota_get_state_partition(esp_ota_get_running_partition(), &state) == ESP_OK
         && state == ESP_OTA_IMG_PENDING_VERIFY) {
         s_ota_pending = true;
+        s_test_fail_self_check = yg_nvs_take_test_flag();
     }
 
     uint8_t sensor_id = 0;

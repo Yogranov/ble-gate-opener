@@ -13,6 +13,7 @@
 #define NAMESPACE "yogigate"
 #define KEY_BEACON "beacon"
 #define KEY_TRIP   "trip"
+#define KEY_TEST_FLAG "test_fail"
 #define PASSWORD_LEN 12
 
 static const char *TAG = "yg_nvs";
@@ -173,4 +174,26 @@ esp_err_t yg_nvs_factory_reset(void) {
     }
     nvs_close(h);
     return err;
+}
+
+void yg_nvs_set_test_flag(void) {
+    nvs_handle_t h;
+    if (nvs_open(NAMESPACE, NVS_READWRITE, &h) == ESP_OK) {
+        nvs_set_u8(h, KEY_TEST_FLAG, 1);
+        nvs_commit(h);
+        nvs_close(h);
+    }
+}
+
+bool yg_nvs_take_test_flag(void) {
+    uint8_t value = 0;
+    nvs_handle_t h;
+    if (nvs_open(NAMESPACE, NVS_READWRITE, &h) == ESP_OK) {
+        if (nvs_get_u8(h, KEY_TEST_FLAG, &value) == ESP_OK) {
+            nvs_erase_key(h, KEY_TEST_FLAG);
+            nvs_commit(h);
+        }
+        nvs_close(h);
+    }
+    return value != 0;
 }

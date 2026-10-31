@@ -1,6 +1,7 @@
 /* Stores settings, the beacon and the trip counter in NVS. */
 #pragma once
 
+#include <stdbool.h>
 #include <stdint.h>
 
 #include "esp_err.h"
@@ -21,3 +22,7 @@ void yg_nvs_save_beacon(const yg_beacon_t *b);
 uint32_t yg_nvs_next_trip(void);
 
 esp_err_t yg_nvs_factory_reset(void);
+
+/* For bench tests of rollback: makes the next boot fail its firmware self-check. */
+void yg_nvs_set_test_flag(void);
+bool yg_nvs_take_test_flag(void);

@@ -27,10 +27,13 @@ def open_port(port):
 
 
 def reset(s):
+    # On Windows a change of RTS only takes effect when DTR is written too.
     s.dtr = False
     s.rts = True
-    time.sleep(0.1)
+    s.dtr = False
+    time.sleep(0.2)
     s.rts = False
+    s.dtr = False
 
 
 def read_for(s, seconds, stop=None):
