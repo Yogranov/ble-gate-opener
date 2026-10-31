@@ -110,8 +110,9 @@ GPIO7  ────────────────────────�
       <li><b>Active buzzer on 3.3 V.</b> Put the meter on mA between 3.3 V and buzzer +, with buzzer − to GND. It should read under about 20 mA, and be loud enough with the glove box closed.</li>
       <li><b>Buzzer pins.</b> Its pins should fit holes V12 and V15, three holes apart. Its size is estimated from a photo, so it is drawn 12 mm wide.</li>
       <li><b>Remote range.</b> Hold the remote against the back of the board and press its button by hand from the parking spot, with the board in the glove box. If the gate doesn't open reliably, keep the remote off the board on longer wires. Everything else stays the same.</li>
+      <li><b>Button pins.</b> Its legs should fit holes R16, R18, U16 and U18. They are usually 6.5 × 4.5 mm apart, so they need a little spreading to reach holes three rows and two columns apart. Measure from the board to the top of its stem. The case expects 5 mm.</li>
     </ol>
-    <p class="sub" style="margin-top:12px">If check 2, 3, 4 or 5 fails, stop before soldering, because the layout has to change.</p>
+    <p class="sub" style="margin-top:12px">If check 2, 3, 4, 5 or 7 fails, stop before soldering, because the layout has to change.</p>
   </section>
 
   <section class="views" aria-label="Board drawings">
@@ -120,7 +121,7 @@ GPIO7  ────────────────────────�
       <div class="scroll"><svg class="brd" id="top" role="img" aria-label="Parts side of the board with all components placed"></svg></div>
     </figure>
     <figure>
-      <figcaption><b>Solder side</b>Board flipped left to right, as you see it while soldering. Column 18 is now on the left. The large dashed outline is the remote, which goes on last.</figcaption>
+      <figcaption><b>Solder side</b>Board flipped left to right, as you see it while soldering. Column 18 is now on the left. The large dashed outline is where the remote sits in the case.</figcaption>
       <div class="scroll"><svg class="brd" id="bot" role="img" aria-label="Solder side of the board with all wires, and the outline of the remote"></svg></div>
     </figure>
   </section>
@@ -129,7 +130,7 @@ GPIO7  ────────────────────────�
 
   <figure>
     <figcaption><b>Side view</b>Seen from the row X edge, to scale. The stack is about 70 × 50 × 38 mm. The antenna sticks out past one side, and the USB plug past the other.</figcaption>
-    <div class="scroll"><svg class="brd side" id="side" role="img" aria-label="Side view of the stack: remote, foam tape, matrix board, parts and C6, with the button drawn beside it"></svg></div>
+    <div class="scroll"><svg class="brd side" id="side" role="img" aria-label="Side view of the stack: remote, gap, matrix board, parts and C6"></svg></div>
   </figure>
 
   <section>
@@ -147,7 +148,8 @@ GPIO7  ────────────────────────�
       <ul class="plain">
         <li>1 × 220 Ω and 1 × 10 kΩ resistor</li>
         <li>2 × 15-pin female headers, 2 × 15-pin male headers for the C6, 1 × 8-pin male header for the MPU6050</li>
-        <li>Thin insulated wire, 2 to 3 mm double-sided foam tape, hot glue</li>
+        <li>1 × 6 × 6 mm tactile button, 5 mm tall</li>
+        <li>Thin insulated wire, hot glue</li>
       </ul>
     </div>
     <div>
@@ -315,10 +317,10 @@ function drawTop(v) {
   v.tx(15, 21.1, "+", "tb", "middle", "ng2");
   v.tx(13.5, 23.2, "Buzzer", "lbl", "middle");
 
-  v.line(["R1", [-.34, 17.7]], "wire", "ngnd");
-  v.line(["R2", [-.34, 18.8]], "wire", "nbtn");
-  v.pad(1, 18); v.pad(2, 18);
-  v.tx(-.6, 18.25, "button", "note", "end");
+  v.rect(15.82, 18.32, 18.18, 20.68, "part");
+  v.circle(17, 19.5, .69 * P, "ghost2");
+  for (const [c, r] of [[16, 18], [18, 18], [16, 21], [18, 21]]) v.pad(c, r);
+  v.tx(17, 19.5, "Button", "lbl", "middle");
 }
 
 /* Every wire belongs to a build step, so a table row can pick it out in the drawing. */
@@ -335,8 +337,8 @@ const WIRES = [
   { step:9, net:"ngnd", pts:["Q1","V8"] },
   { step:11, net:"ng2", pts:["Q12","V15"] },
   { step:11, net:"ngnd", pts:["V12","W8"] },
-  { step:12, net:"nbtn", pts:["Q7",[6.5,18],"R2",[-.34,18.8]], end:"to button" },
-  { step:12, net:"ngnd", pts:["Q1","R1",[-.34,17.7]], end:"to button" },
+  { step:12, net:"nbtn", pts:["Q7",[7,17.5],[15.5,17.5],"R16"] },
+  { step:12, net:"ngnd", pts:["U18",[16.5,21.5],[12.5,21.5],"V12"] },
   { step:13, net:"nrem", pts:["U8",[7,22.4],[7,26.28]], end:"remote +", endRight:true },
   { step:13, net:"ngnd", pts:["X8",[8,26.28]], end:"remote −" },
 ];
@@ -347,17 +349,13 @@ function drawBot(v) {
   v.tx(-.81, 11.5, "Antenna", "zonet", "middle");
   v.tx(-.81, 12.5, "no wires", "zonet", "middle");
 
-  /* The remote and its two pads of tape, on the clear areas. */
-  v.rect(5, 9, 14, 15, "tape");
-  v.rect(10, 23, 17, 24.6, "tape");
-  v.tx(9.5, 10.5, "tape", "note", "middle");
-  v.tx(13.5, 23.8, "tape", "note", "middle");
+  /* The remote, which sits in the case's cover, about 3 mm below the board. */
   v.rect(1.63, -.1, 17.37, 25.1, "ghost");
   v.tx(9.5, 12, "Remote goes here", "lbl", "middle");
 
   headers(v);
   for (let c = 5; c <= 12; c++) v.pad(c, 5);
-  for (const h of ["S7","S11","T8","U8","V8","W8","X8","T9","X9","V12","V15","R1","R2"]) { const [c, r] = hole(h); v.pad(c, r); }
+  for (const h of ["S7","S11","T8","U8","V8","W8","X8","T9","X9","V12","V15","R16","R18","U16","U18"]) { const [c, r] = hole(h); v.pad(c, r); }
 
   /* Parts seen through the board, only as a guide. */
   v.rect(4.37, -.9, 12.63, 5.43, "ghost2");
@@ -407,7 +405,7 @@ function drawSide() {
   const box = (x1, y1, x2, y2, cls) => add("rect", { x: X(x1), y: Y(y2), width: (x2 - x1) * S, height: (y2 - y1) * S, class: cls, rx: 2 });
   const lab = (x, y, s, cls, a) => add("text", { x: X(x), y: Y(y) + 4, class: cls || "lbl", "text-anchor": a || "middle" }, s);
   box(5, 0, 45, 17, "part"); lab(25, 8.5, "Remote, 40 wide from this side");
-  box(13.6, 17, 36.5, 20, "tape"); lab(25, 18.5, "foam tape", "note");
+  lab(25, 18.5, "gap", "note");
   box(0, 20, 50, 21.6, "board");
   box(2.14, 21.6, 40.24, 30.1, "hdr"); lab(23.5, 28, "female header", "note");
   box(2.14, 30.1, 40.24, 32.6, "tab");
@@ -421,9 +419,6 @@ function drawSide() {
   box(29.2, 21.6, 41.2, 31.1, "part"); lab(35.2, 26.3, "buzzer", "note");
   add("polyline", { points: `${X(-8)},${Y(0)} ${X(-8)},${Y(37.4)}`, class: "lead" });
   add("text", { x: X(-8.6), y: Y(18.7) + 4, class: "tb", "text-anchor": "end" }, "38 mm");
-  /* The button stays off the board, so it is drawn on its own at the same scale. */
-  box(88, 8, 104, 33, "part"); lab(96, 21.5, "Button"); lab(96, 17.5, "Ø16 × 25", "note");
-  lab(96, 3, "on two wires", "note");
 }
 
 const partsView = View("top", false), bot = View("bot", true);
@@ -451,9 +446,9 @@ const STEPS = [
   [9,"Ground","Bare offcut from V8, through W8, to X8. Wire Q1 to V8.","Solder"],
   [10,"Active buzzer","+ in V15, − in V12. The + is marked on top.","Parts"],
   [11,"Buzzer wires","Q12 to V15. V12 to W8.","Solder"],
-  [12,"Button","Q7 to one terminal, passing through hole R2. Q1 to the other, passing through hole R1. Either way round. The holes stop a pull reaching the joints, and both wires leave by the column 01 edge.","Solder"],
+  [12,"Button","Tactile button on the parts side, with its legs in R16, R18, U16 and U18. Then, on the solder side, wire Q7 to R16 and U18 to V12. R16 and U18 are diagonally opposite, which works whichever way the button is turned.","Solder"],
   [13,"Remote","U8 to the (+) button wire, X8 to the (−) wire. Find (+) with a meter: it is under the red probe when the reading is positive. Both leave by the bottom edge.","Solder"],
-  [14,"Test, then tape the remote","Run the checks below first, and trim any tall pin ends. Stick the remote's back to the solder side, centred, with its LED end toward row X and foam tape on the two clear areas in the drawing. Its open button side faces away from the board. Peel it off to change the battery once a year.","Solder"],
+  [14,"Test, then close the case","Run the checks below first, and trim any tall pin ends. Then follow the assembly steps in case/README.md. The remote clips into the case's cover, with its LED end toward row X and its open button side facing away from the board.","Solder"],
   [15,"C6","Plug it in. Add a dab of hot glue at two header corners so the USB cable can't pull it out, keeping clear of BOOT and RST.","Parts"],
 ];
 const tb = document.getElementById("steps");

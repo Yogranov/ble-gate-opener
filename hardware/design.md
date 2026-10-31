@@ -1,7 +1,7 @@
 # YogiGate matrix board design
 
 **Date:** 2026-10-31
-**Scope:** Part choices and the hole-by-hole layout of the car unit on a 50 × 70 mm matrix board. The case is not covered. GPIO numbers come from section 4.2 of [2026-10-31-esp-idf-rewrite-design.md](../docs/superpowers/specs/2026-10-31-esp-idf-rewrite-design.md). [board-layout.html](board-layout.html) draws this layout and gives the build order.
+**Scope:** Part choices and the hole-by-hole layout of the car unit on a 50 × 70 mm matrix board. The case has [its own design](case/design.md). GPIO numbers come from section 4.2 of [2026-10-31-esp-idf-rewrite-design.md](../docs/superpowers/specs/2026-10-31-esp-idf-rewrite-design.md). [board-layout.html](board-layout.html) draws this layout and gives the build order.
 
 ## 1. Parts
 
@@ -16,7 +16,7 @@ Sizes are the owner's measurements, except the buzzer, which is estimated from a
 | 220 Ω resistor | | Gate series resistor |
 | 10 kΩ resistor | | Gate pull-down |
 | Active buzzer | About 12 across | Beeps, off by default |
-| Momentary panel button | 16 across, 25 long, 20 pressed | Same gestures as BOOT |
+| Tactile button, through-hole | 6 × 6, 5 tall | Same gestures as BOOT |
 | BFT remote, on its own battery | 64 × 40 × 17 | Sends the gate signal |
 
 ### Details of the real parts
@@ -39,13 +39,13 @@ The layout depends on these. They were read from close-up photos of the owner's 
 
 **Remote.** BFT 36015, 12 V, type B RCB, with 2 buttons and a 12 V 23A battery. With the rubber keypad removed, the buttons are exposed in a well near the LED end, and two wires are soldered to the button that is used. A key-ring slot is at the other end. In the old build, its case was taped.
 
-**Button.** Momentary panel button with a white cap and two spade terminals.
+**Button.** A standard tactile button with 4 legs and a short stem. Its size comes from typical parts, because the actual button is not chosen yet.
 
 **Buzzer.** Round, black, with two pins on the underside. The owner has active and passive ones, and this layout needs an active one.
 
 **Matrix board.** 18 columns and 24 rows of holes at 2.54 mm, with a mounting hole at each corner. The first hole is 3.41 mm in from a long edge and 5.79 mm in from a short edge. A row of long oval pads, one per column, runs along each short edge. The long edges have only printed labels.
 
-**Sizes assumed, not measured.** These come from typical parts or from estimates on the photos, so measure the real parts before relying on them for a case or drilling a hole. The owner measured the button as 16 across, 25 long and 20 pressed. This table assumes that 16 is its widest part, and that 25 and 20 leave out the terminals.
+**Sizes assumed, not measured.** These come from typical parts or from estimates on the photos, so measure the real parts before relying on them for the case.
 
 | Item | Size (mm) |
 |---|---|
@@ -61,17 +61,15 @@ The layout depends on these. They were read from close-up photos of the owner's 
 | USB plug thickness | 7 |
 | USB plug width | 12 |
 | USB plug length, out of the port | 30 |
-| Foam tape thickness | 3 |
+| Gap between the remote and the board | 3 |
 | Matrix board corner holes | 2 across, with centres 2 in from each edge, so 46 × 66 apart |
 | MPU6050 mounting holes | 3.3 across, 16.5 apart, with centres 2 in from the far edge |
 | Buzzer pin spacing | 7.6 |
-| Button threaded body, and the panel hole for it | 12 across |
-| Button nut | 16 across at its widest, 3 thick |
-| Button flange | 15 across, 2 thick |
-| Button cap above the flange | 5 |
-| Button body behind the flange | 20, plus 4.5 for the terminals |
+| Button body | 6 × 6, 3.5 tall |
+| Button, from the board to the top of its stem | 5 |
+| Button legs | 6.5 × 4.5 apart |
 
-The stack is about 38 mm high: 17 for the remote, 3 for the tape, 1.6 for the board, 11 for the headers, 1.6 for the C6 board and 3.2 for its module.
+The stack is about 38 mm high: 17 for the remote, 3 for the gap, 1.6 for the board, 11 for the headers, 1.6 for the C6 board and 3.2 for its module.
 
 ## 2. Decisions
 
@@ -94,11 +92,11 @@ The remote's current is not published, and is estimated at tens of mA. At that l
 
 **The remote keeps its own battery.** It then floats, with the MOSFET as its only link to the unit. This makes the circuit work however the remote wires its button internally, and car voltage spikes cannot reach the MOSFET. The firmware cannot see a dead battery, so it is replaced every year.
 
-**The remote goes under the board.** At 64 × 40 mm it fits inside the board's outline, and the whole unit becomes one block of about 70 × 50 × 38 mm. Foam tape holds it, so it peels off for the battery. Its open button side faces away from the board, so the exposed contacts cannot touch the solder joints. Being close to the board could cost it some range, so this is tested before anything is stuck down. If the gate does not open reliably, the remote stays off the board on longer wires, and nothing else changes.
+**The remote goes under the board.** At 64 × 40 mm it fits inside the board's outline, and the whole unit becomes one block of about 70 × 50 × 38 mm. It clips into the case's cover and carries no load, because the board stands on legs beside it. Its open button side faces away from the board, so the exposed contacts cannot touch the solder joints. Being close to the board could cost it some range, so this is tested before anything is stuck down. If the gate does not open reliably, the remote stays off the board on longer wires, and nothing else changes.
 
-**No zip ties through the board.** The holes are about 1 mm, and even a small zip tie is about 2.5 mm wide. The button wires pass through free holes instead, so a pull cannot reach their joints.
+**External button on GPIO7, not GPIO9.** GPIO9 is a strapping pin. If something in the glove box holds a button on it at ignition, the chip stays in its download mode for that whole drive. The firmware reads GPIO7 and GPIO9 together, so BOOT still works and nothing changes if the external button is not fitted.
 
-**External button on GPIO7, not GPIO9.** GPIO9 is a strapping pin. If something in the glove box holds a button on it at ignition, the chip stays in its download mode for that whole drive. The firmware reads GPIO7 and GPIO9 together, so BOOT still works and nothing changes if the external button is not fitted. The button is too large for the board, so it stays on two wires, in a panel hole assumed to be 12 mm.
+**A tactile button on the board, not a panel button.** A panel button is 24.5 mm long behind its flange, which fits nowhere above or below the board, so it needed 19 mm of extra case and two loose wires. A 6 × 6 mm tactile button solders straight to the board, and a flexible tab in the case's top presses it. It sits in columns 16-18, rows R-U, past the C6's edge, where the tab's post can reach it. That is the one free spot both clear of the C6 and away from where the logo sits on top. It is wired from diagonally opposite legs, because which legs connect differs between makers.
 
 **Active buzzer straight on GPIO11, with no MOSFET and no diode.** An active buzzer has its own driver, so the pin only supplies its power. The pin's default drive is about 20 mA. This is quieter than the buzzer would be on 5 V, and it needs a bench check first: under about 20 mA at 3.3 V, and loud enough with the glove box closed. If it fails that check, the buzzer needs a MOSFET and 5 V, and this layout has to change. A passive buzzer cannot use this wiring. The `buzzer_type` setting must be set to active on the page when the buzzer is turned on.
 
@@ -153,6 +151,7 @@ Of the two USB ports, the one marked ESP32C6, near row G, is the native USB port
 | MOSFET | G T8, D U8, S V8 | Print facing the board, legs toward column 08, body toward column 01. Glue it down |
 | 10 kΩ resistor | T9 to X9 | Lying flat |
 | Buzzer | + V15, − V12 | |
+| Button | R16, R18, U16, U18 | Stem up. Spread the legs a little to reach the holes |
 
 Mark the gate leg with a pen before bending, just past the wide part of the legs. With the print facing you and the legs down, the order is G, D, S from the left.
 
@@ -174,12 +173,12 @@ Use thin insulated wire, except where bare offcuts or part leads are noted.
 | Q1 | V8 | GND to the source | |
 | Q12 | V15 | GPIO11 to buzzer + | |
 | V12 | W8 | Buzzer − to GND | |
-| Q7 | Button, through R2 | GPIO7 to button | Leaves by the column 01 edge |
-| Q1 | Button, through R1 | GND to button | Leaves by the column 01 edge |
+| Q7 | R16 | GPIO7 to button | Along the gap between rows Q and R |
+| U18 | V12 | Button to GND | R16 and U18 are diagonally opposite legs |
 | U8 | Remote (+) | MOSFET drain | Leaves by the bottom edge |
 | X8 | Remote (−) | MOSFET source | Leaves by the bottom edge |
 
-Tape the remote's back to the solder side after the tests in section 7, centred on the board, with its LED end toward row X. It covers about columns 02-17 and all the rows. Use 2 to 3 mm double-sided foam tape on the two clear areas: columns 05-14, rows I-O, and columns 10-17, rows W-X. Trim any tall pin ends first.
+The remote goes in the case after the tests in section 7, centred under the board, with its LED end toward row X. It covers about columns 02-17 and all the rows. Trim any tall pin ends first. [case/README.md](case/README.md) has the assembly steps.
 
 Add a dab of hot glue at two header corners, or the USB cable and vibration will slowly pull the C6 out. Keep it clear of BOOT and RST.
 
@@ -190,6 +189,7 @@ Add a dab of hot glue at two header corners, or the USB cable and vibration will
 - The C6 fits: pin rows in rows G and Q, columns 01-15, and row Q reads as in section 4.
 - With the C6 on its headers, the USB cable plugs into both ports without touching anything.
 - The buzzer draws under about 20 mA at 3.3 V and is loud enough, and its pins fit V12 and V15.
+- The button's legs fit R16, R18, U16 and U18, and it measures 5 mm from the board to the top of its stem. If not, change `btn_h` in [the case](case/README.md).
 - Held against the back of the board, in the glove box, the remote opens the gate reliably from the parking spot.
 
 **Before plugging in the C6, with a meter:**

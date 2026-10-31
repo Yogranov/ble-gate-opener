@@ -24,6 +24,7 @@ PARTS = {
     "220 ohm": (9 - 3.15 / MM, 19 - 1.25 / MM, 9 + 3.15 / MM, 19 + 1.25 / MM),
     "10 kohm": (9 - 1.25 / MM, 22 - 3.15 / MM, 9 + 1.25 / MM, 22 + 3.15 / MM),
     "Buzzer": (13.5 - 6 / MM, 22 - 6 / MM, 13.5 + 6 / MM, 22 + 6 / MM),
+    "Button": (17 - 3 / MM, 19.5 - 3 / MM, 17 + 3 / MM, 19.5 + 3 / MM),
     "Top header": (0.5, 6.5, 15.5, 7.5),
     "Bottom header": (0.5, 16.5, 15.5, 17.5),
 }
@@ -34,10 +35,10 @@ C6 = (1 - 1.2 / MM, 7 - 1.3 / MM, 15 + 9.4 / MM, 17 + 1.3 / MM)
 NETS = {
     "GPIO10 to the 220 ohm": ["Q11", "S11"],
     "Gate": ["S7", "T8", "T9"],
-    "Source and GND": ["Q1", "V8", "W8", "X8", "X9", "V12", "remote −", "button2"],
+    "Source and GND": ["Q1", "V8", "W8", "X8", "X9", "V12", "U18", "remote −"],
     "Drain": ["U8", "remote +"],
     "GPIO11": ["Q12", "V15"],
-    "GPIO7": ["Q7", "R2", "button1"],
+    "GPIO7": ["Q7", "R16"],
     "SDA": ["G2", "E8"],
     "SCL": ["G3", "E7"],
     "MPU6050 GND": ["G1", "E6"],
@@ -85,13 +86,9 @@ def check_circuit(wires, row_g, row_q):
             x = parent[x]
         return x
 
-    buttons = 0
     for holes, end in wires:
         for a, b in zip(holes, holes[1:]):
             parent[find(a)] = find(b)
-        if end == "to button":
-            buttons += 1
-            end = f"button{buttons}"
         if end:
             parent[find(holes[-1])] = find(end)
 
@@ -116,12 +113,25 @@ def check_circuit(wires, row_g, row_q):
                 fail(f"A wire reaches {hole}, which is pin {pin[hole]}")
 
 
+def overlap(a, pa, b, pb):
+    """The buzzer is round, so a part can sit in the corner of the square around it."""
+    if not (min(pa[2], pb[2]) > max(pa[0], pb[0]) and min(pa[3], pb[3]) > max(pa[1], pb[1])):
+        return False
+    if "Buzzer" not in (a, b):
+        return True
+    round_part, other = (pa, pb) if a == "Buzzer" else (pb, pa)
+    cx, cy = (round_part[0] + round_part[2]) / 2, (round_part[1] + round_part[3]) / 2
+    dx = max(other[0] - cx, 0, cx - other[2])
+    dy = max(other[1] - cy, 0, cy - other[3])
+    return dx * dx + dy * dy < ((round_part[2] - round_part[0]) / 2) ** 2
+
+
 def check_fit():
     for name, p in PARTS.items():
         if p[0] < BOARD[0] or p[1] < BOARD[1] or p[2] > BOARD[2] or p[3] > BOARD[3]:
             fail(f"{name} is off the board")
     for (a, pa), (b, pb) in itertools.combinations(PARTS.items(), 2):
-        if min(pa[2], pb[2]) > max(pa[0], pb[0]) and min(pa[3], pb[3]) > max(pa[1], pb[1]):
+        if overlap(a, pa, b, pb):
             fail(f"{a} overlaps {b}")
     for name, p in PARTS.items():
         if "header" not in name and min(p[2], C6[2]) > max(p[0], C6[0]) and min(p[3], C6[3]) > max(p[1], C6[1]):
@@ -149,9 +159,7 @@ def check_design_doc(design, wires, row_g, row_q):
     if len(rows) != len(wires):
         fail(f"design.md lists {len(rows)} wires, but the page has {len(wires)}")
     for holes, end in wires:
-        if end == "to button":
-            wanted = (holes[0], f"Button, through {holes[-1]}")
-        elif end:
+        if end:
             wanted = (holes[0], "Remote (+)" if end.endswith("+") else "Remote (−)")
         else:
             wanted = (holes[0], holes[-1])

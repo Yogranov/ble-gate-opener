@@ -8,3 +8,6 @@ logs/
 .pio/
 .cache/
 __pycache__/
+*.sc.bak
+.~*.lock
+hardware/case/print/*.stl
