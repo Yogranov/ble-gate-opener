@@ -91,6 +91,7 @@ typedef struct
     yg_trigger_t trigger;
     yg_motion_t motion;
     yg_motion_out_t motion_out;
+    yg_imu_sample_t last_sample;
     yg_sensor_health_t health;
     yg_sensor_state_t health_seen;
     yg_pairing_t pairing;
@@ -156,3 +157,4 @@ void yg_engine_log_ota(yg_engine_t *e, uint32_t now, uint8_t event);
 void yg_engine_log_error(yg_engine_t *e, uint32_t now, uint8_t code, uint32_t detail);
 
 int yg_engine_status_json(const yg_engine_t *e, uint32_t now, char *buf, size_t len);
+int yg_engine_debug_json(const yg_engine_t *e, uint32_t now, char *buf, size_t len);

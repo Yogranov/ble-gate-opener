@@ -604,7 +604,19 @@ static void status_reports_the_live_state(void) {
     CHECK_HAS(buf, "\"adverts_per_s\":");
 }
 
+static void debug_view_shows_raw_sensor_values(void) {
+    setup(true);
+    still(SEC(3), 0, 0);
+    static char buf[512];
+    CHECK(yg_engine_debug_json(e, now, buf, sizeof(buf)) > 0);
+    CHECK_HAS(buf, "\"az\":1.0");
+    CHECK_HAS(buf, "\"gravity\":[");
+    CHECK_HAS(buf, "\"bias\":[");
+    CHECK_HAS(buf, "\"near_miss\":false");
+}
+
 int main(void) {
+    RUN(debug_view_shows_raw_sensor_values);
     RUN(boot_is_logged_and_scanning_starts);
     RUN(owners_failure_ignition_in_spot_never_presses_and_pull_out_presses_once);
     RUN(weak_day_presses_when_the_beacon_is_first_heard_on_the_way);

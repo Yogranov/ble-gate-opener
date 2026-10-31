@@ -1,0 +1,33 @@
+menu "YogiGate pins"
+
+    config YG_PIN_REMOTE
+        int "Remote MOSFET gate"
+        default 10
+        help
+            Must have no pull-up during reset. On the C6, GPIO18 to GPIO23 do, so
+            they could press the remote at every power-on. The gate also needs a
+            10 to 100 kOhm resistor to GND.
+
+    config YG_PIN_BUZZER
+        int "Buzzer, optional"
+        default 11
+
+    config YG_PIN_SDA
+        int "MPU6050 SDA"
+        default 2
+
+    config YG_PIN_SCL
+        int "MPU6050 SCL"
+        default 3
+
+    config YG_PIN_BUTTON
+        int "Button"
+        default 9
+        help
+            GPIO9 is the BOOT button on the C6 devkit.
+
+    config YG_PIN_LED
+        int "Addressable RGB LED"
+        default 8
+
+endmenu

@@ -1,0 +1,19 @@
+idf_component_register(
+    SRCS
+        "yg_capture.c"
+        "yg_engine.c"
+        "yg_gesture.c"
+        "yg_hotspot_policy.c"
+        "yg_ibeacon.c"
+        "yg_json.c"
+        "yg_motion.c"
+        "yg_pairing.c"
+        "yg_record.c"
+        "yg_ring.c"
+        "yg_sensor_health.c"
+        "yg_settings.c"
+        "yg_trace.c"
+        "yg_trigger.c"
+        "yg_trips.c"
+    INCLUDE_DIRS "include"
+)

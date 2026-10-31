@@ -191,6 +191,7 @@ void yg_engine_on_advert(yg_engine_t *e, uint32_t now, const yg_addr_t *a, int8_
 void yg_engine_on_imu(yg_engine_t *e, uint32_t now, const yg_imu_sample_t *s, float temp_c) {
     yg_sensor_health_on_sample(&e->health, now, s);
     sync_sensor(e, now);
+    e->last_sample = *s;
     e->has_temp = true;
     e->temp_c = temp_c;
     if (e->capture != NULL) {
@@ -573,5 +574,39 @@ int yg_engine_status_json(const yg_engine_t *e, uint32_t now, char *buf, size_t 
               PAIR[e->pairing.mode], e->s->debug ? "true" : "false",
               yg_trigger_fallback_active(&e->trigger, e->s) ? "true" : "false",
               e->capture != NULL && yg_capture_active(e->capture) ? "true" : "false");
+    return yg_jw_finish(&w);
+}
+
+static void json_tenths_list(yg_jw_t *w, const float v[3], float scale) {
+    yg_jw_raw(w, "[");
+    for (int i = 0; i < 3; i++) {
+        yg_jw_raw(w, "%s", i ? "," : "");
+        yg_jw_tenths(w, (int)(v[i] * scale));
+    }
+    yg_jw_raw(w, "]");
+}
+
+int yg_engine_debug_json(const yg_engine_t *e, uint32_t now, char *buf, size_t len) {
+    const yg_imu_sample_t *in = &e->last_sample;
+    yg_jw_t w;
+    yg_jw_init(&w, buf, len);
+    yg_jw_raw(&w, "{\"uptime_ms\":%u,\"ax\":", (unsigned)(now - e->boot_time));
+    yg_jw_tenths(&w, (int)(in->ax * 10.0f));
+    yg_jw_raw(&w, ",\"ay\":");
+    yg_jw_tenths(&w, (int)(in->ay * 10.0f));
+    yg_jw_raw(&w, ",\"az\":");
+    yg_jw_tenths(&w, (int)(in->az * 10.0f));
+    yg_jw_raw(&w, ",\"gx\":");
+    yg_jw_tenths(&w, (int)(in->gx * 10.0f));
+    yg_jw_raw(&w, ",\"gy\":");
+    yg_jw_tenths(&w, (int)(in->gy * 10.0f));
+    yg_jw_raw(&w, ",\"gz\":");
+    yg_jw_tenths(&w, (int)(in->gz * 10.0f));
+    yg_jw_raw(&w, ",\"gravity\":");
+    json_tenths_list(&w, e->motion.gravity, 1000.0f);
+    yg_jw_raw(&w, ",\"bias\":");
+    json_tenths_list(&w, e->motion.bias, 10.0f);
+    yg_jw_raw(&w, ",\"near_miss\":%s,\"scan\":%d}",
+              e->motion_out.near_miss ? "true" : "false", (int)e->scan_mode);
     return yg_jw_finish(&w);
 }
