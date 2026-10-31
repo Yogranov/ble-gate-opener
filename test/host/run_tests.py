@@ -65,6 +65,10 @@ def main():
             continue
         if subprocess.run([exe_name(name)], cwd=ROOT).returncode != 0:
             failed.append(name)
+    if not wanted or "logs_tool" in wanted:
+        print("== test_logs_tool")
+        if subprocess.run([sys.executable, os.path.join(HOST, "test_logs_tool.py")], cwd=ROOT).returncode != 0:
+            failed.append("test_logs_tool")
     print()
     if failed:
         print("FAILED: " + ", ".join(failed))

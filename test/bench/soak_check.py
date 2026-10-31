@@ -104,7 +104,7 @@ def soak(minutes):
         time.sleep(3)
         r = command("api GET /api/system", 8)
         if "{" in r:
-            readings.append(json.loads(r[r.index("{"):])["heap_free"])
+            readings.append(json.loads(r[r.index("{"):].split("\n")[0])["heap_free"])
         command("api GET /api/status", 8)
         command("scan start")
         time.sleep(2)

@@ -6,8 +6,8 @@
     python tools/yg_logs.py summary logs/some.ndjson   one line per trip, then totals
     python tools/yg_logs.py replay logs/some.ndjson --trip 12 --set motion_accel_mg=60
 
-Replay runs a trip through the current logic with changed settings. Build it first
-with: python test/host/run_tests.py
+Replay runs a trip through the current logic, starting from the settings the trip
+really had, then changed by any --set. Build it first with: python test/host/run_tests.py
 """
 import argparse
 import base64
@@ -25,6 +25,13 @@ ACCEL_LSB_PER_G = 16384.0
 GYRO_LSB_PER_DPS = 131.0
 SAMPLE_MS = 20
 TICK_MS = 100
+# What a boot record calls the settings that decide on a press, and what they are called.
+BOOT_SETTINGS = {
+    "set_point": "set_point_dbm", "press_ms": "press_ms", "moved_window_s": "moved_window_s", "gone_s": "gone_s",
+    "still_s": "still_s", "fallback_dbm": "fallback_dbm", "motion_enabled": "motion_enabled",
+    "motion_accel_mg": "motion_accel_mg", "motion_accel_ms": "motion_accel_ms", "motion_yaw_deg": "motion_yaw_deg",
+    "motion_yaw_window_ms": "motion_yaw_window_ms",
+}
 
 
 def default_output():
@@ -42,9 +49,10 @@ def fetch_usb(port, captures, out_path):
     good = bad = 0
     data = bytearray()
     last = time.time()
+    done = False
     with open(out_path, "w", encoding="utf-8") as out:
         begun = False
-        while time.time() - last < 15:
+        while time.time() - last < 15 and not done:
             chunk = s.read(65536)
             if not chunk:
                 continue
@@ -52,7 +60,6 @@ def fetch_usb(port, captures, out_path):
             data += chunk
             *lines, rest = data.split(b"\n")
             data = bytearray(rest)
-            done = False
             for raw in lines:
                 line = raw.decode(errors="replace").strip()
                 if line == "#BEGIN":
@@ -66,10 +73,10 @@ def fetch_usb(port, captures, out_path):
                         good += 1
                     except ValueError:
                         bad += 1
-            if done:
-                break
     s.close()
     print(f"{good} records saved to {out_path}" + (f", {bad} damaged lines skipped" if bad else ""))
+    if not done:
+        print("WARNING: the unit stopped sending before the end of the logs. This file is not complete.")
 
 
 def fetch_http(host, captures, out_path):
@@ -109,7 +116,7 @@ def summarise(records):
     def trip_of(number):
         return trips.setdefault(number, {
             "trip": number, "fw": "", "duration": 0, "heard": None, "motion": None, "press": None, "presses": 0,
-            "parked": None, "peak": None, "adverts": 0, "temp": None, "errors": [], "env": None, "near_miss": 0,
+            "parked": None, "peak": None, "heard_adverts": 0, "heard_seconds": 0, "temp": None, "errors": [], "env": None, "near_miss": 0,
         })
 
     for r in records:
@@ -139,7 +146,10 @@ def summarise(records):
         elif kind == "trace":
             for at, rssi, adverts, _, _, flags in trace_samples(r):
                 t["duration"] = max(t["duration"], at)
-                t["adverts"] += adverts
+                # Longer periods cap their count and may only be heard for part of the time.
+                if r["period"] == 1 and adverts:
+                    t["heard_adverts"] += adverts
+                    t["heard_seconds"] += 1
                 if flags & 2:
                     t["near_miss"] += 1
                 if rssi is None:
@@ -179,9 +189,10 @@ def cmd_summary(args):
         if t["peak"]:
             peaks.append(t["peak"][1])
         note = " ".join(filter(None, [t.get("rating"), ",".join(t["errors"])]))
+        adverts = f"{t['heard_adverts'] / t['heard_seconds']:.1f}" if t["heard_seconds"] else "-"
         print(f"{number:>5} {t['fw']:>7} {seconds:>6.0f}s {t['parked'] if t['parked'] is not None else '-':>7} "
               f"{moved_at:>7} {press_at:>7} {t['presses']:>2} {t['press']['reason'] if t['press'] else '-':>8} "
-              f"{warn:>6} {t['peak'][1] if t['peak'] else '-':>5} {t['adverts'] / max(seconds, 1):>6.1f} "
+              f"{warn:>6} {t['peak'][1] if t['peak'] else '-':>5} {adverts:>6} "
               f"{t['temp'] if t['temp'] is not None else '-':>5} {t['near_miss']:>4}  {note}")
     print()
     pressed_parked = sum(1 for t in trips.values() if t["press"] and t["press"]["reason"] == "auto" and t["motion"] is None)
@@ -200,9 +211,11 @@ def cmd_summary(args):
 
 
 def capture_events(records, trip):
-    """Raw motion samples and adverts from one trip's debug captures. A capture cut
-    short by a power cut still counts: samples are timed from its start record."""
+    """Raw motion samples and adverts from one trip's debug captures, and the spans of
+    time they cover. A capture cut short by a power cut still counts: samples are timed
+    from its start record."""
     events = []
+    windows = []
     start = None
     for r in records:
         if r.get("trip") != trip:
@@ -210,6 +223,7 @@ def capture_events(records, trip):
         kind = r.get("k")
         if kind == "cap_start":
             start = r
+            windows.append([r["t"] - r["pre"] * SAMPLE_MS, r["t"]])
         elif kind == "cap_imu" and start is not None:
             data = base64.b64decode(r["b64"])
             for i in range(r["n"]):
@@ -217,12 +231,13 @@ def capture_events(records, trip):
                 at = start["t"] + (r["first"] + i - start["pre"]) * SAMPLE_MS
                 values = [v / ACCEL_LSB_PER_G for v in s[:3]] + [v / GYRO_LSB_PER_DPS for v in s[3:]]
                 events.append((at, f"I,{at}," + ",".join(f"{v:.5f}" for v in values)))
+                windows[-1][1] = max(windows[-1][1], at)
         elif kind == "cap_adv" and start is not None:
             data = base64.b64decode(r["b64"])
             for i in range(r["n"]):
                 at, rssi = struct.unpack_from("<Ib", data, i * 5)
                 events.append((at, f"A,{at},{rssi}"))
-    return events
+    return events, windows
 
 
 def trace_events(records, trip):
@@ -239,23 +254,51 @@ def trace_events(records, trip):
     return events
 
 
+def boot_settings(records, trip):
+    """The settings the trip started with, as (key, value) pairs."""
+    for r in records:
+        if r.get("trip") == trip and r.get("k") == "boot":
+            pairs = []
+            for name, key in BOOT_SETTINGS.items():
+                if name in r:
+                    value = r[name]
+                    pairs.append((key, int(value) if isinstance(value, bool) else value))
+            return pairs
+    return []
+
+
+def setting_events(records, trip, overridden):
+    """Settings changed during the trip, unless this replay is overriding them."""
+    known = set(BOOT_SETTINGS.values()) - overridden
+    return [(r["t"], f"set,{r['key']},{r['value']}") for r in records
+            if r.get("trip") == trip and r.get("k") == "setting" and r["key"] in known]
+
+
+def sensor_events(records, trip):
+    events = []
+    for r in records:
+        if r.get("trip") == trip and r.get("k") == "error" and r["code"].startswith("sensor_"):
+            events.append((r["t"], f"{'R' if r['code'] == 'sensor_recovered' else 'F'},{r['t']}"))
+    return events
+
+
 def cmd_replay(args):
     exe = os.path.join(ROOT, "build-host", "replay" + (".exe" if os.name == "nt" else ""))
     if not os.path.exists(exe):
         sys.exit("Build the replay program first: python test/host/run_tests.py")
     records = list(read_records(args.file))
-    events = capture_events(records, args.trip)
-    source = "raw captures"
-    if not any(line.startswith("I,") for _, line in events):
-        events = trace_events(records, args.trip)
-        source = "per-second trace, with motion as logged"
+    overrides = [change.partition("=")[::2] for change in args.settings]
+    captured, windows = capture_events(records, args.trip)
+    # Raw data is better where there is any, but only the trace covers the rest.
+    traced = [e for e in trace_events(records, args.trip) if not any(a <= e[0] <= b for a, b in windows)]
+    events = captured + traced + sensor_events(records, args.trip)
     if not events:
         sys.exit(f"Trip {args.trip} has nothing to replay.")
+    events += setting_events(records, args.trip, {key for key, _ in overrides})
     events.sort(key=lambda e: e[0])
-    lines = []
-    for change in args.settings:
-        key, _, value = change.partition("=")
-        lines.append(f"set,{key},{value}")
+    source = f"{len(windows)} raw captures and the trace" if windows else "the trace, with motion as logged"
+    start_settings = boot_settings(records, args.trip)
+    lines = [f"set,{key},{value}" for key, value in start_settings + overrides]
     next_tick = events[0][0]
     for at, line in events:
         while next_tick <= at:
@@ -273,7 +316,8 @@ def cmd_replay(args):
     for r in records:
         if r.get("trip") == args.trip and r.get("k") in ("press", "motion", "rearm"):
             print(f"  {r['k'].upper()},{r['t']},{r.get('reason') or r.get('cause')}")
-    print("Replayed with" + (" " + ", ".join(args.settings) if args.settings else " current defaults") + ":")
+    base = "the trip's settings" if start_settings else "default settings, as its boot record is gone"
+    print("Replayed with " + ", then ".join([base] + args.settings) + ":")
     print("  " + (result.stdout.strip().replace("\n", "\n  ") or "nothing"))
 
 

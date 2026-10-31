@@ -151,12 +151,13 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/trips":
             before = re.search(r"before=(\d+)", self.path)
             trips = [t for t in TRIPS if not before or t["trip"] < int(before.group(1))]
-            self.send_json({"current": 43, "trips": trips[:10]})
+            older = trips[10].get("trip") + 1 if len(trips) > 10 else 0
+            self.send_json({"current": 43, "trips": trips[:10], "next_before": older})
         elif path.startswith("/api/trips/"):
             number = int(path.rsplit("/", 1)[1])
             self.send_body("\n".join(json.dumps(r) for r in trip_records(number)) + "\n", "application/x-ndjson")
         elif path == "/api/debug/live":
-            self.send_json({"uptime_ms": 1, "ax": 0.0, "ay": 0.0, "az": 1.0, "gx": 0.1, "gy": 0.0, "gz": 0.0,
+            self.send_json({"uptime_ms": 1, "ax_mg": 12, "ay_mg": -4, "az_mg": 999, "gx": 0.1, "gy": 0.0, "gz": 0.0,
                             "gravity": [12.0, -4.0, 999.0], "bias": [1.2, -0.7, 0.4], "near_miss": False, "scan": 1})
         elif path == "/api/logs/export":
             self.send_body('{"k":"meta","format":1}\n', "application/x-ndjson")
@@ -167,6 +168,9 @@ class Handler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length") or 0)
         body = self.rfile.read(length)
         path = self.path
+        if self.headers.get("X-YogiGate") != "1":
+            self.send_json({"ok": False, "error": "missing X-YogiGate header"}, 403)
+            return
         if path == "/api/press":
             state["pressing_until"] = time.time() + 2
         elif path == "/api/pair/scan":

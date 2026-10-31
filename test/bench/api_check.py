@@ -17,12 +17,21 @@ import yg_serial  # noqa: E402
 failures = []
 
 
+def quoted(text):
+    """A console argument that arrives exactly as given."""
+    return '"' + text.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
 def api(s, method, path, body=None, timeout=20):
     command = f"api {method} {path}"
     if body is not None:
-        text = json.dumps(body, separators=(",", ":")).replace('"', '\\"')
-        command += f' "{text}"'
+        command += " " + quoted(json.dumps(body, separators=(",", ":")))
     return yg_serial.run_command(s, command, timeout)
+
+
+def api_raw(s, path, text):
+    """POSTs a body that need not be valid JSON."""
+    return yg_serial.run_command(s, f"api POST {path} {quoted(text)}", 20)
 
 
 def check(name, condition, detail=""):
@@ -73,6 +82,44 @@ def main():
     check("set point any", '"ok":true' in api(s, "POST", "/api/setpoint", {"any": True}))
     check("set point here with nothing heard rejected", "400" in api(s, "POST", "/api/setpoint", {"here": True}))
 
+    before = json.loads(yg_serial.run_command(s, "status", 5).split("\n")[0])
+
+    check("set point of 200 rejected", "400" in api(s, "POST", "/api/setpoint", {"dbm": 200}))
+    check("set point of 256 rejected", "400" in api(s, "POST", "/api/setpoint", {"dbm": 256}))
+    check("set point unchanged by those", '"set_point":"any"' in api(s, "GET", "/api/status"))
+
+    r = api_raw(s, "/api/settings", "[1]")
+    check("an array is not a settings body", "400" in r and "expected an object" in r, r)
+    r = api_raw(s, "/api/settings", "[" * 100)
+    check("deep nesting refused before parsing", "400" in r and "too deep" in r, r)
+    r = api_raw(s, "/api/settings", "not json")
+    check("not JSON refused", "400" in r and "bad json" in r, r)
+    r = yg_serial.run_command(s, "api POST /api/settings", 20)
+    check("empty body refused", "400" in r and "body size" in r, r)
+    r = api_raw(s, "/api/settings", '{"a\\"b":1}')
+    check("error with a quote in it is valid JSON", "400" in r and json.loads(r[r.index('{"ok"'):].split("\n")[0])["ok"] is False, r)
+
+    r = yg_serial.run_command(s, "api NOGUARD /api/press " + quoted('{"x":1}'), 20)
+    check("POST without the guard header refused", "403" in r, r)
+    check("that did not press", '"remote_pin_high":false' in yg_serial.run_command(s, "status", 5))
+
+    ssid = next(i["value"] for i in json.loads(body_of(api(s, "GET", "/api/settings")))["settings"] if i["key"] == "hotspot_ssid")
+    check("SSID of 32 characters accepted", '"ok":true' in api(s, "POST", "/api/settings", {"hotspot_ssid": "x" * 32}))
+    check("SSID with a quote accepted", '"ok":true' in api(s, "POST", "/api/settings", {"hotspot_ssid": 'a"b'}))
+    r = api(s, "GET", "/api/logs/export?captures=0", timeout=60)
+    meta = r[r.index('{"k":"meta"'):].split("\n")[0]
+    check("export meta is valid JSON with a quote in the SSID", json.loads(meta)["ssid"] == 'a"b', meta)
+    api(s, "POST", "/api/settings", {"hotspot_ssid": ssid})
+
+    after = json.loads(yg_serial.run_command(s, "status", 5).split("\n")[0])
+    check("none of those restarted the unit", after["uptime_ms"] > before["uptime_ms"], (before, after))
+
+    if after["sensor_id"] == 0:
+        print("     no sensor fitted, waiting for the 5 s it takes to count as failed")
+        time.sleep(max(0, 5.5 - after["uptime_ms"] / 1000))
+        r = api(s, "GET", "/api/status")
+        check("a missing sensor is reported", '"sensor":"failed"' in r and '"sensor_err":"absent"' in r and '"fallback":true' in r, r)
+
     r = api(s, "POST", "/api/press", {"x": 1})
     check("press", '"ok":true' in r, r)
     level = yg_serial.run_command(s, "status", 5)
@@ -90,13 +137,17 @@ def main():
     check("candidates", '"mode":"list"' in r, r)
     check("pair cancel", '"ok":true' in api(s, "POST", "/api/pair/cancel", {"x": 1}))
     check("bad MAC rejected", "400" in api(s, "POST", "/api/pair/manual", {"mac": "nonsense"}))
+    check("rotating address rejected", "400" in api(s, "POST", "/api/pair/select", {"mac": "45:00:00:00:00:03", "type": 1}))
+    check("unknown address type rejected", "400" in api(s, "POST", "/api/pair/select", {"mac": "c5:b0:e6:53:59:02", "type": 7}))
+    check("address type out of range rejected", "400" in api(s, "POST", "/api/pair/select", {"mac": "c5:b0:e6:53:59:02", "type": 257}))
+    check("those saved nothing", '"beacon":null' in api(s, "GET", "/api/status"))
     check("typed MAC", '"ok":true' in api(s, "POST", "/api/pair/manual", {"mac": "c5:b0:e6:53:59:02"}))
     check("typed MAC shows in status", '"beacon":"c5:b0:e6:53:59:02"' in api(s, "GET", "/api/status"))
     check("forget", '"ok":true' in api(s, "POST", "/api/pair/forget", {"x": 1}))
     check("forgotten", '"beacon":null' in api(s, "GET", "/api/status"))
 
     r = api(s, "GET", "/api/trips")
-    check("trip list", '"current":' in r and '"trips":[' in r and '"fw":"' in r, r)
+    check("trip list", '"current":' in r and '"trips":[' in r and '"fw":"' in r and '"next_before":' in r, r)
     current = json.loads(yg_serial.run_command(s, "status", 5).split("\n")[0])["trip"]
     r = api(s, "POST", f"/api/trips/{current}/rating", {"rating": "good"})
     check("rate a trip", '"ok":true' in r, r)
@@ -115,7 +166,8 @@ def main():
     if not debug_on:
         check("debug endpoints refuse with debug off", "403" in api(s, "GET", "/api/debug/live"))
         api(s, "POST", "/api/settings", {"debug": True})
-    check("live view", '"gravity"' in api(s, "GET", "/api/debug/live"))
+    r = api(s, "GET", "/api/debug/live")
+    check("live view", '"gravity"' in r and '"az_mg":' in r, r)
     check("simulate motion", '"ok":true' in api(s, "POST", "/api/debug/simulate-motion", {"x": 1}))
     check("moved after simulated motion", '"moved_recently":true' in api(s, "GET", "/api/status"))
     if not debug_on:

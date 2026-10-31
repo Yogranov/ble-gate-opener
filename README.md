@@ -90,6 +90,8 @@ python tools/yg_logs.py summary logs/<file>.ndjson
 python tools/yg_logs.py replay logs/<file>.ndjson --trip 12 --set motion_accel_mg=60
 ```
 
+Replay runs a trip through the current logic, starting from the settings that trip really had.
+
 Rate trips on the page when something feels wrong. The unit cannot see the gate, so your rating is the only record of whether it really opened.
 
 To have logs reviewed, give the downloaded file to a Claude session in this repo and ask it to review them. Debug mode records raw captures, which make tuning much easier in the first weeks.
@@ -102,7 +104,18 @@ All decisions live in `components/yg_core`, which has no ESP-IDF dependency and 
 python test/host/run_tests.py
 ```
 
-`test/bench/api_check.py` checks every API endpoint on a real unit over USB. `tools/mock_api.py` serves the page with a fake API, for working on it without a unit.
+These run on a real unit over USB, using the ESP-IDF Python:
+
+| Check | What it does |
+|---|---|
+| `test/bench/api_check.py` | Every API endpoint, including bad requests |
+| `test/bench/ota_check.py` | Firmware update and rollback. About three minutes |
+| `test/bench/log_check.py` | Erasing full logs and a factory reset. **Erases the settings, and the hotspot gets a new password** |
+| `test/bench/soak_check.py` | Repeated restarts and hotspot cycles, watching for crashes and leaks |
+
+`tools/mock_api.py` serves the page with a fake API, for working on it without a unit, and `test/bench/page_check.py` tests the page against that in headless Edge.
+
+Every POST to the API needs the header `X-YogiGate: 1`, which stops a page on another site from pressing the remote.
 
 ## Layout
 

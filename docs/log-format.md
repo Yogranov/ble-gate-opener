@@ -10,7 +10,7 @@ A **trip** is one power-on period. Every record has:
 | `trip` | Trip number |
 | `t` | Milliseconds since this trip's power-on |
 
-The HTTP export starts with one `meta` line: `format`, `fw`, `current_trip`, `ssid`. A USB export has no `meta` line.
+The HTTP export starts with one `meta` line: `format`, `fw`, `current_trip`, `ssid`. A USB export has no `meta` line, and `tools/yg_logs.py fetch` warns if it ends early.
 
 Records are in the order they were written, not strictly by time. A `trace` record is written up to 5 s after its samples, so sort by `t` when building a timeline. Its `t` is the time of its first sample.
 
@@ -36,7 +36,7 @@ There is no clock across power cuts. To place trips in calendar time, use `time_
 | `time_anchor` | `epoch` | Browser time in seconds, when the page opened |
 | `env` | `ble`, `wifi`, `wifi_best`, `chan` | Debug only: nearby BLE devices, Wi-Fi networks, strongest Wi-Fi RSSI, networks on channels 1 to 13. The Wi-Fi fields are `null` if the scan did not finish, which is not the same as 0 networks |
 
-`reset` is the ESP-IDF `esp_reset_reason_t` value: 1 power-on, 3 software restart, 4 panic, 7 task watchdog, 9 brownout.
+`reset` is the ESP-IDF `esp_reset_reason_t` value: 1 power-on, 3 software restart, 4 panic, 5 interrupt watchdog, 6 task watchdog, 7 other watchdog, 9 brownout.
 
 Error `code` values: `sensor_absent`, `sensor_gravity`, `sensor_reads`, `sensor_stuck`, `sensor_recovered`, `queue_dropped`.
 
@@ -73,6 +73,8 @@ These are written only with the debug flag on, to a separate log. They cover abo
 
 1. Did motion ever fire while parked? Look at captures with cause `motion` that are not followed by a real drive, and at owner ratings of `too_early` or `no_reason`.
 2. How much warning does a press give? `tools/yg_logs.py summary` shows the time from press to peak signal.
-3. Do bad days show weaker signal or fewer adverts? Compare parked signal, peak signal and adverts per second across trips.
+3. Do bad days show weaker signal or fewer adverts? Compare parked signal, peak signal and adverts per second across trips. The summary's adverts per second covers only the seconds when the beacon was heard, so a long drive does not lower it. A trip that never reached a 1 s trace period shows `-`.
 4. Does temperature or the `env` snapshot line up with bad days?
 5. Do the owner's ratings agree with the data?
+
+`tools/yg_logs.py replay` answers "what would this change have done?". It starts from the settings in the trip's `boot` record, follows `setting` and sensor `error` records, and uses raw captures where there are any and the trace elsewhere. The trace holds motion only as logged, at most once per 10 s, so raw captures give the better answer.

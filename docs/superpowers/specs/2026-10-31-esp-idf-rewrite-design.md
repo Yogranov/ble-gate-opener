@@ -112,7 +112,7 @@ By default the set point is "any", so a single advert from the paired beacon is 
 
 States are `UNPAIRED`, `ARMED`, `PRESSING` and `HOLD`. Pairing suspends automatic presses and then returns to the previous state.
 
-- `moved_recently` is true when `now - last_motion <= moved_window_s`. It is false at boot until the first motion.
+- `moved_recently` is true when `now - last_motion <= moved_window_s` and that motion has not been used up. A press uses up all motion before it, and so does re-arming because the car is still. It is false at boot until the first motion.
 - `heard` is true for an advert from the paired beacon with `rssi >= set_point`, or any advert when the set point is "any".
 - `ARMED` to `PRESSING`: `moved_recently` and `heard` are both true. Reason `auto`.
 - `UNPAIRED`, `ARMED` or `HOLD` to `PRESSING`: a manual press from the button or page. Reason `button` or `web`.
@@ -122,6 +122,8 @@ States are `UNPAIRED`, `ARMED`, `PRESSING` and `HOLD`. Pairing suspends automati
   - `now - max(last_motion, press_time) >= still_s`
 
 Both timers count from no earlier than the press. Otherwise a car that stopped before the press could re-arm too soon and press again while driving through the gate. The same goes for a manual press made when the beacon had not been heard.
+
+Using up motion means that a parked car stays quiet however `moved_window_s`, `still_s` and `gone_s` are set, so no combination of them needs rejecting.
 
 The state is not saved. After a power cut the unit starts in `ARMED`, or `UNPAIRED` if no beacon is stored, with `moved_recently` false.
 
@@ -136,20 +138,24 @@ The set point exists to stop presses when only driving past, and to keep presses
 
 ### 5.5 Sensor failure fallback
 
-The sensor counts as failed in any of these cases:
+A brief fault must not hand control to the fixed threshold, because that can press a parked car. So the sensor counts as failed only in these cases:
 
-- It is not found on the bus.
+- It has not been found on the bus for 5 s. The unit keeps looking 5 times a second, so a slow start costs nothing.
 - Its accelerometer does not read 1 g ±0.3 g at start. This replaces a strict `WHO_AM_I` check, because clone chips return other IDs. The ID read is logged.
-- 10 consecutive I²C reads fail.
+- No read has worked for 5 s.
 - All samples are identical for 5 s.
 
-When failed, `moved_recently` is always true and the effective set point is `max(set_point, fallback_dbm)`, with `fallback_dbm` defaulting to `-90`. In `HOLD`, only `gone_s` can re-arm. So the gate still works with today's rule, but without today's repeat presses. As today, a strong day can then press from the parking spot. The LED shows an error and the log records it.
+Nothing is final. A power glitch can reset the sensor into sleep, where reads still work but repeat themselves, so the unit reconfigures it after any run of failed reads and after 1 s of identical samples. After 5 s of good, changing samples the sensor counts as working again. The motion estimate then starts over from calibration, because the unit may have been moved while nothing was watching.
+
+When failed, `moved_recently` is always true and the effective set point is `max(set_point, fallback_dbm)`, with `fallback_dbm` defaulting to `-90`. So the gate still works with today's rule, but without today's repeat presses: after a press made this way, only `gone_s` can re-arm, even if the sensor recovers in the meantime. As today, a strong day can then press from the parking spot. The LED shows an error and the log records it.
 
 ### 5.6 Limits accepted
 
 - If the car stalls right after a press and restarts in range, it can press again, because the unit cannot tell how long the power was off.
 - The unit cannot see whether the gate opened. A lost press repeats only after the `still_s` rule, or by hand.
 - With the button in a glove box, there is no fast manual press while driving, so keeping another remote within reach is sensible.
+- The web server handles one request at a time. A press tapped on the page during a log download, firmware upload or log erase waits for that to finish, which can take a minute or more. Automatic presses do not wait.
+- Records logged while the logs are being erased are lost.
 
 ### 5.7 Settings
 
@@ -187,7 +193,14 @@ Runs in `yg_core` with no hardware dependency, so recorded data can be replayed 
 
 **Input:** MPU6050 at 50 Hz, ±2 g and ±250 °/s, with its digital low-pass filter at about 10 Hz to remove engine vibration.
 
-**Calibration:** at start, the unit waits for 1 s of stillness, then stores the gravity direction and gyro bias. Until then it reports no motion, so the failure mode is a late press, not an early one. If stillness does not come within 10 s, for example because of engine shake or a car already rolling, it calibrates from a 2 s average and detection starts normally. While still, both values keep tracking slowly.
+**Calibration:** at start, the unit waits for 1 s of stillness, then stores the gravity direction and gyro bias. Until then it reports no motion, so the failure mode is a late press, not an early one. If stillness does not come within 10 s, for example because of engine shake or a car already rolling, it calibrates from a 2 s average and detection starts normally.
+
+**Keeping them right:**
+
+- **Gravity turns with the gyro.** A lean or a slow glove box leaves no error behind, however slowly it happens. Rotation under 1 °/s is treated as sensor drift and not applied.
+- **The accelerometer corrects gravity slowly,** over 10 s, or 30 s while above the acceleration threshold, so that braking does not look like a tilt once the car has stopped.
+- **The gyro bias follows drift** once a second, from the average over that second, so that engine shake does not get in the way. Only an average under 1 °/s counts.
+- **After 30 s at rest,** gravity and bias are set again from the sensor, which repairs anything that went wrong, such as calibrating in a bend. Rest means every second was quiet and gravity did not move, so real rotation never counts as rest, however slow.
 
 **Each sample,** with `ĝ` as the unit vector of gravity:
 
@@ -198,7 +211,7 @@ Runs in `yg_core` with no hardware dependency, so recorded data can be replayed 
 **Moving is reported when either is true:**
 
 - **Yaw:** the summed yaw over `motion_yaw_window_ms` reaches `motion_yaw_deg`. A car leaving a perpendicular spot must turn, and door slams do not produce this.
-- **Acceleration:** `horizontal >= motion_accel_mg` continuously for `motion_accel_ms`, while not tilting.
+- **Acceleration:** `horizontal >= motion_accel_mg` continuously for `motion_accel_ms`, while not tilting. Any dip below the threshold starts the time again, so that a small lean and a door shutting cannot add up.
 
 **Tilting:** when `tilt_rate > 8 °/s`, the acceleration check is ignored for 1 s and gravity re-estimates quickly. This is how opening the glove box, which rotates around a horizontal axis, is kept from looking like driving.
 
@@ -228,7 +241,7 @@ Timing out after `pair_timeout_s` keeps the old beacon. A success saves the beac
 
 ### 8.1 Hotspot
 
-- It starts at every power-on, after BLE scanning and the motion sensor are running, unless `hotspot_s` is 0.
+- It starts within moments of every power-on, unless `hotspot_s` is 0. It does not wait for the motion sensor, so the page can still report a sensor that is missing.
 - It stops when the car first moves, or when `hotspot_s` expires, whichever comes first. It stays on while a client is connected, and stops 30 s after the last client leaves if a stop condition has been met.
 - With `debug` on, motion does not stop it.
 - Once stopped, it stays off until the next power-on or a triple-click.
@@ -254,6 +267,10 @@ One HTML file with inline CSS and JavaScript, embedded gzipped, with no external
 
 JSON over HTTP. The page and the PC tools use the same API. Anything that changes state uses POST. The Wi-Fi password is the only authentication, and the hotspot has no internet route.
 
+Every POST must carry the header `X-YogiGate: 1`. A phone with cellular data alongside the hotspot could otherwise be made to press the remote by a page on another site, which a browser will not let add a custom header. POST bodies must be JSON objects, nested at most 8 levels, which is checked before parsing because the parser recurses. `/api/ota` is the exception, with a raw body.
+
+An upload that goes silent is abandoned after 30 s, so a phone dropping off Wi-Fi cannot hold up the web server or stop the hotspot from turning off.
+
 | Method and path | Purpose |
 |---|---|
 | `GET /api/status` | Live state, polled at 2 Hz |
@@ -264,11 +281,11 @@ JSON over HTTP. The page and the PC tools use the same API. Anything that change
 | `POST /api/pair/auto`, `/scan`, `/cancel`, `/forget` | Pairing control |
 | `GET /api/pair/candidates` | Live candidate list |
 | `POST /api/pair/select`, `/api/pair/manual` | Save a beacon from the list, or a typed MAC |
-| `GET /api/trips?before=N&limit=M` | Trip summaries, newest first |
+| `GET /api/trips?before=N&limit=M` | Trip summaries, newest first. `limit` counts trip numbers, and some numbers hold nothing, so `next_before` says where to go on from, or 0 at the end |
 | `GET /api/trips/N` | All records of one trip |
 | `POST /api/trips/N/rating` | `too_early`, `too_late`, `did_not_open`, `no_reason`, `good` |
 | `GET /api/logs/export` | Everything, as streamed NDJSON |
-| `POST /api/logs/clear` | Erase logs |
+| `POST /api/logs/clear` | Erase logs. Takes up to about a minute on full logs |
 | `POST /api/time` | The browser's time, stored as a log anchor |
 | `POST /api/ota` | Upload firmware as a raw binary body |
 | `POST /api/reboot`, `/api/factory-reset` | System |
@@ -323,8 +340,10 @@ Bench commands, because the owner's PC has no Wi-Fi and so cannot reach the hots
 
 | Command | Action |
 |---|---|
-| `api <METHOD> <path> [body]` | HTTP request to the unit's own server over loopback |
-| `ota-self [corrupt\|fail]` | Uploads the running image to the unit's own `/api/ota`. `corrupt` damages it, which must be refused. `fail` makes the new boot fail its self-check, which must roll back |
+| `api <METHOD> <path> [body]` | HTTP request to the unit's own server over loopback. `NOGUARD` as the method is a POST without the guard header |
+| `ota-self [corrupt\|fail\|abandon]` | Uploads the running image to the unit's own `/api/ota`. `corrupt` damages it, which must be refused. `fail` makes the new boot fail its self-check, which must roll back. `abandon` goes silent half way, which must be given up on |
+| `log-fill <sectors>` | Fills both logs with dummy records, to test a full log |
+| `log-clear` | Erases the logs, and reports the time taken and the longest the decision task was held up |
 | `wifi-join <ssid> <password>` | Joins a LAN until the next restart. Nothing is stored |
 
 ## 9. Logs and debug
@@ -362,7 +381,7 @@ Trip log records:
 
 ### 9.3 Storage
 
-Raw flash partitions used as append-only rings, not a file system. Oldest data is erased first.
+Raw flash partitions used as append-only rings, not a file system. Oldest data is erased first. A restart finds where to go on writing by looking for blank flash, so the last byte of every record is never 0xFF. Erasing the logs holds the lock for one sector at a time, so that decisions are not held up.
 
 | Partition | Size on 8 MB | Holds | Estimate |
 |---|---|---|---|
@@ -452,7 +471,7 @@ README.md            wiring, flashing, first setup
 
 ### 10.2 Event flow
 
-Everything posts to one queue: adverts, motion, button gestures, web commands and a 1 Hz tick. One task reads the queue and calls `yg_core`, so decisions never race. Web handlers post a command and wait for its result. Adverts that do not fit in the queue are dropped and counted.
+Everything posts to one queue: adverts, motion, button gestures, web commands and a 1 Hz tick. One task reads the queue and calls `yg_core`, so decisions never race. Web handlers post a command and wait for its result. Adverts and motion samples that do not fit in the queue are dropped and counted. Rarer events, button gestures and hotspot client counts, wait up to 200 ms for room, because losing one matters more.
 
 ### 10.3 BLE scanning
 
@@ -479,7 +498,7 @@ To verify at implementation: Espressif's C6 NimBLE example sets `CONFIG_BT_NIMBL
 ### 10.5 Firmware updates and safety
 
 - `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE` is on from the first flash, because the bootloader cannot be changed later over Wi-Fi.
-- On the first boot after an update, the hotspot always starts, whatever `hotspot_s` says. The new image must pass a self-check within 30 s of booting: settings readable, BLE scanning and hotspot started. It then marks itself valid. On failure, or if power is lost first, the previous firmware runs. The page tells the user to keep power on for 30 s after an upload.
+- On the first boot after an update, the hotspot always starts, whatever `hotspot_s` says. The new image must pass a self-check within 30 s of booting: settings store readable, BLE scanning and hotspot started. It then marks itself valid. On failure, or if power is lost first, the previous firmware runs. The page tells the user to keep power on for 30 s after an upload.
 - The sensor is not part of that check, because a broken sensor already has a fallback and should not block updates.
 - Updates are not signed. Accepted, because uploading requires the Wi-Fi password.
 - The remote output has one owner, `yg_io`, which enforces the time limit with a one-shot timer.
@@ -512,17 +531,18 @@ To verify at implementation: Espressif's C6 NimBLE example sets `CONFIG_BT_NIMBL
 - `gesture` covers single, double, triple and hold, with bounce.
 - `record` and the log ring cover wrap-around and torn writes, on a fake flash backend.
 - `replay` runs a downloaded log through the current logic and reports what would change.
-- The page runs in a desktop browser against `tools/mock_api.py`.
+- `test/bench/page_check.py` runs the page in headless Edge against `tools/mock_api.py`, with no unit.
 
 **Build:** `idf.py build` for `esp32c6`, with the image fitting its slot.
 
 **On the bench, with a board, over USB:**
 
 - `test/bench/api_check.py`: every API endpoint, including the press output and its time limit.
-- `test/bench/ota_check.py`: a damaged image refused, an update confirmed, a failed self-check rolled back, and a reset before confirming rolled back.
+- `test/bench/ota_check.py`: a damaged image refused, an abandoned upload given up on, an update confirmed, a failed self-check rolled back, and a reset before confirming rolled back.
+- `test/bench/log_check.py`: full logs erased without holding up decisions, and a factory reset on full logs. It erases the settings too.
 - `test/bench/soak_check.py`: repeated restarts with no press, the debug snapshot, and hotspot and scan cycles watching for crashes and memory leaks.
 
-**Needs a person:** a phone on the real hotspot, the LED and button by eye and hand, pairing a real beacon by holding it close, and the MOSFET with its resistor over real power cycles.
+**Needs a person:** a phone on the real hotspot, the LED and button by eye and hand, pairing a real beacon by holding it close, and the MOSFET with its resistor over real power cycles, with the sensor on the same power so that it cold starts too.
 
 **In the car:** the checks in step 1 of the rollout, then real use.
 

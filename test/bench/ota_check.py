@@ -49,7 +49,7 @@ def system():
         last = command("api GET /api/system", 8)
         status = command("status", 5).split("\n")[0]
         if '"partition"' in last and status.startswith("{"):
-            body = last[last.index("{"):]
+            body = last[last.index("{"):].split("\n")[0]
             return json.loads(body)["partition"], json.loads(status)["uptime_ms"]
         time.sleep(2)
     raise RuntimeError("No answer: " + last)
@@ -77,6 +77,14 @@ def main():
     time.sleep(3)
     slot, _ = system()
     check("still on the same slot after a damaged image", slot == start_slot, slot)
+
+    print("     an upload that goes silent half way, which takes 30 s to give up on")
+    started = time.time()
+    r = command("ota-self abandon", 60)
+    check("an abandoned upload is given up on", "upload failed" in r, r)
+    check("and within a reasonable time", time.time() - started < 45, time.time() - started)
+    slot, _ = system()
+    check("the web server answers again, on the same slot", slot == start_slot, slot)
 
     r = command("ota-self", 60)
     check("upload accepted", '"ok":true' in r, r)
