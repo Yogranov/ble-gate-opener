@@ -135,7 +135,7 @@ static void small_records(void) {
     CHECK_HAS(json, "\"k\":\"time_anchor\"");
     CHECK_HAS(json, "\"epoch\":1790000000");
 
-    yg_env_t env = { 14, 6, -48, { 1, 0, 0, 0, 0, 3, 0, 0, 0, 0, 2 } };
+    yg_env_t env = { 14, true, 6, -48, { 1, 0, 0, 0, 0, 3, 0, 0, 0, 0, 2 } };
     yg_rec_env(&r, 1, 2, &env);
     round_trip();
     CHECK_HAS(json, "\"k\":\"env\"");
@@ -143,6 +143,15 @@ static void small_records(void) {
     CHECK_HAS(json, "\"wifi\":6");
     CHECK_HAS(json, "\"wifi_best\":-48");
     CHECK_HAS(json, "\"chan\":[1,0,0,0,0,3,0,0,0,0,2,0,0]");
+
+    /* A scan that did not finish must not read as "no networks nearby". */
+    yg_env_t unfinished = { 3, false, 0, 0, { 0 } };
+    yg_rec_env(&r, 1, 2, &unfinished);
+    round_trip();
+    CHECK_HAS(json, "\"ble\":3");
+    CHECK_HAS(json, "\"wifi\":null");
+    CHECK_HAS(json, "\"wifi_best\":null");
+    CHECK_HAS(json, "\"chan\":null");
 }
 
 static void trace_record(void) {

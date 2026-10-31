@@ -1,7 +1,7 @@
 # YogiGate 2: ESP-IDF Rewrite Design
 
 **Date:** 2026-10-31
-**Status:** Awaiting owner review
+**Status:** Approved by the owner and implemented on the `esp-idf-rewrite` branch
 **Scope:** Firmware and wiring. The case gets its own spec after this firmware has run in the car.
 
 ## 1. Summary
@@ -58,7 +58,7 @@ Chosen over the three other boards the owner has. The hearing limit is the datas
 | S3 devkit | -97.5 dBm | No hearing advantage over the C6, and modules with R8 in the part number are rated to only 65 °C |
 | D1 mini (ESP32) | -93 dBm | Weakest hearing and BLE 4.2. It stays in the car on the old firmware until step 3 of the rollout, as the fallback |
 
-The first time the board is connected, read its chip type and flash size with `esptool`. Section 9.3 covers the flash layout if it is not 8 MB.
+The owner's board reads as ESP32-C6 (QFN40) revision 0.2 with 16 MB of flash. It keeps the 8 MB layout, per section 9.3.
 
 ### 4.2 Wiring
 
@@ -308,12 +308,24 @@ A small `esp_console` for when Wi-Fi is not available, such as first setup or a 
 
 | Command | Action |
 |---|---|
-| `status` | State, signal, sensor, firmware |
+| `status` | State, signal, sensor, firmware, remote pin level |
 | `wifi` | Show the SSID and password, and start the hotspot |
 | `pair <mac>` | Save a beacon by MAC |
 | `press` | Press the remote |
-| `logs` | Stream the NDJSON export over USB |
-| `factory-reset` | Erase settings and logs |
+| `set <key> <value>` | Change a setting |
+| `scan start`, `list`, `stop` | List nearby iBeacons |
+| `devices [seconds]` | List every BLE device heard, to find a MAC |
+| `motion` | Simulate motion, debug flag only |
+| `logs [nocapture]` | Stream the NDJSON export over USB |
+| `reboot`, `factory-reset` | Restart, or erase settings and logs |
+
+Bench commands, because the owner's PC has no Wi-Fi and so cannot reach the hotspot:
+
+| Command | Action |
+|---|---|
+| `api <METHOD> <path> [body]` | HTTP request to the unit's own server over loopback |
+| `ota-self [corrupt\|fail]` | Uploads the running image to the unit's own `/api/ota`. `corrupt` damages it, which must be refused. `fail` makes the new boot fail its self-check, which must roll back |
+| `wifi-join <ssid> <password>` | Joins a LAN until the next restart. Nothing is stored |
 
 ## 9. Logs and debug
 
@@ -400,16 +412,18 @@ partitions.csv
 main/                app_main, event loop, Kconfig.projbuild (pins)
 components/
   yg_core/           pure logic, no ESP-IDF includes
+  yg_app/            the decision task and its queue
   yg_ble/            NimBLE scanner
   yg_imu/            MPU6050 driver
   yg_io/             remote output, LED, buzzer, button sampling
-  yg_settings/       NVS load, validate, save
-  yg_log/            ring storage, trace, capture
+  yg_settings_nvs/   stores settings in NVS
+  yg_log/            log storage on flash partitions
   yg_net/            hotspot, HTTP server, API, firmware upload
   yg_console/        USB console
 web/index.html
-test/host/           logic tests on a PC
-tools/               yg_logs.py, replay, mock_api.py
+test/host/           logic tests on a PC, and the replay program
+test/bench/          checks that run on a real unit over USB
+tools/               yg_serial.py, yg_logs.py, mock_api.py
 docs/log-format.md
 README.md            wiring, flashing, first setup
 ```
@@ -422,15 +436,19 @@ README.md            wiring, flashing, first setup
 | `yg_core/motion` | The detection in section 6 | Nothing |
 | `yg_core/pairing` | The auto-pairing rule and candidate table | Nothing |
 | `yg_core/gesture` | Turns button level over time into gestures | Nothing |
-| `yg_core/record` | Encodes and decodes log records | Nothing |
+| `yg_core/record`, `ring` | Encodes and decodes log records, and stores them in flash sectors | Nothing |
+| `yg_core/trace`, `trips`, `capture` | Trace samples, trip summaries and debug captures | Nothing |
+| `yg_core/hotspot_policy`, `sensor_health`, `settings` | The hotspot rules, sensor trust and the settings table | Nothing |
+| `yg_core/engine` | Ties all of the above together, and reaches hardware only through an ops table | Nothing |
 | `yg_ble` | Passive scan with filter list, or open scan when pairing. Delivers parsed adverts | NimBLE |
 | `yg_imu` | Samples at 50 Hz, delivers samples and failures | `i2c_master` |
 | `yg_io` | Remote press with a hard time limit, LED patterns, buzzer, button level | GPIO, `led_strip`, LEDC |
-| `yg_settings` | Typed settings with defaults and range checks | NVS |
-| `yg_log` | Append, read and export, over a replaceable flash backend | `esp_partition` |
+| `yg_settings_nvs` | Loads and saves the settings table, the beacon and the trip counter | NVS |
+| `yg_log` | Binds the ring to flash, adds locking, and exports | `esp_partition` |
+| `yg_app` | The one decision task, its queue, and the firmware self-check | `yg_core`, hardware layers |
 | `yg_net` | Hotspot rules, HTTP server, API, upload | Wi-Fi, `esp_http_server`, OTA |
 | `yg_console` | The commands in 8.6 | `esp_console` |
-| `main` | Wires it together and runs the only decision task | All |
+| `main` | Starts everything, with the remote output first | All |
 
 ### 10.2 Event flow
 
@@ -486,7 +504,7 @@ To verify at implementation: Espressif's C6 NimBLE example sets `CONFIG_BT_NIMBL
 
 ## 12. Testing
 
-**On a PC, without a board** (clang is available on this machine, and CMake and Ninja come with ESP-IDF):
+**On a PC, without a board:** `python test/host/run_tests.py`, which needs only clang or gcc.
 
 - Every row of the table in 5.2 becomes a test of `trigger`.
 - `motion` runs on synthetic traces at first, then on real captures: door slam, tilt, pull-out, gentle creep, engine shake.
@@ -498,7 +516,13 @@ To verify at implementation: Espressif's C6 NimBLE example sets `CONFIG_BT_NIMBL
 
 **Build:** `idf.py build` for `esp32c6`, with the image fitting its slot.
 
-**On the bench, with a board:** press output and its time limit, no press at power-on (checked over 20 power cycles), pairing all four ways, every page section, firmware upload, rollback using a deliberately bad image, and a power cut during logging followed by reading the log back.
+**On the bench, with a board, over USB:**
+
+- `test/bench/api_check.py`: every API endpoint, including the press output and its time limit.
+- `test/bench/ota_check.py`: a damaged image refused, an update confirmed, a failed self-check rolled back, and a reset before confirming rolled back.
+- `test/bench/soak_check.py`: repeated restarts with no press, the debug snapshot, and hotspot and scan cycles watching for crashes and memory leaks.
+
+**Needs a person:** a phone on the real hotspot, the LED and button by eye and hand, pairing a real beacon by holding it close, and the MOSFET with its resistor over real power cycles.
 
 **In the car:** the checks in step 1 of the rollout, then real use.
 
@@ -508,7 +532,7 @@ The D1 mini stays in the car on the old firmware until step 3, so the gate keeps
 
 **Step 0: Toolchain.** Install ESP-IDF v6.1 with `winget install Espressif.EIM-CLI` and `eim install -i v6.1`. Build a minimal project for `esp32c6`, flash it, and read the chip and flash size.
 
-**Step 1: Motion and signal test in the car.** This needs the C6, the MPU6050 and USB power only. The remote is not connected, so nothing can be pressed. The firmware logs motion events, captures and adverts to flash, and they are read back over USB afterwards.
+**Step 1: Motion and signal test in the car.** This needs the C6, the MPU6050 and USB power only. The remote is not connected, so a press only toggles an unconnected pin. It uses the full firmware from step 2 with debug on, which logs motion events, captures and adverts to flash, and they are read back over USB afterwards.
 
 | Test | Target |
 |---|---|
@@ -518,7 +542,7 @@ The D1 mini stays in the car on the old firmware until step 3, so the gate keeps
 
 If motion detection misses these targets, tune it using the captures. If it still fails, switch to the fallback rule designed earlier: press when the signal rises 6 dB above its parked level. The model showed about 1 in 7 starts pressing too early with that rule, so it is the backup, not the plan.
 
-**Step 2: Full firmware.** Build everything in this spec and pass the bench tests.
+**Step 2: Full firmware.** Build everything in this spec and pass the bench tests. This was done before step 1, at the owner's request, so step 1 can use it.
 
 **Step 3: Into the car.** Move the MOSFET and remote to the C6, adding the pull-down resistor. Turn debug on.
 

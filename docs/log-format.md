@@ -34,7 +34,7 @@ There is no clock across power cuts. To place trips in calendar time, use `time_
 | `temp` | `c` | Sensor temperature, once a minute |
 | `rating` | `rated_trip`, `rating` | The owner rated a trip: `good`, `too_early`, `too_late`, `did_not_open`, `no_reason` |
 | `time_anchor` | `epoch` | Browser time in seconds, when the page opened |
-| `env` | `ble`, `wifi`, `wifi_best`, `chan` | Debug only: nearby BLE devices, Wi-Fi networks, strongest Wi-Fi RSSI, networks on channels 1 to 13 |
+| `env` | `ble`, `wifi`, `wifi_best`, `chan` | Debug only: nearby BLE devices, Wi-Fi networks, strongest Wi-Fi RSSI, networks on channels 1 to 13. The Wi-Fi fields are `null` if the scan did not finish, which is not the same as 0 networks |
 
 `reset` is the ESP-IDF `esp_reset_reason_t` value: 1 power-on, 3 software restart, 4 panic, 7 task watchdog, 9 brownout.
 

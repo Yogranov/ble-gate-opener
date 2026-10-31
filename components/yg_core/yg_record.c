@@ -205,11 +205,12 @@ void yg_rec_time_anchor(yg_record_t *r, uint32_t trip, uint32_t now, uint32_t ep
 }
 
 void yg_rec_env(yg_record_t *r, uint32_t trip, uint32_t now, const yg_env_t *env) {
-    begin(r, YG_REC_ENV, trip, now, 18);
+    begin(r, YG_REC_ENV, trip, now, 19);
     put_u16(r->payload, env->ble_devices);
     put_u16(r->payload + 2, env->wifi_networks);
     r->payload[4] = (uint8_t)env->wifi_strongest;
     memcpy(r->payload + 5, env->per_channel, 13);
+    r->payload[18] = env->wifi_scanned;
 }
 
 void yg_rec_cap_start(yg_record_t *r, uint32_t trip, uint32_t now, uint32_t id, uint8_t cause, uint16_t pre_samples) {
@@ -449,6 +450,10 @@ static void json_body(yg_jw_t *w, const yg_record_t *r) {
         yg_jw_raw(w, "\"k\":\"time_anchor\",\"epoch\":%u", (unsigned)yg_get_u32(p));
         break;
     case YG_REC_ENV:
+        if (!p[18]) {
+            yg_jw_raw(w, "\"k\":\"env\",\"ble\":%u,\"wifi\":null,\"wifi_best\":null,\"chan\":null", yg_get_u16(p));
+            break;
+        }
         yg_jw_raw(w, "\"k\":\"env\",\"ble\":%u,\"wifi\":%u,\"wifi_best\":%d,\"chan\":[", yg_get_u16(p), yg_get_u16(p + 2), (int)(int8_t)p[4]);
         for (int i = 0; i < 13; i++) {
             yg_jw_raw(w, "%s%u", i ? "," : "", p[5 + i]);

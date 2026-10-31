@@ -11,6 +11,7 @@
 #include "esp_netif.h"
 #include "esp_ota_ops.h"
 #include "esp_partition.h"
+#include "esp_timer.h"
 #include "esp_wifi.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
@@ -43,6 +44,7 @@ static QueueHandle_t s_requests;
 static volatile bool s_running;
 static bool s_joined;
 static volatile bool s_env_done;
+static int64_t s_env_started;
 static yg_env_t s_env;
 
 typedef struct
@@ -105,6 +107,7 @@ static void hotspot_off(void) {
 
 static void env_scan(void) {
     s_env_done = false;
+    s_env_started = esp_timer_get_time();
     memset(&s_env, 0, sizeof(s_env));
     wifi_mode_t mode = WIFI_MODE_NULL;
     if (!s_running || esp_wifi_get_mode(&mode) != ESP_OK || mode != WIFI_MODE_APSTA) {
@@ -135,6 +138,8 @@ static void scan_done(void) {
         }
     }
     s_env_done = true;
+    ESP_LOGI(TAG, "Wi-Fi scan took %d ms: %u networks, strongest %d dBm",
+             (int)((esp_timer_get_time() - s_env_started) / 1000), (unsigned)total, (int)s_env.wifi_strongest);
 }
 
 static void join_network(const request_t *r) {
@@ -233,6 +238,7 @@ void yg_net_env_start(void) {
 
 void yg_net_env_finish(yg_env_t *out) {
     if (s_env_done) {
+        out->wifi_scanned = true;
         out->wifi_networks = s_env.wifi_networks;
         out->wifi_strongest = s_env.wifi_strongest;
         memcpy(out->per_channel, s_env.per_channel, sizeof(out->per_channel));

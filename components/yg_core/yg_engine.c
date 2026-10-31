@@ -11,7 +11,7 @@
 #define TEMP_LOG_GAP_MS      60000u
 #define SET_POINT_WINDOW_MS  3000u
 #define ENV_DELAY_MS         10000u
-#define ENV_RUN_MS           3000u
+#define ENV_RUN_MS           6000u    /* A Wi-Fi scan with the hotspot up takes a few seconds. */
 #define CAPTURE_RECORDS_PER_TICK 3
 
 static void led(yg_engine_t *e, yg_led_event_t ev) {

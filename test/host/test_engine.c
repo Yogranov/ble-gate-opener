@@ -534,6 +534,8 @@ static void debug_snapshot_runs_once_when_parked(void) {
     CHECK_INT(fake.env_starts, 1);
     CHECK_INT(fake.scan, YG_SCAN_OPEN);
     still(SEC(4), 0, 0);
+    CHECK_INT(fake.env_finishes, 0);
+    still(SEC(3), 0, 0);
     CHECK_INT(fake.env_finishes, 1);
     CHECK_INT(fake.scan, YG_SCAN_FILTERED);
     CHECK_INT(count_records(YG_REC_ENV), 1);

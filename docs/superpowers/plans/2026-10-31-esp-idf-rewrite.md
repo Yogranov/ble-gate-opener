@@ -10,6 +10,8 @@
 
 **Scope note:** interfaces and test cases are spelled out here. Function bodies are written during execution, driven by the tests and the spec section named in each task.
 
+**Changes made during execution:** logic tests run from `test/host/run_tests.py` rather than CMake, because it needs only a C compiler. `yg_app` became its own component, so `yg_net` and `yg_console` can reach the decision task without depending on `main`. Update and rollback are tested by the unit uploading to itself, with `ota-self`.
+
 ---
 
 ## Bench constraints found while planning

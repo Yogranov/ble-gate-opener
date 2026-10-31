@@ -85,6 +85,7 @@ typedef enum
 typedef struct
 {
     uint16_t ble_devices;
+    bool wifi_scanned;      /* False if the Wi-Fi scan did not finish in time. */
     uint16_t wifi_networks;
     int8_t wifi_strongest;
     uint8_t per_channel[13];
