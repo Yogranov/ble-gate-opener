@@ -42,18 +42,16 @@ def main():
     if wanted:
         tests = [t for t in tests if os.path.basename(t)[5:-2] in wanted]
     failed = []
+    if not build("replay", [os.path.join(HOST, "replay.c"), *core_sources]):
+        failed.append("replay (build)")
     for test in tests:
         name = os.path.basename(test)[:-2]
         print(f"== {name}")
         if not build(name, [test, *core_sources, *helpers]):
             failed.append(name + " (build)")
             continue
-        if subprocess.run([exe_name(name)]).returncode != 0:
+        if subprocess.run([exe_name(name)], cwd=ROOT).returncode != 0:
             failed.append(name)
-    replay = os.path.join(HOST, "replay.c")
-    if os.path.exists(replay) and not wanted:
-        if not build("replay", [replay, *core_sources]):
-            failed.append("replay (build)")
     print()
     if failed:
         print("FAILED: " + ", ".join(failed))

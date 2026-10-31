@@ -44,6 +44,11 @@ void yg_jw_string(yg_jw_t *w, const char *text) {
     yg_jw_raw(w, "\"");
 }
 
+void yg_jw_tenths(yg_jw_t *w, int tenths) {
+    int magnitude = tenths < 0 ? -tenths : tenths;
+    yg_jw_raw(w, "%s%d.%d", tenths < 0 ? "-" : "", magnitude / 10, magnitude % 10);
+}
+
 int yg_jw_finish(yg_jw_t *w) {
     return w->overflow ? -1 : (int)w->pos;
 }
