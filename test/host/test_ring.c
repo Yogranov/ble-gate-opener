@@ -79,6 +79,40 @@ static void sector_header_gives_the_first_trip(void) {
     CHECK_INT(trip, (records_per_sector() * 2 + 1) / 10);
 }
 
+static void append_trip(uint32_t trip, uint32_t index) {
+    yg_record_t r;
+    yg_rec_time_anchor(&r, trip, index, index);
+    yg_ring_append(&ring, &r);
+}
+
+static void finds_the_start_of_a_trip_that_spans_sectors(void) {
+    fresh();
+    uint32_t per = records_per_sector();
+    uint32_t index = 1;
+    for (uint32_t i = 0; i < per / 2; i++) append_trip(1, index++);
+    for (uint32_t i = 0; i < per * 2; i++) append_trip(2, index++);   /* Starts mid sector. */
+    for (uint32_t i = 0; i < 10; i++) append_trip(3, index++);
+
+    uint32_t sector, trip;
+    uint32_t age = yg_ring_age_for_trip(&ring, 2);
+    CHECK(yg_ring_sector_at(&ring, age, &sector, &trip));
+    CHECK_INT(trip, 1);
+    CHECK_INT(yg_ring_read_sector(&ring, sector, sector_buf), 0);
+    size_t pos = YG_RING_FIRST_RECORD;
+    yg_record_t r;
+    bool saw_start = false;
+    while (yg_record_next(sector_buf, YG_RING_SECTOR, &pos, &r)) {
+        if (r.trip == 2) saw_start = true;
+    }
+    CHECK(saw_start);
+
+    /* The newest trip began inside the newest sector, or the one before it. */
+    CHECK(yg_ring_sector_at(&ring, yg_ring_age_for_trip(&ring, 3), &sector, &trip));
+    CHECK(trip <= 2);
+    /* Older than anything held: start from the oldest. */
+    CHECK_INT(yg_ring_age_for_trip(&ring, 0), 2);
+}
+
 static void wrapping_drops_the_oldest_and_keeps_order(void) {
     fresh();
     uint32_t n = records_per_sector() * SECTORS * 5 + 17;
@@ -194,6 +228,7 @@ int main(void) {
     RUN(empty_ring_reads_nothing);
     RUN(reads_back_in_order_across_sectors);
     RUN(sector_header_gives_the_first_trip);
+    RUN(finds_the_start_of_a_trip_that_spans_sectors);
     RUN(wrapping_drops_the_oldest_and_keeps_order);
     RUN(reopening_continues_where_it_stopped);
     RUN(reopening_after_wrap_finds_the_newest);

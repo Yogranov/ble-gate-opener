@@ -1,3 +1,657 @@
 <!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
 <title>YogiGate</title>
-<p>Placeholder.</p>
+<style>
+:root {
+  --bg: #f4f5f7; --card: #fff; --text: #14171a; --muted: #5b646e; --line: #dfe3e8;
+  --accent: #0b63c5; --accent-text: #fff; --good: #18794e; --warn: #a65b00; --bad: #c62a2f;
+  --soft: #eef1f4; --r: 14px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0e1113; --card: #181c20; --text: #e9ebee; --muted: #9ba5af; --line: #2b3137;
+    --accent: #5ea8ff; --accent-text: #07121e; --good: #4ac27b; --warn: #eea33d; --bad: #ff7373;
+    --soft: #22272c;
+  }
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+header { position: sticky; top: 0; z-index: 2; background: var(--bg); border-bottom: 1px solid var(--line); padding: 10px 16px; padding-top: max(10px, env(safe-area-inset-top)); display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+header b { font-size: 18px; letter-spacing: .2px; }
+header span { color: var(--muted); font-size: 13px; text-align: right; }
+main { max-width: 640px; margin: 0 auto; padding: 12px 16px 96px; }
+nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 3; display: flex; background: var(--card); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); }
+nav button { flex: 1; min-height: 56px; padding: 0 2px; border: 0; background: none; color: var(--muted); font: inherit; font-size: 14px; border-top: 2px solid transparent; border-radius: 0; }
+nav button[aria-selected=true] { color: var(--accent); border-top-color: var(--accent); font-weight: 600; }
+section[hidden] { display: none; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 14px 16px; margin: 0 0 12px; }
+h2 { margin: 0 0 8px; font-size: 16px; }
+h3 { margin: 16px 0 4px; font-size: 13px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .5px; }
+p { margin: 0 0 10px; }
+.muted { color: var(--muted); font-size: 14px; }
+.state { font-size: 28px; font-weight: 700; line-height: 1.15; margin: 0; }
+.state.armed { color: var(--good); } .state.pressing { color: var(--accent); } .state.hold { color: var(--warn); } .state.unpaired { color: var(--muted); }
+.grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px 8px; margin: 2px 0 0; }
+.grid div { min-width: 0; }
+.grid dt { color: var(--muted); font-size: 12.5px; }
+.grid dd { margin: 0; font-size: 17px; font-weight: 600; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+dl { margin: 0; }
+canvas { display: block; width: 100%; height: 170px; margin-top: 8px; }
+button, .button { font: inherit; font-weight: 600; min-height: 44px; padding: 8px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--soft); color: var(--text); cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
+button:disabled { opacity: .5; cursor: default; }
+[hidden] { display: none !important; }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+button.danger { color: var(--bad); }
+button.wide, .button.wide { width: 100%; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.row > button { flex: 1 1 auto; }
+.banner { border-radius: 10px; padding: 10px 12px; margin: 0 0 12px; font-size: 14.5px; background: color-mix(in srgb, var(--warn) 14%, var(--card)); border: 1px solid color-mix(in srgb, var(--warn) 40%, var(--line)); }
+.banner.bad { background: color-mix(in srgb, var(--bad) 13%, var(--card)); border-color: color-mix(in srgb, var(--bad) 40%, var(--line)); }
+.field { padding: 11px 0; border-top: 1px solid var(--line); }
+.field:first-of-type { border-top: 0; }
+.field label { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-weight: 500; }
+.field small { display: block; color: var(--muted); font-size: 13px; margin-top: 3px; }
+input[type=number], input[type=text], input[type=password], select { font: inherit; min-height: 42px; width: 118px; padding: 6px 10px; border-radius: 9px; border: 1px solid var(--line); background: var(--bg); color: var(--text); }
+input.long { width: 190px; }
+input.full { width: 100%; font-variant-numeric: tabular-nums; }
+input[type=checkbox] { width: 22px; height: 22px; accent-color: var(--accent); flex: none; }
+input.changed, select.changed { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.setpoint { display: flex; gap: 10px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
+.setpoint label { font-weight: 400; gap: 6px; }
+.savebar { position: sticky; bottom: 68px; margin-top: 10px; }
+.trip { display: block; width: 100%; text-align: left; background: none; border: 0; border-top: 1px solid var(--line); border-radius: 0; padding: 12px 0; font-weight: 400; min-height: 0; }
+.trip:first-child { border-top: 0; }
+.trip b { font-size: 16px; }
+.trip .sub { color: var(--muted); font-size: 13.5px; display: block; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.chip { display: inline-block; padding: 1px 8px; border-radius: 99px; font-size: 12.5px; background: var(--soft); margin-left: 6px; font-weight: 600; }
+.chip.good { color: var(--good); } .chip.bad { color: var(--bad); }
+.detail { padding: 0 0 14px; }
+.ratings { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.ratings button { flex: 1 1 30%; font-size: 13.5px; font-weight: 500; padding: 6px 8px; min-height: 40px; }
+.ratings button.on { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+.cand { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); }
+.cand:first-child { border-top: 0; }
+.cand code { font-size: 14.5px; }
+.cand small { display: block; color: var(--muted); font-size: 12.5px; overflow-wrap: anywhere; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+#toast { position: fixed; left: 16px; right: 16px; bottom: 76px; z-index: 5; max-width: 560px; margin: 0 auto; padding: 11px 14px; border-radius: 10px; background: var(--text); color: var(--bg); font-size: 14.5px; opacity: 0; transition: opacity .15s; pointer-events: none; }
+#toast.show { opacity: 1; }
+#toast.bad { background: var(--bad); color: #fff; }
+progress { width: 100%; height: 10px; margin-top: 8px; }
+.legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); margin-top: 4px; }
+.legend i { display: inline-block; width: 10px; height: 3px; margin-right: 4px; vertical-align: middle; border-radius: 2px; }
+pre { margin: 8px 0 0; font-size: 12.5px; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--muted); }
+</style>
+</head>
+<body>
+<header><b>YogiGate</b><span id="sub">Connecting</span></header>
+<main>
+  <div id="lost" class="banner bad" hidden>Not connected to the unit. Check that this phone is on its hotspot. The hotspot turns off when the car moves or its time runs out.</div>
+  <div id="warn" class="banner" hidden></div>
+
+  <section id="status">
+    <div class="card">
+      <p id="state" class="state unpaired">&nbsp;</p>
+      <p id="stateText" class="muted" style="margin:2px 0 12px">&nbsp;</p>
+      <dl class="grid">
+        <div><dt>Signal</dt><dd id="mRssi">-</dd></div>
+        <div><dt>Adverts/s</dt><dd id="mAdv">-</dd></div>
+        <div><dt>Set point</dt><dd id="mSet">-</dd></div>
+        <div><dt>Car moved</dt><dd id="mMoved">-</dd></div>
+        <div><dt>Temperature</dt><dd id="mTemp">-</dd></div>
+        <div><dt>Hotspot left</dt><dd id="mHot">-</dd></div>
+      </dl>
+    </div>
+    <div class="card">
+      <h2>Live signal</h2>
+      <canvas id="live"></canvas>
+      <div class="legend"><span><i style="background:var(--accent)"></i>Beacon, last 2 minutes</span><span><i style="background:var(--warn)"></i>Set point</span></div>
+    </div>
+    <button id="press" class="primary wide">Press the remote</button>
+  </section>
+
+  <section id="beacon" hidden>
+    <div class="card">
+      <h2>Paired beacon</h2>
+      <p><code id="bMac">None</code></p>
+      <button id="bForget" class="danger" hidden>Forget this beacon</button>
+    </div>
+    <div class="card">
+      <h2>Pair by holding close</h2>
+      <p class="muted">Hold the beacon against the unit. It saves the strongest beacon once it is clearly closer than anything else.</p>
+      <div class="row"><button id="pAuto" class="primary">Start</button></div>
+      <p id="pAutoState" class="muted" style="margin:10px 0 0" hidden></p>
+    </div>
+    <div class="card">
+      <h2>Choose from nearby</h2>
+      <p class="muted">Lists iBeacons the unit can hear. Automatic presses wait until this is done.</p>
+      <div class="row"><button id="pScan">Scan</button></div>
+      <div id="pList" style="margin-top:8px"></div>
+    </div>
+    <div class="card">
+      <h2>Type a MAC address</h2>
+      <p class="muted">For a beacon already on the gate.</p>
+      <input id="pMac" class="full" type="text" placeholder="c5:b0:e6:53:59:02" autocapitalize="none" autocomplete="off" spellcheck="false">
+      <div class="row" style="margin-top:8px"><button id="pMacSave">Save</button></div>
+    </div>
+  </section>
+
+  <section id="settings" hidden>
+    <div id="setForm"></div>
+    <div class="savebar"><button id="setSave" class="primary wide" hidden>Save</button></div>
+  </section>
+
+  <section id="logs" hidden>
+    <div class="card">
+      <h2>Trips</h2>
+      <div id="tripList"><p class="muted">Loading</p></div>
+      <button id="tripMore" class="wide" hidden>Show older trips</button>
+    </div>
+    <div class="card">
+      <h2>All logs</h2>
+      <p id="logUse" class="muted">&nbsp;</p>
+      <a class="button wide" href="/api/logs/export" download="yogigate-logs.ndjson">Download everything</a>
+      <div class="row" style="margin-top:8px"><button id="logClear" class="danger">Erase all logs</button></div>
+    </div>
+  </section>
+
+  <section id="system" hidden>
+    <div class="card">
+      <h2>Test the hardware</h2>
+      <div class="row">
+        <button id="tLed">Flash the LED</button>
+        <button id="tBeep">Beep</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Firmware</h2>
+      <p id="sysInfo" class="muted">&nbsp;</p>
+      <input id="otaFile" type="file" accept=".bin" style="max-width:100%">
+      <div class="row" style="margin-top:8px"><button id="otaGo" class="primary" disabled>Upload</button></div>
+      <progress id="otaBar" max="100" value="0" hidden></progress>
+      <p id="otaState" class="muted" style="margin:8px 0 0" hidden></p>
+    </div>
+    <div class="card" id="debugCard" hidden>
+      <h2>Debug tools</h2>
+      <div class="row">
+        <button id="dMotion">Simulate motion</button>
+        <button id="dCapture">Capture now</button>
+      </div>
+      <pre id="dLive"></pre>
+    </div>
+    <div class="card">
+      <h2>Unit</h2>
+      <div class="row">
+        <button id="sReboot">Restart</button>
+        <button id="sReset" class="danger">Factory reset</button>
+      </div>
+    </div>
+  </section>
+</main>
+<div id="toast" role="status"></div>
+<nav role="tablist">
+  <button data-tab="status" role="tab">Status</button>
+  <button data-tab="beacon" role="tab">Beacon</button>
+  <button data-tab="settings" role="tab">Settings</button>
+  <button data-tab="logs" role="tab">Logs</button>
+  <button data-tab="system" role="tab">System</button>
+</nav>
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
+
+async function api(path, options) {
+  const r = await fetch(path, options);
+  const type = r.headers.get("content-type") || "";
+  const data = type.includes("application/json") ? await r.json() : await r.text();
+  if (!r.ok) throw new Error((data && data.error) || r.statusText);
+  return data;
+}
+const post = (path, body) => api(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || { go: 1 }) });
+
+let toastTimer;
+function toast(text, bad) {
+  const t = $("toast");
+  t.textContent = text;
+  t.className = "show" + (bad ? " bad" : "");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.className = ""; }, 3200);
+}
+const act = (fn, done) => async () => {
+  try { await fn(); if (done) toast(done); } catch (e) { toast(e.message, true); }
+};
+
+/* Tabs */
+let tab = "status";
+function showTab(name) {
+  if (!$(name)) name = "status";
+  tab = name;
+  document.querySelectorAll("main section").forEach(s => { s.hidden = s.id !== name; });
+  document.querySelectorAll("nav button").forEach(b => b.setAttribute("aria-selected", b.dataset.tab === name));
+  if (location.hash !== "#" + name) history.replaceState(null, "", "#" + name);
+  if (name === "settings") loadSettings();
+  if (name === "logs") loadTrips(true);
+  if (name === "system") loadSystem();
+  if (name === "status") drawLive();
+}
+document.querySelectorAll("nav button").forEach(b => b.addEventListener("click", () => showTab(b.dataset.tab)));
+
+/* Drawing */
+const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+function chart(canvas, opts) {
+  const ratio = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  if (!w || !h) return;
+  canvas.width = w * ratio; canvas.height = h * ratio;
+  const c = canvas.getContext("2d");
+  c.setTransform(ratio, 0, 0, ratio, 0, 0);
+  c.clearRect(0, 0, w, h);
+  const left = 34, right = 6, top = 6, bottom = 20;
+  const yMin = -100, yMax = -30;
+  const x = t => left + (t - opts.tMin) / Math.max(opts.tMax - opts.tMin, 1) * (w - left - right);
+  const y = v => top + (yMax - v) / (yMax - yMin) * (h - top - bottom);
+  c.font = "11px system-ui, sans-serif";
+  c.textBaseline = "middle";
+  for (let v = -100; v <= -30; v += 20) {
+    c.strokeStyle = css("--line"); c.lineWidth = 1;
+    c.beginPath(); c.moveTo(left, y(v)); c.lineTo(w - right, y(v)); c.stroke();
+    c.fillStyle = css("--muted"); c.textAlign = "right"; c.fillText(String(v), left - 5, y(v));
+  }
+  c.textAlign = "center"; c.textBaseline = "alphabetic";
+  c.fillStyle = css("--muted");
+  (opts.ticks || []).forEach(t => c.fillText(t.label, Math.min(Math.max(x(t.t), left + 8), w - 14), h - 4));
+  if (typeof opts.setPoint === "number") {
+    c.strokeStyle = css("--warn"); c.setLineDash([4, 4]); c.lineWidth = 1.5;
+    c.beginPath(); c.moveTo(left, y(opts.setPoint)); c.lineTo(w - right, y(opts.setPoint)); c.stroke();
+    c.setLineDash([]);
+  }
+  (opts.markers || []).forEach(m => {
+    c.strokeStyle = css(m.color); c.lineWidth = 1.5;
+    c.beginPath(); c.moveTo(x(m.t), top); c.lineTo(x(m.t), h - bottom); c.stroke();
+  });
+  c.strokeStyle = c.fillStyle = css("--accent"); c.lineWidth = 2;
+  c.beginPath();
+  let pen = false, last = null;
+  opts.points.forEach(p => {
+    if (p.v === null || (last !== null && p.t - last > opts.gap)) pen = false;
+    if (p.v === null) return;
+    if (pen) c.lineTo(x(p.t), y(p.v)); else c.moveTo(x(p.t), y(p.v));
+    pen = true; last = p.t;
+  });
+  c.stroke();
+  opts.points.forEach(p => { if (p.v !== null) { c.beginPath(); c.arc(x(p.t), y(p.v), 1.6, 0, 7); c.fill(); } });
+}
+
+/* Status */
+let st = null, livePoints = [], pollBusy = false;
+const STATE = { armed: "Armed", pressing: "Pressing", hold: "Pressed", unpaired: "No beacon" };
+const dbm = v => v === null || v === undefined ? "-" : v === "any" ? "Any" : v + " dBm";
+const clock = s => s >= 60 ? Math.floor(s / 60) + "m " + (s % 60) + "s" : s + "s";
+
+function stateText(s) {
+  if (s.pair_mode !== "idle") return "Pairing: automatic presses are paused.";
+  if (s.state === "unpaired") return "Pair one on the Beacon tab.";
+  if (s.state === "pressing") return "Pressing the remote now.";
+  if (s.state === "hold") return "Quiet until the beacon is gone or the car is parked.";
+  if (s.fallback) return "Presses when the signal reaches the fixed threshold.";
+  return s.moved_recently ? "Car moving. Presses when it hears the beacon." : "Waiting for the car to move.";
+}
+
+function render(s) {
+  st = s;
+  $("sub").textContent = "Trip " + s.trip + " · v" + s.fw;
+  const state = $("state");
+  state.textContent = STATE[s.state] || s.state;
+  state.className = "state " + s.state;
+  $("stateText").textContent = stateText(s);
+  const fresh = s.rssi !== null && s.rssi_age_ms < 5000;
+  $("mRssi").textContent = fresh ? s.rssi + " dBm" : "Not heard";
+  $("mAdv").textContent = s.adverts_per_s;
+  $("mSet").textContent = dbm(s.set_point);
+  $("mMoved").textContent = s.moved_recently ? "Yes" : "No";
+  $("mTemp").textContent = s.temp_c === null ? "-" : s.temp_c.toFixed(1) + " °C";
+  $("mHot").textContent = s.hotspot_on ? clock(s.hotspot_left_s) : "Off";
+  $("press").disabled = s.state === "pressing";
+
+  const warn = $("warn");
+  const reasons = { absent: "not found", gravity: "giving wrong readings", reads: "not answering", stuck: "frozen" };
+  if (s.sensor === "failed") {
+    warn.textContent = "Motion sensor " + (reasons[s.sensor_err] || "failed") + ". Using the fixed threshold of " + dbm(s.effective_set_point) + " instead.";
+    warn.hidden = false;
+  } else if (s.fallback) {
+    warn.textContent = "Motion sensor turned off. Using the fixed threshold of " + dbm(s.effective_set_point) + " instead.";
+    warn.hidden = false;
+  } else warn.hidden = true;
+
+  $("bMac").textContent = s.beacon || "None";
+  $("bForget").hidden = !s.paired;
+  $("debugCard").hidden = !s.debug;
+
+  const now = s.uptime_ms / 1000;
+  if (!livePoints.length || now > livePoints[livePoints.length - 1].t) {
+    livePoints.push({ t: now, v: s.rssi !== null && s.rssi_age_ms < 1500 ? s.rssi : null });
+  }
+  livePoints = livePoints.filter(p => now - p.t <= 120);
+  if (tab === "status") drawLive();
+  if (tab === "beacon") renderPairing(s);
+}
+
+function drawLive() {
+  if (!st) return;
+  const now = st.uptime_ms / 1000;
+  const set = typeof st.effective_set_point === "number" ? st.effective_set_point : undefined;
+  chart($("live"), { tMin: now - 120, tMax: now, points: livePoints, gap: 3, setPoint: set,
+    ticks: [{ t: now - 120, label: "2 min" }, { t: now - 60, label: "1 min" }, { t: now - 1, label: "now" }] });
+}
+
+async function poll() {
+  if (pollBusy || document.hidden) return;
+  pollBusy = true;
+  try {
+    render(await api("/api/status"));
+    $("lost").hidden = true;
+    if (tab === "beacon" && st.pair_mode === "list") renderCandidates(await api("/api/pair/candidates"));
+    if (tab === "system" && st.debug) $("dLive").textContent = JSON.stringify(await api("/api/debug/live"));
+  } catch (e) {
+    $("lost").hidden = false;
+    $("sub").textContent = "Not connected";
+  }
+  pollBusy = false;
+}
+$("press").addEventListener("click", act(() => post("/api/press"), "Pressing the remote"));
+
+/* Beacon */
+let lastPairMode = "idle";
+function renderPairing(s) {
+  const auto = s.pair_mode === "auto", list = s.pair_mode === "list";
+  $("pAuto").textContent = auto ? "Cancel" : "Start";
+  $("pScan").textContent = list ? "Stop" : "Scan";
+  $("pAutoState").hidden = !auto;
+  if (auto) $("pAutoState").textContent = "Listening. Hold the beacon against the unit.";
+  if (lastPairMode === "auto" && !auto) toast(s.paired ? "Pairing finished" : "No beacon saved", !s.paired);
+  if (!list) $("pList").textContent = "";
+  lastPairMode = s.pair_mode;
+}
+function renderCandidates(data) {
+  const list = $("pList");
+  list.textContent = "";
+  if (!data.candidates.length) { list.append(el("p", "muted", "Listening. Nothing heard yet.")); return; }
+  data.candidates.forEach(c => {
+    const row = el("div", "cand");
+    const info = el("div");
+    info.append(el("code", "", c.mac));
+    info.append(el("small", "", c.rssi + " dBm · major " + c.major + ", minor " + c.minor));
+    info.append(el("small", "", c.uuid));
+    const use = el("button", "", "Use");
+    use.addEventListener("click", act(() => post("/api/pair/select", { mac: c.mac, type: c.type }), "Beacon saved"));
+    row.append(info, use);
+    list.append(row);
+  });
+}
+$("bForget").addEventListener("click", () => { if (confirm("Forget this beacon? The gate will stop opening until you pair again.")) act(() => post("/api/pair/forget"), "Beacon forgotten")(); });
+$("pAuto").addEventListener("click", act(() => post(st && st.pair_mode === "auto" ? "/api/pair/cancel" : "/api/pair/auto")));
+$("pScan").addEventListener("click", act(() => post(st && st.pair_mode === "list" ? "/api/pair/cancel" : "/api/pair/scan")));
+$("pMacSave").addEventListener("click", act(async () => { await post("/api/pair/manual", { mac: $("pMac").value.trim() }); $("pMac").value = ""; }, "Beacon saved"));
+
+/* Settings: drawn from what the unit reports, so new settings appear by themselves. */
+const LABELS = {
+  set_point_dbm: ["Set point", "How strong the signal must be before a moving car presses. Any means as soon as it is heard."],
+  press_ms: ["Press time", "Milliseconds the remote button is held."],
+  moved_window_s: ["Moved within", "Seconds. A press needs motion within this time."],
+  gone_s: ["Re-arm when gone for", "Seconds without hearing the beacon."],
+  still_s: ["Re-arm when still for", "Seconds with no motion."],
+  fallback_dbm: ["Fixed threshold", "dBm. Used if the motion sensor fails or is turned off."],
+  motion_enabled: ["Use the motion sensor", ""],
+  motion_accel_mg: ["Acceleration", "mg. Sideways or forward force that counts as moving."],
+  motion_accel_ms: ["Acceleration must last", "Milliseconds."],
+  motion_yaw_deg: ["Turn", "Degrees of turning that count as moving."],
+  motion_yaw_window_ms: ["Turn must happen within", "Milliseconds."],
+  pair_min_dbm: ["Weakest signal to pair", "dBm."],
+  pair_margin_db: ["Stronger than others by", "dB."],
+  pair_hold_s: ["Hold for", "Seconds."],
+  pair_timeout_s: ["Give up after", "Seconds."],
+  hotspot_s: ["Hotspot time", "Seconds after start. 0 means only on request."],
+  hotspot_ssid: ["Hotspot name", "Applies the next time the hotspot starts."],
+  hotspot_password: ["New hotspot password", "Leave empty to keep the current one. Applies the next time the hotspot starts."],
+  wifi_tx_dbm: ["Wi-Fi power", "dBm. Low keeps the hotspot close to the car."],
+  led_enabled: ["LED", ""],
+  buzzer_enabled: ["Buzzer", "Only if one is fitted."],
+  buzzer_type: ["Buzzer type", ""],
+  debug: ["Debug mode", "Records raw captures and adds tools on the System tab. Keeps the hotspot on while moving."],
+};
+const GROUPS = [
+  ["When to press", ["set_point_dbm", "press_ms", "moved_window_s", "gone_s", "still_s", "fallback_dbm"]],
+  ["Motion", ["motion_enabled", "motion_accel_mg", "motion_accel_ms", "motion_yaw_deg", "motion_yaw_window_ms"]],
+  ["Hotspot", ["hotspot_s", "hotspot_ssid", "hotspot_password", "wifi_tx_dbm"]],
+  ["Lights and sound", ["led_enabled", "buzzer_enabled", "buzzer_type"]],
+  ["Pairing by holding close", ["pair_min_dbm", "pair_margin_db", "pair_hold_s", "pair_timeout_s"]],
+  ["Debug", ["debug"]],
+];
+let original = {}, inputs = {};
+
+function readInput(s) {
+  const i = inputs[s.key];
+  if (s.type === "bool") return i.checked;
+  if (s.type === "dbm_or_any") return i.any.checked ? "any" : Number(i.num.value);
+  if (s.type === "int") return Number(i.value);
+  return i.value;
+}
+function changedSettings() {
+  const out = {};
+  Object.values(original).forEach(s => {
+    const v = readInput(s);
+    if (s.type === "password" ? v !== "" : v !== s.value) out[s.key] = v;
+  });
+  return out;
+}
+function updateSave() {
+  const n = Object.keys(changedSettings()).length;
+  $("setSave").hidden = n === 0;
+  $("setSave").textContent = "Save " + n + (n === 1 ? " change" : " changes");
+}
+function field(s) {
+  const f = el("div", "field");
+  const [title, help] = LABELS[s.key] || [s.key, ""];
+  const label = el("label");
+  label.append(el("span", "", title));
+  let input;
+  if (s.type === "bool") {
+    input = el("input"); input.type = "checkbox"; input.checked = s.value;
+    label.append(input); inputs[s.key] = input;
+  } else if (s.type === "enum") {
+    input = el("select");
+    s.options.forEach(o => { const opt = el("option", "", o); opt.value = o; input.append(opt); });
+    input.value = s.value; label.append(input); inputs[s.key] = input;
+  } else if (s.type === "dbm_or_any") {
+    f.append(label);
+    const box = el("div", "setpoint");
+    const anyLabel = el("label");
+    const any = el("input"); any.type = "checkbox"; any.checked = s.value === "any";
+    anyLabel.append(any, el("span", "", "Any"));
+    const num = el("input"); num.type = "number"; num.min = s.min; num.max = s.max; num.inputMode = "numeric";
+    num.value = s.value === "any" ? "" : s.value; num.disabled = any.checked;
+    any.addEventListener("change", () => { num.disabled = any.checked; if (!any.checked && num.value === "") num.value = -85; updateSave(); });
+    num.addEventListener("input", updateSave);
+    const here = el("button", "", "Set here");
+    here.addEventListener("click", act(async () => { await post("/api/setpoint", { here: true }); await loadSettings(); }, "Set point saved"));
+    box.append(anyLabel, num, here);
+    inputs[s.key] = { any, num };
+    f.append(box);
+    if (help) f.append(el("small", "", help));
+    return f;
+  } else {
+    input = el("input");
+    input.type = s.type === "int" ? "number" : s.type === "password" ? "password" : "text";
+    if (s.type === "int") { input.min = s.min; input.max = s.max; input.inputMode = "numeric"; }
+    else { input.maxLength = s.max; input.className = "long"; input.autocomplete = "off"; }
+    input.value = s.value === undefined ? "" : s.value;
+    label.append(input); inputs[s.key] = input;
+  }
+  input.addEventListener("input", updateSave);
+  f.append(label);
+  if (help) f.append(el("small", "", help));
+  return f;
+}
+async function loadSettings() {
+  const data = await api("/api/settings");
+  original = {}; inputs = {};
+  data.settings.forEach(s => { original[s.key] = s; });
+  const form = $("setForm");
+  form.textContent = "";
+  const placed = new Set();
+  GROUPS.forEach(([title, keys]) => {
+    const card = el("div", "card");
+    card.append(el("h2", "", title));
+    keys.filter(k => original[k]).forEach(k => { card.append(field(original[k])); placed.add(k); });
+    form.append(card);
+  });
+  const rest = data.settings.filter(s => !placed.has(s.key));
+  if (rest.length) {
+    const card = el("div", "card");
+    card.append(el("h2", "", "Other"));
+    rest.forEach(s => card.append(field(s)));
+    form.append(card);
+  }
+  updateSave();
+}
+$("setSave").addEventListener("click", act(async () => { await post("/api/settings", changedSettings()); await loadSettings(); }, "Saved"));
+
+/* Logs */
+const RATINGS = [["good", "Good"], ["too_early", "Too early"], ["too_late", "Too late"], ["did_not_open", "Didn't open"], ["no_reason", "Opened for no reason"]];
+let oldestTrip = null;
+
+function tripSummary(t) {
+  const parts = [clock(Math.round(t.duration_ms / 1000))];
+  parts.push(t.presses === 1 ? "1 press" : t.presses + " presses");
+  if (t.warning_ms !== null && t.presses) parts.push((t.warning_ms / 1000).toFixed(1) + " s warning");
+  if (t.peak) parts.push("peak " + t.peak.rssi);
+  if (t.temp_c !== null) parts.push(t.temp_c.toFixed(0) + " °C");
+  return parts.join(" · ");
+}
+function tripRow(t) {
+  const wrap = el("div");
+  const row = el("button", "trip");
+  const title = el("b", "", "Trip " + t.trip);
+  row.append(title);
+  if (t.rating) {
+    const label = (RATINGS.find(r => r[0] === t.rating) || [0, t.rating])[1];
+    row.append(el("span", "chip " + (t.rating === "good" ? "good" : "bad"), label));
+  }
+  if (t.errors) row.append(el("span", "chip bad", t.errors + (t.errors === 1 ? " error" : " errors")));
+  row.append(el("span", "sub", tripSummary(t)));
+  const detail = el("div", "detail");
+  detail.hidden = true;
+  row.addEventListener("click", () => {
+    detail.hidden = !detail.hidden;
+    if (!detail.hidden && !detail.firstChild) {
+      loadTripDetail(t, detail, row).catch(e => { detail.textContent = ""; toast(e.message, true); });
+    }
+  });
+  wrap.append(row, detail);
+  return wrap;
+}
+async function loadTripDetail(t, box, row) {
+  box.append(el("p", "muted", "Loading"));
+  const text = await api("/api/trips/" + t.trip);
+  const records = String(text).split("\n").filter(Boolean).map(l => { try { return JSON.parse(l); } catch (e) { return null; } }).filter(Boolean);
+  const points = [], markers = [];
+  let end = 0, period = 1;
+  records.forEach(r => {
+    if (r.k === "trace") {
+      period = r.period;
+      r.s.forEach((s, i) => { const at = (r.t + i * r.period * 1000) / 1000; points.push({ t: at, v: s[1] ? s[0] : null }); end = Math.max(end, at); });
+    }
+    if (r.k === "motion") markers.push({ t: r.t / 1000, color: "--warn" });
+    if (r.k === "press") markers.push({ t: r.t / 1000, color: "--good" });
+    end = Math.max(end, r.t / 1000);
+  });
+  points.sort((a, b) => a.t - b.t);
+  box.textContent = "";
+  const canvas = el("canvas");
+  box.append(canvas);
+  const legend = el("div", "legend");
+  [["--accent", "Signal"], ["--warn", "Motion"], ["--good", "Press"]].forEach(([color, name]) => {
+    const item = el("span");
+    const swatch = el("i"); swatch.style.background = "var(" + color + ")";
+    item.append(swatch, document.createTextNode(name));
+    legend.append(item);
+  });
+  box.append(legend);
+  chart(canvas, { tMin: 0, tMax: Math.max(end, 10), points, markers, gap: 4 * Math.max(period, 1),
+    ticks: [{ t: 0, label: "0 s" }, { t: end / 2, label: Math.round(end / 2) + " s" }, { t: end, label: Math.round(end) + " s" }] });
+  const rate = el("div", "ratings");
+  RATINGS.forEach(([key, label]) => {
+    const b = el("button", t.rating === key ? "on" : "", label);
+    b.addEventListener("click", act(async () => {
+      await post("/api/trips/" + t.trip + "/rating", { rating: key });
+      t.rating = key;
+      rate.querySelectorAll("button").forEach(x => x.classList.remove("on"));
+      b.classList.add("on");
+      row.querySelectorAll(".chip").forEach(c => { if (!c.textContent.includes("error")) c.remove(); });
+      const chip = el("span", "chip " + (key === "good" ? "good" : "bad"), label);
+      row.insertBefore(chip, row.querySelector(".sub"));
+    }, "Rating saved"));
+    rate.append(b);
+  });
+  box.append(rate);
+}
+async function loadTrips(reset) {
+  const list = $("tripList");
+  const query = reset ? "?limit=10" : "?limit=10&before=" + oldestTrip;
+  const data = await api("/api/trips" + query);
+  if (reset) list.textContent = "";
+  if (reset && !data.trips.length) list.append(el("p", "muted", "No trips yet."));
+  data.trips.forEach(t => { list.append(tripRow(t)); oldestTrip = t.trip; });
+  $("tripMore").hidden = data.trips.length < 10;
+  const sys = await api("/api/system");
+  const percent = (used, total) => total ? Math.round(used * 100 / total) : 0;
+  $("logUse").textContent = "Trip log " + percent(sys.log_used, sys.log_total) + "% full, debug captures " + percent(sys.capture_used, sys.capture_total) + "% full. The oldest data is overwritten.";
+}
+$("tripMore").addEventListener("click", act(() => loadTrips(false)));
+$("logClear").addEventListener("click", () => { if (confirm("Erase all logs? This cannot be undone.")) act(async () => { await post("/api/logs/clear"); await loadTrips(true); }, "Logs erased")(); });
+
+/* System */
+async function loadSystem() {
+  const [sys, status] = await Promise.all([api("/api/system"), api("/api/status")]);
+  $("sysInfo").textContent = "Running v" + status.fw + " from slot " + sys.partition + ". " + Math.round(sys.heap_free / 1024) + " kB memory free.";
+}
+$("tLed").addEventListener("click", act(() => post("/api/test/led"), "LED should flash green"));
+$("tBeep").addEventListener("click", act(() => post("/api/test/beep"), "Beeped, if a buzzer is fitted"));
+$("dMotion").addEventListener("click", act(() => post("/api/debug/simulate-motion"), "Motion simulated"));
+$("dCapture").addEventListener("click", act(() => post("/api/debug/capture-now"), "Capturing for 30 seconds"));
+$("sReboot").addEventListener("click", () => { if (confirm("Restart the unit? The hotspot goes away for a moment.")) act(() => post("/api/reboot"), "Restarting")(); });
+$("sReset").addEventListener("click", () => { if (confirm("Erase all settings, the beacon and all logs? The hotspot gets a new password, which you can only read over USB.")) act(() => post("/api/factory-reset"), "Erased. Restarting")(); });
+$("otaFile").addEventListener("change", () => { $("otaGo").disabled = !$("otaFile").files.length; });
+$("otaGo").addEventListener("click", () => {
+  const file = $("otaFile").files[0];
+  if (!file) return;
+  const bar = $("otaBar"), state = $("otaState");
+  bar.hidden = false; state.hidden = false; $("otaGo").disabled = true;
+  state.textContent = "Uploading. Keep the power on.";
+  const x = new XMLHttpRequest();
+  x.open("POST", "/api/ota");
+  x.upload.onprogress = e => { if (e.lengthComputable) bar.value = e.loaded * 100 / e.total; };
+  x.onload = () => {
+    if (x.status === 200) state.textContent = "Uploaded. The unit is restarting. Keep the power on for 30 seconds while it checks the new firmware, then reconnect.";
+    else state.textContent = "Upload failed: " + x.responseText;
+    $("otaGo").disabled = false;
+  };
+  x.onerror = () => { state.textContent = "Upload failed: lost the connection."; $("otaGo").disabled = false; };
+  x.send(file);
+});
+
+/* Start */
+window.addEventListener("resize", () => { if (tab === "status") drawLive(); });
+post("/api/time", { epoch: Math.floor(Date.now() / 1000) }).catch(() => {});
+showTab(location.hash.slice(1) || "status");
+poll();
+setInterval(poll, 500);
+</script>
+</body>
+</html>

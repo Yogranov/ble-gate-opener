@@ -147,6 +147,18 @@ bool yg_ring_sector_at(const yg_ring_t *r, uint32_t age, uint32_t *sector, uint3
     return true;
 }
 
+uint32_t yg_ring_age_for_trip(const yg_ring_t *r, uint32_t trip) {
+    uint32_t age = 0;
+    uint32_t sector, first_trip;
+    if (!yg_ring_sector_at(r, 0, &sector, &first_trip)) {
+        return 0;
+    }
+    while (first_trip >= trip && yg_ring_sector_at(r, age + 1, &sector, &first_trip)) {
+        age++;
+    }
+    return age;
+}
+
 int yg_ring_read_sector(const yg_ring_t *r, uint32_t sector, uint8_t *buf) {
     return r->f.read(r->f.ctx, sector_offset(sector), buf, YG_RING_SECTOR);
 }

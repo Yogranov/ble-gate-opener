@@ -41,6 +41,7 @@ typedef struct
     uint32_t started;
     uint32_t emit_imu;
     uint32_t first_imu;
+    uint16_t pre_samples;
     uint32_t emit_adv;
     uint32_t adverts_written;
     uint32_t sequence;

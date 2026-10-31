@@ -141,6 +141,19 @@ static esp_err_t get_status(httpd_req_t *req) {
     return send_json(req, s_json);
 }
 
+static esp_err_t get_system(httpd_req_t *req) {
+    uint32_t trip_used, trip_total, cap_used, cap_total;
+    yg_log_usage(&trip_used, &trip_total, &cap_used, &cap_total);
+    const esp_partition_t *running = esp_ota_get_running_partition();
+    snprintf(s_json, JSON_BUF_SIZE,
+             "{\"log_used\":%u,\"log_total\":%u,\"capture_used\":%u,\"capture_total\":%u,\"sector_bytes\":4096,"
+             "\"heap_free\":%u,\"partition\":\"%s\",\"remote_pin_high\":%s}",
+             (unsigned)trip_used, (unsigned)trip_total, (unsigned)cap_used, (unsigned)cap_total,
+             (unsigned)esp_get_free_heap_size(), running != NULL ? running->label : "unknown",
+             yg_io_remote_level() ? "true" : "false");
+    return send_json(req, s_json);
+}
+
 static void fn_settings(yg_engine_t *e, uint32_t now, void *arg) {
     (void)now;
     yg_settings_to_json(e->s, arg, JSON_BUF_SIZE, false);
@@ -576,6 +589,7 @@ static esp_err_t get_live(httpd_req_t *req) {
 static const httpd_uri_t ROUTES[] = {
     { .uri = "/", .method = HTTP_GET, .handler = get_page },
     { .uri = "/api/status", .method = HTTP_GET, .handler = get_status },
+    { .uri = "/api/system", .method = HTTP_GET, .handler = get_system },
     { .uri = "/api/settings", .method = HTTP_GET, .handler = get_settings },
     { .uri = "/api/settings", .method = HTTP_POST, .handler = post_settings },
     { .uri = "/api/setpoint", .method = HTTP_POST, .handler = post_setpoint },

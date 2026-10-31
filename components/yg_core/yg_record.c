@@ -11,6 +11,14 @@
 #define HEADER_SIZE   12
 #define CRC_SIZE      2
 
+static size_t bounded_len(const char *text, size_t max) {
+    size_t n = 0;
+    while (n < max && text[n] != 0) {
+        n++;
+    }
+    return n;
+}
+
 uint16_t yg_get_u16(const uint8_t *p) {
     return (uint16_t)(p[0] | (p[1] << 8));
 }
@@ -162,8 +170,8 @@ void yg_rec_pair(yg_record_t *r, uint32_t trip, uint32_t now, uint8_t event, con
 
 void yg_rec_setting(yg_record_t *r, uint32_t trip, uint32_t now, const char *key, const char *value) {
     begin(r, YG_REC_SETTING, trip, now, 0);
-    size_t key_len = strnlen(key, 63);
-    size_t value_len = strnlen(value, YG_RECORD_MAX_PAYLOAD - key_len - 2);
+    size_t key_len = bounded_len(key, 63);
+    size_t value_len = bounded_len(value, YG_RECORD_MAX_PAYLOAD - key_len - 2);
     memcpy(r->payload, key, key_len);
     memcpy(r->payload + key_len + 1, value, value_len);
     r->len = (uint8_t)(key_len + value_len + 2);
@@ -204,10 +212,11 @@ void yg_rec_env(yg_record_t *r, uint32_t trip, uint32_t now, const yg_env_t *env
     memcpy(r->payload + 5, env->per_channel, 13);
 }
 
-void yg_rec_cap_start(yg_record_t *r, uint32_t trip, uint32_t now, uint32_t id, uint8_t cause) {
-    begin(r, YG_REC_CAP_START, trip, now, 5);
+void yg_rec_cap_start(yg_record_t *r, uint32_t trip, uint32_t now, uint32_t id, uint8_t cause, uint16_t pre_samples) {
+    begin(r, YG_REC_CAP_START, trip, now, 7);
     put_u32(r->payload, id);
     r->payload[4] = cause;
+    put_u16(r->payload + 5, pre_samples);
 }
 
 void yg_rec_cap_imu(yg_record_t *r, uint32_t trip, uint32_t now, uint32_t id, uint32_t first_index,
@@ -407,7 +416,7 @@ static void json_body(yg_jw_t *w, const yg_record_t *r) {
         break;
     case YG_REC_SETTING: {
         const char *key = (const char *)p;
-        size_t key_len = strnlen(key, r->len);
+        size_t key_len = bounded_len(key, r->len);
         yg_jw_raw(w, "\"k\":\"setting\",\"key\":");
         yg_jw_string(w, key);
         yg_jw_raw(w, ",\"value\":");
@@ -447,7 +456,7 @@ static void json_body(yg_jw_t *w, const yg_record_t *r) {
         yg_jw_raw(w, "]");
         break;
     case YG_REC_CAP_START:
-        yg_jw_raw(w, "\"k\":\"cap_start\",\"cap\":%u,\"cause\":\"%s\"", (unsigned)yg_get_u32(p), cap_cause_name(p[4]));
+        yg_jw_raw(w, "\"k\":\"cap_start\",\"cap\":%u,\"cause\":\"%s\",\"pre\":%u", (unsigned)yg_get_u32(p), cap_cause_name(p[4]), yg_get_u16(p + 5));
         break;
     case YG_REC_CAP_IMU:
         yg_jw_raw(w, "\"k\":\"cap_imu\",\"cap\":%u,\"first\":%u,\"n\":%u,\"b64\":\"", (unsigned)yg_get_u32(p), (unsigned)yg_get_u32(p + 4), p[8]);

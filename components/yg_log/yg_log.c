@@ -157,18 +157,9 @@ int yg_log_export(bool captures, yg_log_line_cb_t cb, void *ctx) {
     return 0;
 }
 
-/* Finds the newest sector that started at or before `trip`, or the oldest one. */
 static uint32_t age_for_trip(uint32_t trip) {
-    uint32_t age = 0;
-    uint32_t sector, first_trip;
     xSemaphoreTake(s_lock, portMAX_DELAY);
-    while (yg_ring_sector_at(&s_trips, age, &sector, &first_trip) && first_trip > trip) {
-        uint32_t next_sector, next_first;
-        if (!yg_ring_sector_at(&s_trips, age + 1, &next_sector, &next_first)) {
-            break;
-        }
-        age++;
-    }
+    uint32_t age = yg_ring_age_for_trip(&s_trips, trip);
     xSemaphoreGive(s_lock);
     return age;
 }

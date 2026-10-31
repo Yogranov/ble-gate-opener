@@ -161,11 +161,12 @@ static void trace_record(void) {
 }
 
 static void capture_records(void) {
-    yg_rec_cap_start(&r, 1, 2, 77, YG_CAP_CAUSE_NEAR_MISS);
+    yg_rec_cap_start(&r, 1, 2, 77, YG_CAP_CAUSE_NEAR_MISS, 431);
     round_trip();
     CHECK_HAS(json, "\"k\":\"cap_start\"");
     CHECK_HAS(json, "\"cap\":77");
     CHECK_HAS(json, "\"cause\":\"near_miss\"");
+    CHECK_HAS(json, "\"pre\":431");
 
     int16_t raw_imu[6 * YG_CAP_IMU_PER_RECORD];
     for (int i = 0; i < 6 * YG_CAP_IMU_PER_RECORD; i++) raw_imu[i] = (int16_t)(i * 300 - 15000);

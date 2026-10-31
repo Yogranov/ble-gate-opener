@@ -2,6 +2,8 @@
 
 #include <string.h>
 
+#define ADV_FLUSH_AT 8
+
 void yg_capture_init(yg_capture_t *c) {
     memset(c, 0, sizeof(*c));
 }
@@ -39,6 +41,7 @@ bool yg_capture_trigger(yg_capture_t *c, uint32_t now, uint32_t trip, uint8_t ca
     c->cause = cause;
     c->started = now;
     c->first_imu = c->imu_count > YG_CAP_PRE_SAMPLES ? c->imu_count - YG_CAP_PRE_SAMPLES : 0;
+    c->pre_samples = (uint16_t)(c->imu_count - c->first_imu);
     c->emit_imu = c->first_imu;
     c->emit_adv = c->adv_count > YG_CAP_ADV_RING ? c->adv_count - YG_CAP_ADV_RING : 0;
     c->adverts_written = 0;
@@ -99,10 +102,14 @@ bool yg_capture_next(yg_capture_t *c, uint32_t now, uint32_t trip, yg_record_t *
     bool done = now - c->started >= YG_CAP_POST_MS;
     switch (c->phase) {
     case YG_CAP_START_PENDING:
-        yg_rec_cap_start(out, trip, c->started, c->id, c->cause);
+        yg_rec_cap_start(out, trip, c->started, c->id, c->cause, c->pre_samples);
         c->phase = YG_CAP_IMU;
         return true;
     case YG_CAP_IMU:
+        /* Power can go at any moment, so adverts do not wait for the end. */
+        if (c->adv_count - c->emit_adv >= ADV_FLUSH_AT && next_adv(c, now, trip, out)) {
+            return true;
+        }
         if (next_imu(c, now, trip, out, done)) {
             return true;
         }

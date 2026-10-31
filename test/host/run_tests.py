@@ -23,11 +23,24 @@ def exe_name(name):
     return os.path.join(OUT, name + (".exe" if os.name == "nt" else ""))
 
 
+def find_compiler():
+    """A compiler that builds for this PC. The ESP-IDF environment puts a clang that
+    targets the chip first on the path, so check what each candidate builds for."""
+    candidates = [os.environ.get("CC"), "C:/Program Files/LLVM/bin/clang.exe", "clang", "gcc"]
+    for candidate in candidates:
+        path = candidate and shutil.which(candidate)
+        if not path:
+            continue
+        target = subprocess.run([path, "-dumpmachine"], capture_output=True, text=True).stdout
+        if target and not any(word in target for word in ("riscv", "xtensa", "esp")):
+            return path, target
+    sys.exit("No C compiler for this PC found. Install clang or gcc, or set CC.")
+
+
 def build(name, sources):
-    compiler = os.environ.get("CC") or shutil.which("clang") or shutil.which("gcc")
-    if not compiler:
-        sys.exit("No C compiler found. Install clang or gcc, or set CC.")
-    libs = ["-lm"] if os.name != "nt" else []
+    compiler, target = find_compiler()
+    # A compiler targeting MSVC has its maths in the C library, and rejects -lm.
+    libs = [] if "msvc" in target else ["-lm"]
     cmd = [compiler, *FLAGS, *sources, "-o", exe_name(name), *libs]
     result = subprocess.run(cmd)
     return result.returncode == 0

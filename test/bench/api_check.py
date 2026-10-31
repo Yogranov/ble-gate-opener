@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Checks every API endpoint on a real unit over USB, using its loopback console
-command. Run with the ESP-IDF Python, which has pyserial. The unit keeps its
-settings: this restores what it changes, but it does leave rating records.
+command. Run with the ESP-IDF Python, which has pyserial. It restores the settings
+it changes, but it forgets the paired beacon and leaves records in the log.
 
     python test/bench/api_check.py [--port COM3]
 """
@@ -44,9 +44,13 @@ def main():
     # Restarts the hotspot and its timer, because the web server runs with it.
     yg_serial.run_command(s, "wifi", 5)
     time.sleep(2)
+    api(s, "POST", "/api/pair/forget", {"x": 1})
 
     r = api(s, "GET", "/api/status")
     check("status", "200 OK" in r and '"fw"' in r and '"trip"' in r, r)
+
+    r = api(s, "GET", "/api/system")
+    check("system", '"log_total":512' in r and '"partition":"' in r and '"remote_pin_high":false' in r, r)
 
     r = api(s, "GET", "/api/settings")
     check("settings list", '"key":"press_ms"' in r and '"min":200' in r, r)

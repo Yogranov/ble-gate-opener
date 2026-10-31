@@ -99,6 +99,38 @@ static void falling_behind_skips_overwritten_samples(void) {
     CHECK(samples > 0);
 }
 
+static void adverts_are_saved_as_they_arrive(void) {
+    /* Parking and switching off right after arriving must not lose them. */
+    setup();
+    CHECK(yg_capture_trigger(c, 1000, 5, YG_CAP_CAUSE_PRESS));
+    int adverts = 0, ends = 0;
+    drain(1000, 5, NULL, NULL, &adverts, &ends);
+    for (int i = 0; i < 12; i++) yg_capture_on_advert(c, 2000 + (uint32_t)i * 100, -80);
+    drain(3500, 5, NULL, NULL, &adverts, &ends);
+    CHECK_INT(adverts, 12);
+    CHECK_INT(ends, 0);
+    for (int i = 0; i < 3; i++) yg_capture_on_advert(c, 4000 + (uint32_t)i * 100, -80);
+    drain(1000 + YG_CAP_POST_MS + 100, 5, NULL, NULL, &adverts, &ends);
+    CHECK_INT(adverts, 15);
+    CHECK_INT(ends, 1);
+}
+
+static void start_record_says_how_much_history_it_holds(void) {
+    setup();
+    for (int i = 0; i < 100; i++) yg_capture_on_imu(c, &quiet);
+    yg_record_t r;
+    CHECK(yg_capture_trigger(c, 2000, 5, YG_CAP_CAUSE_PRESS));
+    CHECK(yg_capture_next(c, 2000, 5, &r));
+    CHECK_INT(r.type, YG_REC_CAP_START);
+    CHECK_INT(yg_get_u16(r.payload + 5), 100);
+
+    setup();
+    for (int i = 0; i < 900; i++) yg_capture_on_imu(c, &quiet);
+    CHECK(yg_capture_trigger(c, 2000, 5, YG_CAP_CAUSE_PRESS));
+    CHECK(yg_capture_next(c, 2000, 5, &r));
+    CHECK_INT(yg_get_u16(r.payload + 5), YG_CAP_PRE_SAMPLES);
+}
+
 static void raw_samples_use_the_documented_scale(void) {
     setup();
     yg_imu_sample_t s = { 0.5f, -0.25f, 1.0f, 10.0f, -20.0f, 0 };
@@ -123,6 +155,8 @@ int main(void) {
     RUN(second_trigger_during_a_capture_is_ignored);
     RUN(old_adverts_before_the_window_are_left_out);
     RUN(falling_behind_skips_overwritten_samples);
+    RUN(adverts_are_saved_as_they_arrive);
+    RUN(start_record_says_how_much_history_it_holds);
     RUN(raw_samples_use_the_documented_scale);
     return TEST_RESULT();
 }

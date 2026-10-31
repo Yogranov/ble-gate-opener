@@ -37,6 +37,10 @@ int yg_ring_clear(yg_ring_t *r);
  * false once past the oldest. first_trip is the trip the sector started in. */
 bool yg_ring_sector_at(const yg_ring_t *r, uint32_t age, uint32_t *sector, uint32_t *first_trip);
 
+/* The newest age that can hold the start of `trip`. A trip can span sectors, so
+ * this looks for a sector that began before it, or else the oldest sector. */
+uint32_t yg_ring_age_for_trip(const yg_ring_t *r, uint32_t trip);
+
 /* Reads a whole sector into `buf`, which must hold YG_RING_SECTOR bytes. */
 int yg_ring_read_sector(const yg_ring_t *r, uint32_t sector, uint8_t *buf);
 

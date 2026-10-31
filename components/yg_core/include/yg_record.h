@@ -129,7 +129,7 @@ void yg_rec_temp(yg_record_t *r, uint32_t trip, uint32_t now, float celsius);
 void yg_rec_rating(yg_record_t *r, uint32_t trip, uint32_t now, uint32_t rated_trip, uint8_t rating);
 void yg_rec_time_anchor(yg_record_t *r, uint32_t trip, uint32_t now, uint32_t epoch_s);
 void yg_rec_env(yg_record_t *r, uint32_t trip, uint32_t now, const yg_env_t *env);
-void yg_rec_cap_start(yg_record_t *r, uint32_t trip, uint32_t now, uint32_t id, uint8_t cause);
+void yg_rec_cap_start(yg_record_t *r, uint32_t trip, uint32_t now, uint32_t id, uint8_t cause, uint16_t pre_samples);
 void yg_rec_cap_imu(yg_record_t *r, uint32_t trip, uint32_t now, uint32_t id, uint32_t first_index,
                     uint8_t count, const int16_t *raw);
 void yg_rec_cap_adv(yg_record_t *r, uint32_t trip, uint32_t now, uint32_t id, uint8_t count,

@@ -272,7 +272,8 @@ JSON over HTTP. The page and the PC tools use the same API. Anything that change
 | `POST /api/time` | The browser's time, stored as a log anchor |
 | `POST /api/ota` | Upload firmware as a raw binary body |
 | `POST /api/reboot`, `/api/factory-reset` | System |
-| `POST /api/debug/simulate-motion`, `GET /api/debug/live` | Debug flag only |
+| `GET /api/system` | Log usage, free memory, running firmware slot, remote pin level |
+| `POST /api/debug/simulate-motion`, `/api/debug/capture-now`, `GET /api/debug/live` | Debug flag only |
 
 Unfitted hardware must never make an endpoint fail. A beep with no buzzer simply does nothing.
 
