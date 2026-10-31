@@ -150,7 +150,8 @@ static void io_task(void *arg) {
         vTaskDelayUntil(&wake, pdMS_TO_TICKS(TASK_PERIOD_MS));
         uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
 
-        bool pressed = gpio_get_level(CONFIG_YG_PIN_BUTTON) == 0;
+        bool pressed = gpio_get_level(CONFIG_YG_PIN_BUTTON) == 0 ||
+                       gpio_get_level(CONFIG_YG_PIN_BUTTON_EXT) == 0;
         yg_gesture_t gesture = yg_gesture_update(&s_gesture, now, pressed);
         if (gesture != YG_GESTURE_NONE && s_on_gesture != NULL) {
             s_on_gesture(gesture);
@@ -191,7 +192,7 @@ void yg_io_start(yg_io_gesture_cb_t on_gesture) {
     yg_gesture_init(&s_gesture);
 
     const gpio_config_t button = {
-        .pin_bit_mask = 1ULL << CONFIG_YG_PIN_BUTTON,
+        .pin_bit_mask = (1ULL << CONFIG_YG_PIN_BUTTON) | (1ULL << CONFIG_YG_PIN_BUTTON_EXT),
         .mode = GPIO_MODE_INPUT,
         .pull_up_en = GPIO_PULLUP_ENABLE,
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
