@@ -1,5 +1,9 @@
-.pio
-.vscode
-include
-lib
-test
+build/
+build-host/
+sdkconfig
+sdkconfig.old
+managed_components/
+logs/
+.vscode/
+.pio/
+.cache/

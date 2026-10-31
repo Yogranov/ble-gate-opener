@@ -118,10 +118,10 @@ States are `UNPAIRED`, `ARMED`, `PRESSING` and `HOLD`. Pairing suspends automati
 - `UNPAIRED`, `ARMED` or `HOLD` to `PRESSING`: a manual press from the button or page. Reason `button` or `web`.
 - `PRESSING` to `HOLD`: after `press_ms`. Press requests during `PRESSING` are ignored. If no beacon is paired, it returns to `UNPAIRED` instead.
 - `HOLD` to `ARMED`, when either of these is true:
-  - `now - last_advert >= gone_s`
+  - `now - max(last_advert, press_time) >= gone_s`
   - `now - max(last_motion, press_time) >= still_s`
 
-Using `max(last_motion, press_time)` guarantees at least `still_s` of quiet after every press. Otherwise a car that stopped before the press could re-arm too soon and press again while driving through the gate.
+Both timers count from no earlier than the press. Otherwise a car that stopped before the press could re-arm too soon and press again while driving through the gate. The same goes for a manual press made when the beacon had not been heard.
 
 The state is not saved. After a power cut the unit starts in `ARMED`, or `UNPAIRED` if no beacon is stored, with `moved_recently` false.
 
