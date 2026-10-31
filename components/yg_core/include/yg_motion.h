@@ -47,13 +47,15 @@ typedef struct
     float avg_sum[6];
     float avg_last[6];
     bool avg_valid;
+    bool avg_steady;
 
     float gravity[3];
     float bias[3];
     float horizontal[3];
 
+    float prev_mean[6];
     uint16_t rest_windows;
-    float rest_gravity[3];
+    float rest_mean[6];
 
     bool above;
     uint32_t above_since;

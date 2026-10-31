@@ -112,7 +112,7 @@ By default the set point is "any", so a single advert from the paired beacon is 
 
 States are `UNPAIRED`, `ARMED`, `PRESSING` and `HOLD`. Pairing suspends automatic presses and then returns to the previous state.
 
-- `moved_recently` is true when `now - last_motion <= moved_window_s` and that motion has not been used up. A press uses up all motion before it, and so does re-arming because the car is still. It is false at boot until the first motion.
+- `moved_recently` is true when `now - last_motion <= moved_window_s` and that motion has not been used up. A press uses up all motion before it, and so does re-arming. It is false at boot until the first motion.
 - `heard` is true for an advert from the paired beacon with `rssi >= set_point`, or any advert when the set point is "any".
 - `ARMED` to `PRESSING`: `moved_recently` and `heard` are both true. Reason `auto`.
 - `UNPAIRED`, `ARMED` or `HOLD` to `PRESSING`: a manual press from the button or page. Reason `button` or `web`.
@@ -123,7 +123,7 @@ States are `UNPAIRED`, `ARMED`, `PRESSING` and `HOLD`. Pairing suspends automati
 
 Both timers count from no earlier than the press. Otherwise a car that stopped before the press could re-arm too soon and press again while driving through the gate. The same goes for a manual press made when the beacon had not been heard.
 
-Using up motion means that a parked car stays quiet however `moved_window_s`, `still_s` and `gone_s` are set, so no combination of them needs rejecting.
+Using up motion means that a car that has not moved since re-arming stays quiet, however `moved_window_s`, `still_s` and `gone_s` are set, so no combination of them needs rejecting. A car that moves and then stops in earshot still presses within `moved_window_s`, as it must at a closed gate.
 
 The state is not saved. After a power cut the unit starts in `ARMED`, or `UNPAIRED` if no beacon is stored, with `moved_recently` false.
 
@@ -141,13 +141,13 @@ The set point exists to stop presses when only driving past, and to keep presses
 A brief fault must not hand control to the fixed threshold, because that can press a parked car. So the sensor counts as failed only in these cases:
 
 - It has not been found on the bus for 5 s. The unit keeps looking 5 times a second, so a slow start costs nothing.
-- Its accelerometer does not read 1 g ±0.3 g at start. This replaces a strict `WHO_AM_I` check, because clone chips return other IDs. The ID read is logged.
-- No read has worked for 5 s.
+- Its accelerometer does not read 1 g ±0.3 g during its first 5 s. This replaces a strict `WHO_AM_I` check, because clone chips return other IDs. The ID read is logged.
+- No read has worked for 5 s. A sensor that has reset sleeps and reads all zeros, which counts as a failed read.
 - All samples are identical for 5 s.
 
-Nothing is final. A power glitch can reset the sensor into sleep, where reads still work but repeat themselves, so the unit reconfigures it after any run of failed reads and after 1 s of identical samples. After 5 s of good, changing samples the sensor counts as working again. The motion estimate then starts over from calibration, because the unit may have been moved while nothing was watching.
+Nothing is final. A power glitch can reset the sensor into sleep, where reads still work, so the unit reconfigures it after a run of failed reads and after 1 s of identical samples, and waits for it to wake. After 5 s of good samples the sensor counts as working again. A repeated sample counts for neither side, because the sensor's clock is not the poller's and a slow one repeats itself now and then. After any gap in the samples the motion estimate treats the unit as just moved (section 6), because it may have been while nothing was watching. An outage too short to count as a failure is logged with its length, at most once per 10 s, because it can explain false motion in a log.
 
-When failed, `moved_recently` is always true and the effective set point is `max(set_point, fallback_dbm)`, with `fallback_dbm` defaulting to `-90`. So the gate still works with today's rule, but without today's repeat presses: after a press made this way, only `gone_s` can re-arm, even if the sensor recovers in the meantime. As today, a strong day can then press from the parking spot. The LED shows an error and the log records it.
+When failed, `moved_recently` is always true and the effective set point is `max(set_point, fallback_dbm)`, with `fallback_dbm` defaulting to `-90`. So the gate still works with today's rule, but without today's repeat presses. A press made this way can't know whether the car has moved, so `still_s` does not re-arm after it, even if the sensor recovers, and a sensor that keeps dropping out cannot keep pressing. `gone_s` still re-arms, and so does motion from a working sensor once `still_s` has passed since that press, so that a driver leaving the spot still gets a press. As today, a strong day can then press from the parking spot. The LED shows an error and the log records it.
 
 ### 5.6 Limits accepted
 
@@ -193,14 +193,14 @@ Runs in `yg_core` with no hardware dependency, so recorded data can be replayed 
 
 **Input:** MPU6050 at 50 Hz, ±2 g and ±250 °/s, with its digital low-pass filter at about 10 Hz to remove engine vibration.
 
-**Calibration:** at start, the unit waits for 1 s of stillness, then stores the gravity direction and gyro bias. Until then it reports no motion, so the failure mode is a late press, not an early one. If stillness does not come within 10 s, for example because of engine shake or a car already rolling, it calibrates from a 2 s average and detection starts normally.
+**Calibration:** at start, the unit waits for 1 s of stillness, then stores the gravity direction and gyro bias. Until then it reports no motion, so the failure mode is a late press, not an early one. If stillness does not come within 10 s, for example because of engine shake or a car already rolling, it calibrates from 2 s averages as soon as two in a row agree, so that a passenger getting in cannot spoil it, or after 20 s whatever they say.
 
-**Keeping them right:**
+**Keeping them right:** a real sensor has offsets, scale errors and a gyro zero that moves as it warms up. The accelerometer threshold is only about 2.3° of tilt, so errors must not be able to reach it.
 
-- **Gravity turns with the gyro.** A lean or a slow glove box leaves no error behind, however slowly it happens. Rotation under 1 °/s is treated as sensor drift and not applied.
-- **The accelerometer corrects gravity slowly,** over 10 s, or 30 s while above the acceleration threshold, so that braking does not look like a tilt once the car has stopped.
-- **The gyro bias follows drift** once a second, from the average over that second, so that engine shake does not get in the way. Only an average under 1 °/s counts.
-- **After 30 s at rest,** gravity and bias are set again from the sensor, which repairs anything that went wrong, such as calibrating in a bend. Rest means every second was quiet and gravity did not move, so real rotation never counts as rest, however slow.
+- **Gravity turns with the gyro,** so that a lean leaves no error behind, however slowly it happens.
+- **The accelerometer corrects gravity over 2 s.** So a gyro zero error under 1 °/s stays under about 35 mg of error, and so do the offset and scale errors after a big turn. While above the acceleration threshold it takes 30 s, so that short braking does not look like a tilt once the car has stopped. Long hard braking can still report motion for up to 30 s after the stop, which does no harm.
+- **The gyro is checked once a second,** from that second's averages, in which engine shake cancels out. A tilt under 1 °/s is taken as drift, and followed over 10 s. If it says the unit is tilting faster than that, but the accelerometer's average has moved by less than a quarter of what the gyro says, then the gyro is wrong: half the error is taken out, and gravity is set from the accelerometer.
+- **After 30 s at rest,** gravity and bias are set again from the sensor, which repairs what that check cannot see, such as calibrating in a bend. Rest means that the whole-second averages of both sensors stayed put, which also works with the engine shaking. Steady rotation around the vertical looks the same, so a long smooth bend, such as a garage ramp, is taken for bias. That shows as false yaw for up to 30 s after it ends, with the car just having moved anyway.
 
 **Each sample,** with `ĝ` as the unit vector of gravity:
 
@@ -213,9 +213,9 @@ Runs in `yg_core` with no hardware dependency, so recorded data can be replayed 
 - **Yaw:** the summed yaw over `motion_yaw_window_ms` reaches `motion_yaw_deg`. A car leaving a perpendicular spot must turn, and door slams do not produce this.
 - **Acceleration:** `horizontal >= motion_accel_mg` continuously for `motion_accel_ms`, while not tilting. Any dip below the threshold starts the time again, so that a small lean and a door shutting cannot add up.
 
-**Tilting:** when `tilt_rate > 8 °/s`, the acceleration check is ignored for 1 s and gravity re-estimates quickly. This is how opening the glove box, which rotates around a horizontal axis, is kept from looking like driving.
+**Tilting:** when `tilt_rate > 8 °/s`, the acceleration check is ignored for 1 s and gravity re-estimates over 1 s, or as long as it takes to come within the threshold. A gap of over 100 ms in the samples does the same, because the unit may have moved meanwhile. Opening the glove box is kept from looking like driving this way. A door's shove during the hold barely counts, as it is over so soon.
 
-Thresholds are first guesses. Step 1 of the rollout tests them in the real car before anything else is built on top.
+Thresholds are first guesses. Step 1 of the rollout tests them in the real car before anything else is built on top. All of the above makes a pull-out need about 50 mg in practice. If gentle ones are missed, try a lower threshold, or letting short dips through. A missed one only waits for the first turn, which yaw catches.
 
 ## 7. Pairing
 

@@ -11,13 +11,18 @@ static uint32_t later(uint32_t a, uint32_t b) {
     return (int32_t)(a - b) > 0 ? a : b;
 }
 
-/* A press uses up the motion before it, and so does the car coming to rest: otherwise
- * a parked car could press again, however the moved window and timers are set. */
+/* A press uses up the motion before it, and so does re-arming: otherwise a parked car
+ * could press again, however the moved window and timers are set. */
 static void start_press(yg_trigger_t *t, uint32_t now, bool until_gone) {
     t->state = YG_TRIG_PRESSING;
     t->motion_unused = false;
     t->until_gone = until_gone;
     t->press_time = now;
+}
+
+static void rearm(yg_trigger_t *t) {
+    t->state = YG_TRIG_ARMED;
+    t->motion_unused = false;
 }
 
 void yg_trigger_init(yg_trigger_t *t, bool paired) {
@@ -112,16 +117,25 @@ yg_rearm_reason_t yg_trigger_tick(yg_trigger_t *t, const yg_settings_t *s, uint3
     }
     uint32_t heard = t->has_advert ? later(t->last_advert, t->press_time) : t->press_time;
     if (elapsed(now, heard) >= (uint32_t)s->gone_s * 1000u) {
-        t->state = YG_TRIG_ARMED;
+        rearm(t);
         return YG_REARM_GONE;
     }
-    if (t->until_gone || yg_trigger_fallback_active(t, s)) {
+    if (yg_trigger_fallback_active(t, s)) {
+        return YG_REARM_NONE;
+    }
+    uint32_t still_ms = (uint32_t)s->still_s * 1000u;
+    if (t->until_gone) {
+        /* Pressed with no motion to go on, so the car may sit in earshot for good. A sensor
+         * that keeps dropping out must not press again, but a driver leaving must. */
+        if (yg_trigger_moved_recently(t, s, now) && elapsed(now, t->press_time) >= still_ms) {
+            t->state = YG_TRIG_ARMED;
+            return YG_REARM_MOVED;
+        }
         return YG_REARM_NONE;
     }
     uint32_t moved = t->has_motion ? later(t->last_motion, t->press_time) : t->press_time;
-    if (elapsed(now, moved) >= (uint32_t)s->still_s * 1000u) {
-        t->state = YG_TRIG_ARMED;
-        t->motion_unused = false;
+    if (elapsed(now, moved) >= still_ms) {
+        rearm(t);
         return YG_REARM_STILL;
     }
     return YG_REARM_NONE;

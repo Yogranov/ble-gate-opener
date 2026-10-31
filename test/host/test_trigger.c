@@ -294,15 +294,65 @@ static void stillness_uses_up_motion_from_after_a_press(void) {
     CHECK_INT(yg_trigger_on_advert(&t, &s, SEC(291), -70), YG_PRESS_AUTO);
 }
 
-static void a_car_still_moving_when_the_beacon_goes_can_press_again(void) {
-    /* Driven away and back, all within the moved window. */
+static void the_beacon_going_uses_up_motion_too(void) {
+    /* Pressed while rolling, then parked where the beacon comes and goes. */
     setup();
+    s.moved_window_s = 300;
+    s.gone_s = 10;
     yg_trigger_on_motion(&t, SEC(8));
     CHECK_INT(yg_trigger_on_advert(&t, &s, SEC(9), -70), YG_PRESS_AUTO);
+    yg_trigger_on_motion(&t, SEC(11));
     yg_trigger_tick(&t, &s, SEC(12));
+    CHECK_INT(yg_trigger_tick(&t, &s, SEC(19)), YG_REARM_GONE);
+    CHECK_INT(yg_trigger_on_advert(&t, &s, SEC(25), -70), YG_PRESS_NONE);
+    /* Moving again counts, so driving away and coming back still works. */
     yg_trigger_on_motion(&t, SEC(40));
-    CHECK_INT(yg_trigger_tick(&t, &s, SEC(69)), YG_REARM_GONE);
-    CHECK_INT(yg_trigger_on_advert(&t, &s, SEC(70), -70), YG_PRESS_AUTO);
+    CHECK_INT(yg_trigger_on_advert(&t, &s, SEC(41), -70), YG_PRESS_AUTO);
+}
+
+static void real_motion_ends_the_wait_after_a_fallback_press(void) {
+    /* A sensor outage pressed while parked, in earshot. The driver leaves 5 minutes later. */
+    setup();
+    yg_trigger_set_sensor_ok(&t, false);
+    CHECK_INT(yg_trigger_on_advert(&t, &s, SEC(1), -80), YG_PRESS_FALLBACK);
+    yg_trigger_set_sensor_ok(&t, true);
+    for (uint32_t now = SEC(2); now <= SEC(300); now += SEC(1)) {
+        yg_trigger_on_advert(&t, &s, now, -80);
+        CHECK_INT(yg_trigger_tick(&t, &s, now), YG_REARM_NONE);
+    }
+    yg_trigger_on_motion(&t, SEC(301));
+    CHECK_INT(yg_trigger_tick(&t, &s, SEC(301)), YG_REARM_MOVED);
+    CHECK_INT(yg_trigger_on_advert(&t, &s, SEC(301) + 100, -80), YG_PRESS_AUTO);
+}
+
+static void a_fallback_press_uses_up_the_motion_before_it(void) {
+    /* The sensor fails just after the car stopped, with a long moved window. */
+    setup();
+    s.moved_window_s = 300;
+    yg_trigger_on_motion(&t, SEC(1));
+    yg_trigger_set_sensor_ok(&t, false);
+    CHECK_INT(yg_trigger_on_advert(&t, &s, SEC(7), -80), YG_PRESS_FALLBACK);
+    yg_trigger_set_sensor_ok(&t, true);
+    yg_trigger_tick(&t, &s, SEC(10));
+    for (uint32_t now = SEC(11); now < SEC(290); now += SEC(1)) {
+        yg_trigger_on_advert(&t, &s, now, -80);
+        CHECK_INT(yg_trigger_tick(&t, &s, now), YG_REARM_NONE);
+    }
+}
+
+static void motion_right_after_a_fallback_press_does_not_press_again(void) {
+    /* The gate has only just been told to open, by that press. */
+    setup();
+    yg_trigger_set_sensor_ok(&t, false);
+    CHECK_INT(yg_trigger_on_advert(&t, &s, SEC(1), -80), YG_PRESS_FALLBACK);
+    yg_trigger_set_sensor_ok(&t, true);
+    yg_trigger_tick(&t, &s, SEC(5));
+    for (uint32_t now = SEC(6); now < SEC(121); now += SEC(1)) {
+        yg_trigger_on_motion(&t, now);
+        yg_trigger_on_advert(&t, &s, now, -80);
+        CHECK_INT(yg_trigger_tick(&t, &s, now), YG_REARM_NONE);
+    }
+    CHECK_INT(t.state, YG_TRIG_HOLD);
 }
 
 static void fallback_press_waits_for_the_beacon_to_go_even_after_recovery(void) {
@@ -323,7 +373,10 @@ int main(void) {
     RUN(motion_from_before_a_press_does_not_count_after_it);
     RUN(motion_before_a_press_does_not_count_after_gone_either);
     RUN(stillness_uses_up_motion_from_after_a_press);
-    RUN(a_car_still_moving_when_the_beacon_goes_can_press_again);
+    RUN(the_beacon_going_uses_up_motion_too);
+    RUN(real_motion_ends_the_wait_after_a_fallback_press);
+    RUN(a_fallback_press_uses_up_the_motion_before_it);
+    RUN(motion_right_after_a_fallback_press_does_not_press_again);
     RUN(fallback_press_waits_for_the_beacon_to_go_even_after_recovery);
     RUN(ignition_in_spot_with_beacon_heard_never_presses);
     RUN(pulling_out_with_beacon_heard_presses_once);

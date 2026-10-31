@@ -54,6 +54,16 @@ typedef struct {
     uint32_t first_cause_at;
     bool any_near_miss;
     yg_motion_out_t out;
+
+    /* What a real sensor adds, in its own axes. */
+    float zero[3];                   /* deg/s: the gyro's zero moving after calibration. */
+    float accel_offset[3];           /* g */
+    float gyro_scale;                /* A fraction. */
+    float shake_a, shake_g;          /* Engine shake at 23 Hz, in g and deg/s. */
+    float random_a, random_g;        /* Band-limited shake: standard deviations. */
+    float random_alpha, random_slow_alpha;
+    float random_lp[6], random_slow[6];
+    uint32_t tick;
 } rig_t;
 
 static float noise(float amp) {
@@ -67,12 +77,26 @@ static void step(rig_t *r, const float accel[3], const float gyro[3]) {
     float a[3], g[3];
     apply(&r->attitude, car_a, a);
     apply(&r->attitude, gyro, g);
-    in.ax = a[0] + noise(0.002f);
-    in.ay = a[1] + noise(0.002f);
-    in.az = a[2] + noise(0.002f);
-    in.gx = g[0] + BIAS[0] + noise(0.1f);
-    in.gy = g[1] + BIAS[1] + noise(0.1f);
-    in.gz = g[2] + BIAS[2] + noise(0.1f);
+    float phase = 2 * PI * 23.0f * (float)(r->tick++) * 0.02f;
+    const float shake_a[3] = { r->shake_a * sinf(phase), r->shake_a * cosf(phase), r->shake_a * sinf(phase + 1) };
+    const float shake_g[3] = { r->shake_g * sinf(phase), r->shake_g * cosf(phase), r->shake_g * sinf(phase + 2) };
+    float v[6];
+    for (int i = 0; i < 3; i++) {
+        v[i] = a[i] + r->accel_offset[i] + shake_a[i] + noise(0.002f);
+        v[i + 3] = g[i] * (1.0f + r->gyro_scale) + BIAS[i] + r->zero[i] + shake_g[i] + noise(0.1f);
+    }
+    for (int i = 0; r->random_alpha > 0 && i < 6; i++) {
+        float sd = i < 3 ? r->random_a : r->random_g;
+        r->random_lp[i] += r->random_alpha * (noise(sd * sqrtf(3.0f * (2.0f - r->random_alpha) / r->random_alpha)) - r->random_lp[i]);
+        r->random_slow[i] += r->random_slow_alpha * (r->random_lp[i] - r->random_slow[i]);
+        v[i] += r->random_lp[i] - r->random_slow[i];
+    }
+    in.ax = v[0];
+    in.ay = v[1];
+    in.az = v[2];
+    in.gx = v[3];
+    in.gy = v[4];
+    in.gz = v[5];
     yg_motion_update(&r->m, &r->s, r->now, &in, &r->out);
     if (r->out.cause != YG_MOTION_NONE && r->first_cause == YG_MOTION_NONE) {
         r->first_cause = r->out.cause;
@@ -254,19 +278,8 @@ static void tilt(rig_t *r, float deg, uint32_t ms, int axis) {
         mat3 turn = axis == 0 ? rot_x(-done) : rot_y(-done);
         r->attitude = mul(base, turn);
         const float a[3] = { 0, 0, 0 };
-        float g[3] = { axis == 0 ? rate : 0, axis == 1 ? rate : 0, 0 };
-        float sensor_g[3];
-        apply(&r->attitude, g, sensor_g);
-        yg_imu_sample_t in;
-        float car_a[3] = { a[0], a[1], 1.0f }, sensor_a[3];
-        apply(&r->attitude, car_a, sensor_a);
-        in.ax = sensor_a[0]; in.ay = sensor_a[1]; in.az = sensor_a[2];
-        in.gx = sensor_g[0] + BIAS[0]; in.gy = sensor_g[1] + BIAS[1]; in.gz = sensor_g[2] + BIAS[2];
-        yg_motion_update(&r->m, &r->s, r->now, &in, &r->out);
-        if (r->out.cause != YG_MOTION_NONE && r->first_cause == YG_MOTION_NONE) {
-            r->first_cause = r->out.cause;
-        }
-        r->now += DT_MS;
+        const float g[3] = { axis == 0 ? rate : 0, axis == 1 ? rate : 0, 0 };
+        step(r, a, g);
     }
 }
 
@@ -424,6 +437,298 @@ static void drift_is_followed_even_with_the_engine_shaking(void) {
     }
 }
 
+static void engine_on(rig_t *r) {
+    r->shake_a = 0.03f;
+    r->shake_g = 2.0f;
+}
+
+/* The gyro's zero moves, by an amount given along the car's axes. */
+static void zero_moves(rig_t *r, float x, float y, float z) {
+    const float car[3] = { x, y, z };
+    apply(&r->attitude, car, r->zero);
+}
+
+static void a_gyro_zero_error_cannot_fake_motion(void) {
+    /* Gravity follows the gyro, so a wrong zero could otherwise look like a lean. */
+    static const float ERRORS[] = { 0.3f, 0.6f, 0.9f, 1.1f, 1.5f, 2.5f };
+    for (int shake = 0; shake < 2; shake++) {
+        for (int o = 0; o < ORIENTATIONS; o++) {
+            for (size_t e = 0; e < sizeof(ERRORS) / sizeof(ERRORS[0]); e++) {
+                static rig_t r;
+                rig_init(&r, orientation(o));
+                still(&r, 5000);
+                if (shake) engine_on(&r);
+                zero_moves(&r, ERRORS[e], 0, 0);
+                still(&r, 120000);
+                CHECK_INT(r.first_cause, YG_MOTION_NONE);
+            }
+        }
+    }
+}
+
+static void a_small_gyro_zero_error_fades_without_waiting_for_a_rest(void) {
+    /* Left alone it would stand as a false lean, and hide a gentle pull-out the other way. */
+    static rig_t r;
+    rig_init(&r, orientation(1));
+    still(&r, 5000);
+    zero_moves(&r, 0.8f, 0, 0);
+    still(&r, 25000);
+    CHECK(r.out.horizontal_mg < 10.0f);
+}
+
+static void a_long_rest_repairs_the_gyro_with_the_engine_running(void) {
+    /* Around the vertical gravity cannot show an error, so only a long rest can. */
+    for (int o = 0; o < ORIENTATIONS; o++) {
+        static rig_t r;
+        rig_init(&r, orientation(o));
+        still(&r, 5000);
+        engine_on(&r);
+        zero_moves(&r, 0, 0, 7.0f);
+        still(&r, 35000);
+        reset_seen(&r);
+        still(&r, 60000);
+        CHECK_INT(r.first_cause, YG_MOTION_NONE);
+    }
+}
+
+static void warming_up_stays_quiet(void) {
+    static const float RAMPS[] = { 0.02f, 0.04f, 0.1f, 0.15f, 0.3f };   /* deg/s per second */
+    for (int shake = 0; shake < 2; shake++) {
+        for (size_t i = 0; i < sizeof(RAMPS) / sizeof(RAMPS[0]); i++) {
+            static rig_t r;
+            rig_init(&r, orientation(1));
+            still(&r, 5000);
+            if (shake) engine_on(&r);
+            for (uint32_t t = 0; t < 180000; t += DT_MS) {
+                float d = RAMPS[i] * (float)t / 1000.0f;
+                d = d > 3.0f ? 3.0f : d;
+                zero_moves(&r, d, -d / 2, 0);
+                still(&r, DT_MS);
+            }
+            CHECK_INT(r.first_cause, YG_MOTION_NONE);
+        }
+    }
+}
+
+static void random_shake_while_parked_stays_quiet(void) {
+    /* A body rocks around where it rests, so the slower shake has no very slow part. */
+    static const struct { float a, g, hz, low_hz; } SHAKES[] = {
+        { 0.002f, 0.5f, 10, 0 }, { 0.005f, 1.0f, 10, 0 }, { 0.005f, 1.5f, 10, 0 }, { 0.01f, 2.0f, 10, 0 }, { 0.01f, 3.0f, 10, 0 },
+        { 0.01f, 6.0f, 10, 0 }, { 0.01f, 1.0f, 3, 0.3f }, { 0.01f, 2.0f, 3, 0.3f }, { 0.01f, 3.0f, 3, 0.3f }, { 0.01f, 4.0f, 3, 0.3f },
+    };
+    for (size_t i = 0; i < sizeof(SHAKES) / sizeof(SHAKES[0]); i++) {
+        static rig_t r;
+        rig_init(&r, orientation(1));
+        still(&r, 5000);
+        float w = 2 * PI * SHAKES[i].hz * 0.02f;
+        float slow = 2 * PI * SHAKES[i].low_hz * 0.02f;
+        r.random_alpha = w / (1 + w);
+        r.random_slow_alpha = slow / (1 + slow);
+        r.random_a = SHAKES[i].a;
+        r.random_g = SHAKES[i].g;
+        still(&r, 180000);
+        CHECK_INT(r.first_cause, YG_MOTION_NONE);
+    }
+}
+
+static void a_passenger_gets_in_with_the_engine_on_from_the_start(void) {
+    /* No quiet second, so calibration comes from an average around the 10 s deadline. */
+    static const float LEANS[] = { 1.0f, 1.5f, 2.0f, 3.0f };
+    static const uint32_t TIMES[] = { 4000, 8200, 9000, 9400, 11000, 12500 };
+    for (size_t l = 0; l < sizeof(LEANS) / sizeof(LEANS[0]); l++) {
+        for (size_t i = 0; i < sizeof(TIMES) / sizeof(TIMES[0]); i++) {
+            static rig_t r;
+            rig_init(&r, orientation(1));
+            engine_on(&r);
+            still(&r, TIMES[i]);
+            tilt(&r, LEANS[l], 500, 0);
+            still(&r, 60000 - TIMES[i]);
+            CHECK_INT(r.first_cause, YG_MOTION_NONE);
+        }
+    }
+}
+
+static void a_lean_too_slow_for_the_gyro_is_ignored(void) {
+    static const struct { float deg, rate; } LEANS[] = {
+        { 3, 0.5f }, { 5, 0.5f }, { 3, 0.7f }, { 5, 0.7f }, { 3, 0.9f }, { 4, 0.9f }, { 6, 0.9f }, { 6, 1.1f }, { 6, 2.0f },
+    };
+    for (int shake = 0; shake < 2; shake++) {
+        for (size_t i = 0; i < sizeof(LEANS) / sizeof(LEANS[0]); i++) {
+            static rig_t r;
+            rig_init(&r, orientation(1));
+            still(&r, 5000);
+            if (shake) engine_on(&r);
+            tilt(&r, LEANS[i].deg, (uint32_t)(LEANS[i].deg / LEANS[i].rate * 1000.0f), 0);
+            still(&r, 15000);
+            CHECK_INT(r.first_cause, YG_MOTION_NONE);
+        }
+    }
+}
+
+static void a_glove_box_with_real_sensor_errors_is_ignored(void) {
+    /* Offsets and scale errors mean that gravity and the accelerometer disagree after turning. */
+    static const struct { float offset, scale; } ERRORS[] = { { 0.05f, 0 }, { 0.10f, 0 }, { 0, 0.03f }, { 0.05f, 0.03f } };
+    static const uint32_t TIMES[] = { 1000, 6000, 14000, 30000 };
+    for (size_t e = 0; e < sizeof(ERRORS) / sizeof(ERRORS[0]); e++) {
+        for (size_t i = 0; i < sizeof(TIMES) / sizeof(TIMES[0]); i++) {
+            for (int o = 0; o < ORIENTATIONS; o++) {
+                for (int axis = 0; axis < 2; axis++) {
+                    static rig_t r;
+                    rig_init(&r, orientation(o));
+                    r.accel_offset[0] = ERRORS[e].offset;
+                    r.accel_offset[1] = -ERRORS[e].offset;
+                    r.accel_offset[2] = ERRORS[e].offset;
+                    r.gyro_scale = ERRORS[e].scale;
+                    still(&r, 5000);
+                    tilt(&r, 42.0f, TIMES[i], axis);
+                    still(&r, 10000);
+                    tilt(&r, -42.0f, TIMES[i], axis);
+                    still(&r, 10000);
+                    CHECK_INT(r.first_cause, YG_MOTION_NONE);
+                }
+            }
+        }
+    }
+}
+
+static void the_unit_moving_while_samples_were_lost_is_ignored(void) {
+    static const struct { float deg; uint32_t gap; } GAPS[] = {
+        { 1.5f, 1000 }, { 2, 1000 }, { 2.5f, 1000 }, { 3, 2000 }, { 5, 4000 }, { 20, 4000 }, { 45, 4000 },
+    };
+    for (size_t i = 0; i < sizeof(GAPS) / sizeof(GAPS[0]); i++) {
+        static rig_t r;
+        rig_init(&r, orientation(1));
+        still(&r, 5000);
+        r.now += GAPS[i].gap;
+        r.attitude = mul(r.attitude, rot_x(-GAPS[i].deg));
+        still(&r, 10000);
+        CHECK_INT(r.first_cause, YG_MOTION_NONE);
+    }
+}
+
+static void two_doors_shut_in_a_row_are_ignored(void) {
+    /* The first turns fast enough to start the tilt hold, and the second shoves during it. */
+    static const float FIRST[] = { 12, 20 };
+    static const float SECOND[] = { 0.1f, 0.15f, 0.2f, 0.3f };
+    for (size_t a = 0; a < 2; a++) {
+        for (size_t b = 0; b < 4; b++) {
+            for (uint32_t gap = 200; gap <= 1400; gap += 20) {
+                static rig_t r;
+                rig_init(&r, identity());
+                still(&r, 5000);
+                for (uint32_t t = 0; t < 160; t += DT_MS) {
+                    float k = expf(-(float)t / 60.0f);
+                    const float acc[3] = { 0, 0.2f * k, 0 };
+                    const float rot[3] = { FIRST[a] * k * sinf(2 * PI * 5 * (float)t / 1000.0f + 1.57f), 0, 0 };
+                    step(&r, acc, rot);
+                }
+                still(&r, gap);
+                shove(&r, SECOND[b]);
+                still(&r, 5000);
+                CHECK_INT(r.first_cause, YG_MOTION_NONE);
+            }
+        }
+    }
+}
+
+static void calibrating_during_a_slow_lean_then_starting_the_engine_is_ignored(void) {
+    static const float RATES[] = { 0.5f, 0.7f, 0.9f };
+    for (size_t i = 0; i < sizeof(RATES) / sizeof(RATES[0]); i++) {
+        static rig_t r;
+        rig_init(&r, identity());
+        tilt(&r, RATES[i] * 1.2f, 1200, 0);
+        CHECK(r.out.calibrated);
+        engine_on(&r);
+        still(&r, 60000);
+        CHECK_INT(r.first_cause, YG_MOTION_NONE);
+    }
+}
+
+static void a_lean_in_the_last_second_of_a_rest_does_not_count_as_rest(void) {
+    static const float RATES[] = { 0.5f, 0.8f, 0.95f, 1.02f, 1.05f, 1.1f, 1.2f };
+    for (size_t i = 0; i < sizeof(RATES) / sizeof(RATES[0]); i++) {
+        for (int k = 0; k < 10; k++) {
+            static rig_t r;
+            rig_init(&r, identity());
+            still(&r, 1500);
+            for (int guard = 0; guard < 4000 && !(r.m.rest_windows == 29 && r.m.still_n == 0); guard++) {
+                still(&r, DT_MS);
+            }
+            tilt(&r, RATES[i], 1000, 0);
+            reset_seen(&r);
+            still(&r, 40000);
+            CHECK_INT(r.first_cause, YG_MOTION_NONE);
+        }
+    }
+}
+
+static void a_very_slow_turn_does_not_count_as_rest(void) {
+    /* The gyro reads steadily all the way, so only gravity moving gives it away. */
+    for (int o = 0; o < ORIENTATIONS; o++) {
+        static rig_t r;
+        rig_init(&r, orientation(o));
+        still(&r, 5000);
+        tilt(&r, 60.0f, 40000, o % 2);
+        still(&r, 10000);
+        CHECK_INT(r.first_cause, YG_MOTION_NONE);
+    }
+}
+
+static void pulling_out_just_as_a_rest_ends_does_not_count_as_rest(void) {
+    /* A creeping turn leaves gravity where it was, so only the gyro gives it away. */
+    static rig_t r;
+    rig_init(&r, identity());
+    still(&r, 1500);
+    for (int guard = 0; guard < 4000 && !(r.m.rest_windows == 29 && r.m.still_n == 0); guard++) {
+        still(&r, DT_MS);
+    }
+    const float a[3] = { 0, 0, 0 };
+    const float g[3] = { 0, 0, 8.0f };
+    for (int i = 0; i < 100; i++) step(&r, a, g);
+    CHECK_INT(r.first_cause, YG_MOTION_YAW);
+    still(&r, 3000);
+    reset_seen(&r);
+    still(&r, 20000);
+    CHECK_INT(r.first_cause, YG_MOTION_NONE);
+}
+
+static void readings_that_are_not_gravity_do_not_calibrate(void) {
+    static rig_t r;
+    rig_init(&r, identity());
+    const yg_imu_sample_t zeros = { 0, 0, 0, 0, 0, 0 };
+    for (int i = 0; i < 1500; i++) {
+        yg_motion_update(&r.m, &r.s, r.now, &zeros, &r.out);
+        r.now += DT_MS;
+    }
+    CHECK(!r.out.calibrated);
+    still(&r, 2000);
+    CHECK(r.out.calibrated);
+    const float a[3] = { 0, 0, 0 };
+    const float g[3] = { 0, 0, 25.0f };
+    for (int i = 0; i < 75; i++) step(&r, a, g);
+    CHECK_INT(r.first_cause, YG_MOTION_YAW);
+}
+
+static void gentle_pull_outs_are_still_found(void) {
+    static const struct { float g, noise; } PULLS[] = { { 0.06f, 0.005f }, { 0.06f, 0.01f }, { 0.08f, 0.02f }, { 0.10f, 0.03f } };
+    for (size_t i = 0; i < sizeof(PULLS) / sizeof(PULLS[0]); i++) {
+        for (int k = 0; k < 20; k++) {
+            static rig_t r;
+            rig_init(&r, identity());
+            still(&r, 5000);
+            float w = 2 * PI * 4.0f * 0.02f;
+            r.random_alpha = w / (1 + w);
+            r.random_a = PULLS[i].noise;
+            uint32_t start = r.now;
+            const float a[3] = { PULLS[i].g, 0, 0 };
+            const float g[3] = { 0, 0, 0 };
+            for (int s = 0; s < 150; s++) step(&r, a, g);
+            CHECK_INT(r.first_cause, YG_MOTION_ACCEL);
+            CHECK(r.first_cause_at - start <= 2000);
+        }
+    }
+}
+
 static void turn_is_still_detected_after_the_glove_box_moved(void) {
     static rig_t r;
     rig_init(&r, identity());
@@ -440,7 +745,7 @@ static void turn_is_still_detected_after_the_glove_box_moved(void) {
 static void already_moving_at_boot_detects_later_turns(void) {
     static rig_t r;
     rig_init(&r, orientation(1));
-    for (uint32_t t = 0; t < 15000; t += DT_MS) {
+    for (uint32_t t = 0; t < 21000; t += DT_MS) {
         float a[3] = { 0.05f * sinf((float)t / 300.0f), 0.05f * cosf((float)t / 200.0f), 0.02f * sinf((float)t / 50.0f) };
         float g[3] = { 0, 0, 8.0f * sinf((float)t / 900.0f) };
         step(&r, a, g);
@@ -464,10 +769,10 @@ static void thresholds_come_from_settings(void) {
     const float g[3] = { 0, 0, 20.0f };
     for (int i = 0; i < 100; i++) step(&r, a, g);
     CHECK_INT(r.first_cause, YG_MOTION_NONE);
+    still(&r, 15000);
     r.s.motion_accel_mg = 40;
     r.s.motion_accel_ms = 200;
     reset_seen(&r);
-    still(&r, 3000);
     uint32_t start = r.now;
     const float g0[3] = { 0, 0, 0 };
     for (int i = 0; i < 30; i++) step(&r, a, g0);
@@ -512,6 +817,22 @@ int main(void) {
     RUN(slow_sensor_drift_is_followed);
     RUN(a_small_shift_of_the_gyro_zero_is_ignored);
     RUN(drift_is_followed_even_with_the_engine_shaking);
+    RUN(a_gyro_zero_error_cannot_fake_motion);
+    RUN(a_small_gyro_zero_error_fades_without_waiting_for_a_rest);
+    RUN(a_long_rest_repairs_the_gyro_with_the_engine_running);
+    RUN(warming_up_stays_quiet);
+    RUN(random_shake_while_parked_stays_quiet);
+    RUN(a_passenger_gets_in_with_the_engine_on_from_the_start);
+    RUN(a_lean_too_slow_for_the_gyro_is_ignored);
+    RUN(a_glove_box_with_real_sensor_errors_is_ignored);
+    RUN(the_unit_moving_while_samples_were_lost_is_ignored);
+    RUN(two_doors_shut_in_a_row_are_ignored);
+    RUN(calibrating_during_a_slow_lean_then_starting_the_engine_is_ignored);
+    RUN(a_lean_in_the_last_second_of_a_rest_does_not_count_as_rest);
+    RUN(a_very_slow_turn_does_not_count_as_rest);
+    RUN(pulling_out_just_as_a_rest_ends_does_not_count_as_rest);
+    RUN(readings_that_are_not_gravity_do_not_calibrate);
+    RUN(gentle_pull_outs_are_still_found);
     RUN(turn_is_still_detected_after_the_glove_box_moved);
     RUN(already_moving_at_boot_detects_later_turns);
     RUN(thresholds_come_from_settings);

@@ -10,6 +10,8 @@
 #define MOTION_LOG_GAP_MS    10000u
 #define NEAR_MISS_GAP_MS     60000u
 #define TEMP_LOG_GAP_MS      60000u
+#define GLITCH_MIN_MS        100u
+#define GLITCH_LOG_GAP_MS    10000u
 #define SET_POINT_WINDOW_MS  3000u
 #define ENV_DELAY_MS         10000u
 #define ENV_RUN_MS           6000u    /* A Wi-Fi scan with the hotspot up takes a few seconds. */
@@ -106,7 +108,6 @@ static void sync_sensor(yg_engine_t *e, uint32_t now) {
         led(e, YG_LED_SENSOR_FAILED);
     } else if (e->health_seen == YG_SENSOR_FAILED) {
         yg_trigger_set_sensor_ok(&e->trigger, true);
-        yg_motion_init(&e->motion);
         yg_rec_error(&r, e->trip, now, YG_ERROR_SENSOR_RECOVERED, 0);
         log_record(e, &r);
         led_idle(e);
@@ -190,7 +191,32 @@ void yg_engine_on_advert(yg_engine_t *e, uint32_t now, const yg_addr_t *a, int8_
     }
 }
 
+/* An outage too short to count as a failure can still explain false motion in a log. */
+static void note_sensor_back(yg_engine_t *e, uint32_t now) {
+    if (!e->sensor_out) {
+        return;
+    }
+    e->sensor_out = false;
+    uint32_t lasted = now - e->sensor_out_since;
+    if (lasted < GLITCH_MIN_MS || e->health.state == YG_SENSOR_FAILED
+        || (e->glitch_logged && now - e->last_glitch_log < GLITCH_LOG_GAP_MS)) {
+        return;
+    }
+    yg_record_t r;
+    yg_rec_error(&r, e->trip, now, YG_ERROR_SENSOR_GLITCH, lasted);
+    log_record(e, &r);
+    e->glitch_logged = true;
+    e->last_glitch_log = now;
+}
+
 void yg_engine_on_imu(yg_engine_t *e, uint32_t now, const yg_imu_sample_t *s, float temp_c) {
+    /* A sensor reset by a power glitch sleeps, and reads as all zeros, which never happens
+     * for real because of gravity. */
+    if (s->ax == 0 && s->ay == 0 && s->az == 0 && s->gx == 0 && s->gy == 0 && s->gz == 0) {
+        yg_engine_on_imu_failed(e, now, false);
+        return;
+    }
+    note_sensor_back(e, now);
     yg_sensor_health_on_sample(&e->health, now, s);
     sync_sensor(e, now);
     e->last_sample = *s;
@@ -222,6 +248,10 @@ void yg_engine_on_imu(yg_engine_t *e, uint32_t now, const yg_imu_sample_t *s, fl
 }
 
 void yg_engine_on_imu_failed(yg_engine_t *e, uint32_t now, bool absent) {
+    if (!e->sensor_out) {
+        e->sensor_out = true;
+        e->sensor_out_since = now;
+    }
     yg_sensor_health_on_read_failed(&e->health, now, absent);
     sync_sensor(e, now);
 }
@@ -416,6 +446,7 @@ void yg_engine_pair_set(yg_engine_t *e, uint32_t now, const uint8_t addr[YG_ADDR
     e->beacon.paired = true;
     memcpy(e->beacon.addr.addr, addr, YG_ADDR_LEN);
     e->beacon.addr.type = type;
+    e->pair_saves++;
     e->heard_logged = false;
     e->has_advert = false;
     e->recent_head = 0;
@@ -568,9 +599,9 @@ int yg_engine_status_json(const yg_engine_t *e, uint32_t now, char *buf, size_t 
     } else {
         yg_jw_raw(&w, "null");
     }
-    yg_jw_raw(&w, ",\"hotspot_on\":%s,\"hotspot_left_s\":%u,\"clients\":%u,\"pair_mode\":\"%s\",\"debug\":%s,\"fallback\":%s,\"capturing\":%s}",
+    yg_jw_raw(&w, ",\"hotspot_on\":%s,\"hotspot_left_s\":%u,\"clients\":%u,\"pair_mode\":\"%s\",\"pair_saves\":%u,\"debug\":%s,\"fallback\":%s,\"capturing\":%s}",
               e->hotspot_on ? "true" : "false", (unsigned)yg_hotspot_left_s(&e->hotspot, e->s, now), e->clients,
-              PAIR[e->pairing.mode], e->s->debug ? "true" : "false",
+              PAIR[e->pairing.mode], e->pair_saves, e->s->debug ? "true" : "false",
               yg_trigger_fallback_active(&e->trigger, e->s) ? "true" : "false",
               e->capture != NULL && yg_capture_active(e->capture) ? "true" : "false");
     return yg_jw_finish(&w);

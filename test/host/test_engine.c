@@ -59,6 +59,7 @@ static uint32_t now;
 static const yg_addr_t GATE = { { 0xC5, 0xB0, 0xE6, 0x53, 0x59, 0x02 }, YG_ADDR_TYPE_RANDOM };
 static const yg_addr_t OTHER = { { 0xD1, 0x22, 0x33, 0x44, 0x55, 0x66 }, YG_ADDR_TYPE_RANDOM };
 static yg_ibeacon_t ib = { true, { 0 }, 1, 2, -59 };
+static float gyro_zero[3];
 
 static void boot(bool paired) {
     yg_beacon_t b = { paired, GATE };
@@ -75,6 +76,7 @@ static void setup(bool paired) {
     memset(&fake, 0, sizeof(fake));
     fake.records = records;
     yg_settings_defaults(&s);
+    memset(gyro_zero, 0, sizeof(gyro_zero));
     boot(paired);
 }
 
@@ -85,7 +87,8 @@ static int imu_counter;
 static void run(uint32_t ms, float accel, float yaw, uint32_t advert_ms, int8_t rssi) {
     for (uint32_t t = 0; t < ms; t += 20) {
         imu_counter++;
-        yg_imu_sample_t in = { accel, 0.0005f * (float)(imu_counter % 3), 1.0f, 0.02f * (float)(imu_counter % 2), 0, yaw };
+        yg_imu_sample_t in = { accel, 0.0005f * (float)(imu_counter % 3), 1.0f, gyro_zero[0] + 0.02f * (float)(imu_counter % 2),
+                               gyro_zero[1], gyro_zero[2] + yaw };
         yg_engine_on_imu(e, now, &in, 33.5f);
         if (advert_ms && t % advert_ms == 0) yg_engine_on_advert(e, now, &GATE, rssi, &ib);
         if (t % 100 == 0) yg_engine_tick(e, now);
@@ -105,6 +108,25 @@ static void sensor_down(uint32_t ms, bool absent, uint32_t advert_ms, int8_t rss
     }
 }
 static void pull_out(uint32_t ms, uint32_t advert_ms, int8_t rssi) { run(ms, 0.1f, 0, advert_ms, rssi); }
+
+/* A sensor reset by a power glitch sleeps, and reads as all zeros. */
+static void sensor_asleep(uint32_t ms, uint32_t advert_ms, int8_t rssi) {
+    const yg_imu_sample_t zeros = { 0, 0, 0, 0, 0, 0 };
+    for (uint32_t t = 0; t < ms; t += 20) {
+        yg_engine_on_imu(e, now, &zeros, 36.5f);
+        if (advert_ms && t % advert_ms == 0) yg_engine_on_advert(e, now, &GATE, rssi, &ib);
+        if (t % 100 == 0) yg_engine_tick(e, now);
+        now += 20;
+    }
+}
+
+static int count_error(uint8_t code) {
+    int n = 0;
+    for (int i = 0; i < fake.record_count; i++) {
+        if (fake.records[i].type == YG_REC_ERROR && fake.records[i].payload[0] == code) n++;
+    }
+    return n;
+}
 
 static int count_records(uint8_t type) {
     int n = 0;
@@ -237,7 +259,7 @@ static void sensor_failure_falls_back_to_the_threshold(void) {
     still(SEC(3), 0, 0);
     CHECK_INT(fake.last_led, YG_LED_OFF);
     sensor_down(SEC(6), false, 0, 0);
-    CHECK_INT(count_records(YG_REC_ERROR), 1);
+    CHECK_INT(count_error(YG_ERROR_SENSOR_READS), 1);
     CHECK_INT(fake.last_led, YG_LED_SENSOR_FAILED);
     yg_engine_on_advert(e, now, &GATE, -95, &ib);
     CHECK_INT(fake.presses, 0);
@@ -255,7 +277,7 @@ static void absent_sensor_falls_back_at_boot(void) {
     CHECK_INT(fake.presses, 0);
     CHECK_INT(count_records(YG_REC_ERROR), 0);
     sensor_down(400, true, 0, 0);
-    CHECK_INT(count_records(YG_REC_ERROR), 1);
+    CHECK_INT(count_error(YG_ERROR_SENSOR_ABSENT), 1);
     CHECK_INT(fake.last_led, YG_LED_SENSOR_FAILED);
     yg_engine_on_advert(e, now, &GATE, -85, &ib);
     CHECK_INT(fake.presses, 1);
@@ -269,7 +291,76 @@ static void short_sensor_dropouts_never_press_a_parked_car(void) {
         still(SEC(130), 300, -85);
     }
     CHECK_INT(fake.presses, 0);
-    CHECK_INT(count_records(YG_REC_ERROR), 0);
+    CHECK_INT(count_error(YG_ERROR_SENSOR_READS), 0);
+}
+
+static void short_outages_are_logged_with_their_length(void) {
+    setup(true);
+    still(SEC(3), 0, 0);
+    sensor_down(400, false, 0, 0);
+    still(SEC(1), 0, 0);
+    CHECK_INT(count_error(YG_ERROR_SENSOR_GLITCH), 1);
+    const yg_record_t *r = last_record(YG_REC_ERROR);
+    CHECK(r != NULL);
+    if (r != NULL) CHECK_INT(yg_get_u32(r->payload + 1), 400);
+    /* Not one record per glitch from a loose wire. */
+    for (int i = 0; i < 3; i++) {
+        sensor_down(200, false, 0, 0);
+        still(SEC(1), 0, 0);
+    }
+    CHECK_INT(count_error(YG_ERROR_SENSOR_GLITCH), 1);
+    still(SEC(10), 0, 0);
+    sensor_down(200, false, 0, 0);
+    still(SEC(1), 0, 0);
+    CHECK_INT(count_error(YG_ERROR_SENSOR_GLITCH), 2);
+    /* A single lost read is nothing to report. */
+    still(SEC(11), 0, 0);
+    sensor_down(20, false, 0, 0);
+    still(SEC(1), 0, 0);
+    CHECK_INT(count_error(YG_ERROR_SENSOR_GLITCH), 2);
+}
+
+static void a_sleeping_sensor_presses_nothing(void) {
+    setup(true);
+    gyro_zero[0] = 3.0f;
+    gyro_zero[1] = -2.0f;
+    gyro_zero[2] = 1.0f;
+    still(SEC(10), 300, -85);
+    sensor_asleep(SEC(1), 300, -85);
+    still(SEC(30), 300, -85);
+    CHECK_INT(fake.presses, 0);
+    CHECK_INT(count_records(YG_REC_MOTION), 0);
+}
+
+static void a_sensor_asleep_at_power_on_does_not_fall_back(void) {
+    /* One write failed while configuring it, so it sleeps until it is woken. */
+    setup(true);
+    sensor_asleep(SEC(1), 300, -85);
+    still(SEC(30), 300, -85);
+    CHECK_INT(fake.presses, 0);
+    CHECK_INT(count_error(YG_ERROR_SENSOR_GRAVITY), 0);
+}
+
+static void a_sensor_that_stays_asleep_counts_as_failed(void) {
+    setup(true);
+    still(SEC(3), 0, 0);
+    sensor_asleep(SEC(6), 0, 0);
+    CHECK_INT(count_error(YG_ERROR_SENSOR_READS), 1);
+    CHECK_INT(fake.last_led, YG_LED_SENSOR_FAILED);
+}
+
+static void the_driver_leaving_after_a_fallback_press_still_presses(void) {
+    setup(true);
+    still(SEC(60), 300, -85);
+    sensor_down(SEC(6), false, 300, -85);
+    CHECK_INT(fake.presses, 1);
+    still(SEC(300), 300, -85);
+    CHECK_INT(fake.presses, 1);
+    pull_out(SEC(2), 300, -85);
+    CHECK_INT(fake.presses, 2);
+    const yg_record_t *r = last_record(YG_REC_REARM);
+    CHECK(r != NULL);
+    if (r != NULL) CHECK_INT(r->payload[0], YG_REARM_MOVED);
 }
 
 static void a_fallback_press_stays_single_after_the_sensor_recovers(void) {
@@ -312,7 +403,8 @@ static void sensor_recovery_is_logged_and_restores_the_rule(void) {
     still(SEC(3), 0, 0);
     sensor_down(SEC(6), false, 0, 0);
     still(SEC(6), 0, 0);
-    CHECK_INT(count_records(YG_REC_ERROR), 2);
+    CHECK_INT(count_error(YG_ERROR_SENSOR_READS), 1);
+    CHECK_INT(count_error(YG_ERROR_SENSOR_RECOVERED), 1);
     CHECK_INT(fake.last_led, YG_LED_OFF);
     yg_engine_on_advert(e, now, &GATE, -85, &ib);
     CHECK_INT(fake.presses, 0);
@@ -666,6 +758,10 @@ static void status_reports_the_live_state(void) {
     CHECK_HAS(buf, "\"debug\":false");
     CHECK_HAS(buf, "\"fallback\":false");
     CHECK_HAS(buf, "\"adverts_per_s\":");
+    CHECK_HAS(buf, "\"pair_saves\":0");
+    yg_engine_pair_set(e, now, GATE.addr, GATE.type);
+    CHECK(yg_engine_status_json(e, now, buf, sizeof(buf)) > 0);
+    CHECK_HAS(buf, "\"pair_saves\":1");
 }
 
 static void debug_view_shows_raw_sensor_values(void) {
@@ -694,6 +790,11 @@ int main(void) {
     RUN(sensor_failure_falls_back_to_the_threshold);
     RUN(absent_sensor_falls_back_at_boot);
     RUN(short_sensor_dropouts_never_press_a_parked_car);
+    RUN(short_outages_are_logged_with_their_length);
+    RUN(a_sleeping_sensor_presses_nothing);
+    RUN(a_sensor_asleep_at_power_on_does_not_fall_back);
+    RUN(a_sensor_that_stays_asleep_counts_as_failed);
+    RUN(the_driver_leaving_after_a_fallback_press_still_presses);
     RUN(a_fallback_press_stays_single_after_the_sensor_recovers);
     RUN(the_motion_estimate_starts_over_after_an_outage);
     RUN(set_point_here_forgets_the_old_beacon);

@@ -63,6 +63,7 @@ typedef enum
     YG_ERROR_SENSOR_STUCK,
     YG_ERROR_SENSOR_RECOVERED,
     YG_ERROR_QUEUE_DROPPED,
+    YG_ERROR_SENSOR_GLITCH,
 } yg_error_code_t;
 
 typedef enum

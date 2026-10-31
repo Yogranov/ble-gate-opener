@@ -28,6 +28,7 @@ typedef enum
     YG_REARM_NONE,
     YG_REARM_GONE,
     YG_REARM_STILL,
+    YG_REARM_MOVED,
 } yg_rearm_reason_t;
 
 typedef struct
@@ -38,7 +39,7 @@ typedef struct
     bool sensor_ok;
     bool has_motion;
     bool has_advert;
-    bool motion_unused;    /* Motion since the last press or the car coming to rest. */
+    bool motion_unused;    /* Motion since the last press or re-arm. */
     bool until_gone;       /* The last press came from the fixed threshold. */
     uint32_t last_motion;
     uint32_t last_advert;

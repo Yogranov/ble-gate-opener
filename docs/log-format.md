@@ -24,7 +24,7 @@ There is no clock across power cuts. To place trips in calendar time, use `time_
 | `first_heard` | `rssi` | First advert from the beacon in this trip |
 | `motion` | `cause` (`yaw` or `accel`), `mg`, `yaw` | Driving detected, at most once per 10 s |
 | `press` | `reason` (`auto`, `button`, `web`, `fallback`), `rssi`, `since_motion_ms`, `set_point` | Remote pressed |
-| `rearm` | `reason` (`gone` or `still`) | Ready to press again |
+| `rearm` | `reason` (`gone`, `still` or `moved`) | Ready to press again. `moved` follows a `fallback` press, once a working sensor sees the car move |
 | `hotspot` | `on`, `clients` | Hotspot or client count changed |
 | `pair` | `event` (`saved`, `timeout`, `forget`), `mac`, `type` | Pairing result |
 | `setting` | `key`, `value` | Setting changed. A password shows as `changed` |
@@ -38,7 +38,7 @@ There is no clock across power cuts. To place trips in calendar time, use `time_
 
 `reset` is the ESP-IDF `esp_reset_reason_t` value: 1 power-on, 3 software restart, 4 panic, 5 interrupt watchdog, 6 task watchdog, 7 other watchdog, 9 brownout.
 
-Error `code` values: `sensor_absent`, `sensor_gravity`, `sensor_reads`, `sensor_stuck`, `sensor_recovered`, `queue_dropped`.
+Error `code` values: `sensor_absent`, `sensor_gravity`, `sensor_reads`, `sensor_stuck`, `sensor_recovered`, `queue_dropped`, and `sensor_glitch`, an outage too short to count as a failure, with its length in ms as `detail`, at most once per 10 s. Look for these around false motion.
 
 ## Trace samples
 

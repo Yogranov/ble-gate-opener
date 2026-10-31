@@ -87,6 +87,10 @@ static void small_records(void) {
     CHECK_HAS(json, "\"k\":\"rearm\"");
     CHECK_HAS(json, "\"reason\":\"still\"");
 
+    yg_rec_rearm(&r, 1, 2, YG_REARM_MOVED);
+    round_trip();
+    CHECK_HAS(json, "\"reason\":\"moved\"");
+
     yg_rec_hotspot(&r, 1, 2, true, 1);
     round_trip();
     CHECK_HAS(json, "\"k\":\"hotspot\"");
@@ -116,6 +120,11 @@ static void small_records(void) {
     CHECK_HAS(json, "\"k\":\"error\"");
     CHECK_HAS(json, "\"code\":\"sensor_stuck\"");
     CHECK_HAS(json, "\"detail\":9");
+
+    yg_rec_error(&r, 1, 2, YG_ERROR_SENSOR_GLITCH, 400);
+    round_trip();
+    CHECK_HAS(json, "\"code\":\"sensor_glitch\"");
+    CHECK_HAS(json, "\"detail\":400");
 
     yg_rec_temp(&r, 1, 2, 31.5f);
     round_trip();

@@ -116,6 +116,11 @@ typedef struct
     float temp_c;
     bool temp_logged;
     uint32_t last_temp_log;
+    bool sensor_out;
+    uint32_t sensor_out_since;
+    bool glitch_logged;
+    uint32_t last_glitch_log;
+    uint16_t pair_saves;
     uint32_t recent_time[YG_ENGINE_RECENT_ADVERTS];
     int8_t recent_rssi[YG_ENGINE_RECENT_ADVERTS];
     uint8_t recent_head;

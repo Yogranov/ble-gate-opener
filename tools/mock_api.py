@@ -99,7 +99,7 @@ def status():
         "rssi": rssi, "rssi_age_ms": 240, "adverts_per_s": random.randint(2, 4), "moved_recently": False,
         "calibrated": True, "tilting": False, "motion_mg": 3, "motion_yaw": 0.2, "sensor": "ok", "sensor_err": "none",
         "sensor_id": 104, "temp_c": 36.5, "hotspot_on": True, "hotspot_left_s": max(0, 300 - int(now - START)),
-        "clients": 1, "pair_mode": state["pair_mode"], "debug": True, "fallback": False, "capturing": False,
+        "clients": 1, "pair_mode": state["pair_mode"], "pair_saves": 0, "debug": True, "fallback": False, "capturing": False,
     }
 
 

@@ -51,12 +51,25 @@ f.onload = async () => {
     await wait(1200);
     out.beacon_list_empties_after_scan = q("#pList").textContent === "";
 
-    js('renderPairing({pair_mode:"auto",paired:true,beacon:"old"})');
-    js('renderPairing({pair_mode:"idle",paired:true,beacon:"old"})');
+    const beacon = (mac, rssi) => ({ mac, type: 1, rssi, uuid: "u", major: 1, minor: 1 });
+    js("renderCandidates")({ candidates: [beacon("aa", -60), beacon("bb", -70)] });
+    const lower = doc.querySelectorAll(".cand")[1], topBefore = lower.getBoundingClientRect().top;
+    js("renderCandidates")({ candidates: [beacon("bb", -71)] });
+    out.a_row_above_going_quiet_does_not_move_the_rows = lower.getBoundingClientRect().top === topBefore;
+    out.a_quiet_row_says_so = doc.querySelectorAll(".cand")[0].classList.contains("stale");
+    js("renderCandidates")({ candidates: [beacon("aa", -62), beacon("bb", -71)] });
+    out.a_row_coming_back_is_normal_again = !doc.querySelectorAll(".cand")[0].classList.contains("stale");
+    js("clearCandidates")();
+
+    js('renderPairing({pair_mode:"auto",paired:true,beacon:"old",pair_saves:1})');
+    js('renderPairing({pair_mode:"idle",paired:true,beacon:"old",pair_saves:1})');
     out.pairing_timeout_says_no_beacon = q("#toast").textContent === "No beacon saved";
-    js('renderPairing({pair_mode:"auto",paired:true,beacon:"old"})');
-    js('renderPairing({pair_mode:"idle",paired:true,beacon:"new"})');
+    js('renderPairing({pair_mode:"auto",paired:true,beacon:"old",pair_saves:1})');
+    js('renderPairing({pair_mode:"idle",paired:true,beacon:"new",pair_saves:2})');
     out.pairing_success_says_saved = q("#toast").textContent === "Beacon saved";
+    js('renderPairing({pair_mode:"auto",paired:true,beacon:"old",pair_saves:2})');
+    js('renderPairing({pair_mode:"idle",paired:true,beacon:"old",pair_saves:3})');
+    out.pairing_the_same_beacon_again_says_saved = q("#toast").textContent === "Beacon saved";
 
     win.location.hash = "settings"; await js('showTab("settings"); loadSettings()');
     const num = key => [...doc.querySelectorAll(".field")].find(x => x.textContent.includes(key)).querySelector("input[type=number]");
@@ -89,7 +102,16 @@ f.onload = async () => {
     const realFetch = win.fetch;
     win.fetch = (path, options) => new Promise((_, reject) => options.signal.addEventListener("abort", () => reject(new Error("timed out"))));
     out.polling_gives_up_when_nothing_answers = await js('api("/api/status", null, 200)').then(() => false, e => e.message === "timed out");
+    win.fetch = () => Promise.reject(new Error("no answer"));
+    js("clearInterval")(0);
+    await js("poll()");
+    out.one_slow_answer_is_not_a_lost_connection = q("#lost").hidden;
+    await js("poll()");
+    await js("poll()");
+    out.repeated_failures_are_a_lost_connection = !q("#lost").hidden;
     win.fetch = realFetch;
+    await js("poll()");
+    out.an_answer_clears_the_warning = q("#lost").hidden;
 
     // Trip numbers 20 to 11 hold nothing, which must not hide the older ones.
     const pages = { "": { trips: [], next_before: 11 }, "11": { trips: [{ trip: 9, duration_ms: 1000, presses: 0, warning_ms: null, peak: null, temp_c: null, errors: 0, rating: null }], next_before: 0 } };

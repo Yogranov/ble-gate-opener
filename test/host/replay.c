@@ -39,7 +39,8 @@ static void op_log(void *ctx, const yg_record_t *r) {
         printf("PRESS,%u,%s\n", (unsigned)r->uptime_ms, yg_press_reason_name(r->payload[0]));
         break;
     case YG_REC_REARM:
-        printf("REARM,%u,%s\n", (unsigned)r->uptime_ms, r->payload[0] == YG_REARM_GONE ? "gone" : "still");
+        printf("REARM,%u,%s\n", (unsigned)r->uptime_ms,
+               r->payload[0] == YG_REARM_GONE ? "gone" : r->payload[0] == YG_REARM_STILL ? "still" : "moved");
         break;
     case YG_REC_MOTION:
         printf("MOTION,%u,%s\n", (unsigned)r->uptime_ms, r->payload[0] == YG_MOTION_YAW ? "yaw" : "accel");

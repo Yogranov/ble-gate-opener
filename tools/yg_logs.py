@@ -277,7 +277,7 @@ def setting_events(records, trip, overridden):
 def sensor_events(records, trip):
     events = []
     for r in records:
-        if r.get("trip") == trip and r.get("k") == "error" and r["code"].startswith("sensor_"):
+        if r.get("trip") == trip and r.get("k") == "error" and r["code"].startswith("sensor_") and r["code"] != "sensor_glitch":
             events.append((r["t"], f"{'R' if r['code'] == 'sensor_recovered' else 'F'},{r['t']}"))
     return events
 

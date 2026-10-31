@@ -567,9 +567,11 @@ static esp_err_t post_reboot(httpd_req_t *req) {
 }
 
 static esp_err_t post_factory_reset(httpd_req_t *req) {
-    /* Settings first: erasing full logs takes much longer. */
+    /* Settings first, as erasing full logs takes a long time, and again after, as a
+     * setting saved in the meantime writes them all back. */
     yg_nvs_factory_reset();
     yg_log_clear();
+    yg_nvs_factory_reset();
     send_ok(req);
     schedule_restart();
     return ESP_OK;

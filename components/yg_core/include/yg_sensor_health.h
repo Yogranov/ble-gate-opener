@@ -28,6 +28,7 @@ typedef struct
     yg_sensor_err_t err;
     uint16_t start_n;
     float start_sum;
+    uint32_t started;
     uint32_t last_good;
     bool has_last;
     yg_imu_sample_t last;

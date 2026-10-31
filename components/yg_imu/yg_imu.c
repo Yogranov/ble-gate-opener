@@ -14,6 +14,7 @@
 #define REG_CONFIG     0x1A
 #define REG_GYRO_CFG   0x1B
 #define REG_ACCEL_CFG  0x1C
+#define REG_ACCEL_CFG2 0x1D
 #define REG_ACCEL_OUT  0x3B
 #define REG_PWR_MGMT_1 0x6B
 #define REG_WHO_AM_I   0x75
@@ -21,8 +22,8 @@
 #define GYRO_LSB_PER_DPS 131.0f     /* 250 deg/s range */
 #define SAMPLE_PERIOD_MS 20
 #define WAKE_MS          100         /* The sensor's readings are not good before this. */
-#define REINIT_EVERY_FAILS 50
-#define REINIT_EVERY_FROZEN 50       /* A sensor reset by a power glitch sleeps, and repeats itself. */
+#define REINIT_AFTER_FAILS 5         /* A run this long may have been a power glitch. */
+#define REINIT_AFTER_FROZEN 50       /* A sensor reset by a power glitch sleeps, and repeats itself. */
 #define SEARCH_EVERY_SAMPLES 10      /* Looks for a missing sensor 5 times a second. */
 #define RAW_FRAME_SIZE   14
 
@@ -47,6 +48,8 @@ static esp_err_t configure(void) {
     if (err == ESP_OK) err = write_reg(REG_CONFIG, 5);
     if (err == ESP_OK) err = write_reg(REG_GYRO_CFG, 0);
     if (err == ESP_OK) err = write_reg(REG_ACCEL_CFG, 0);
+    /* MPU-6500 clones filter the accelerometer separately. Unused on a real MPU6050. */
+    if (err == ESP_OK) err = write_reg(REG_ACCEL_CFG2, 5);
     return err;
 }
 
@@ -73,7 +76,6 @@ static bool find_sensor(void) {
     i2c_master_transmit_receive(s_dev, &reg, 1, &id, 1, I2C_TIMEOUT_MS);
     s_id = id;
     ESP_LOGI(TAG, "Sensor at 0x%02x, WHO_AM_I 0x%02x", (unsigned)address, id);
-    configure();
     return true;
 }
 
@@ -109,10 +111,10 @@ static int16_t be16(const uint8_t *p) {
 
 static void imu_task(void *arg) {
     (void)arg;
-    vTaskDelay(pdMS_TO_TICKS(WAKE_MS));
     uint32_t searches = 0;
     uint32_t fails = 0;
     uint32_t frozen = 0;
+    bool needs_config = true;
     uint8_t last[RAW_FRAME_SIZE] = { 0 };
     TickType_t wake = xTaskGetTickCount();
     for (;;) {
@@ -123,8 +125,15 @@ static void imu_task(void *arg) {
             }
             if (s_bus == NULL || !find_sensor()) {
                 s_on_failed(true);
+            }
+            continue;
+        }
+        if (needs_config) {
+            if (configure() != ESP_OK) {
+                s_on_failed(false);
                 continue;
             }
+            needs_config = false;
             vTaskDelay(pdMS_TO_TICKS(WAKE_MS));
             wake = xTaskGetTickCount();
             continue;
@@ -132,21 +141,23 @@ static void imu_task(void *arg) {
         const uint8_t reg = REG_ACCEL_OUT;
         uint8_t data[RAW_FRAME_SIZE];
         if (i2c_master_transmit_receive(s_dev, &reg, 1, data, sizeof(data), I2C_TIMEOUT_MS) != ESP_OK) {
-            fails++;
             s_on_failed(false);
-            if (fails % REINIT_EVERY_FAILS == 0) {
-                configure();
+            if (++fails >= REINIT_AFTER_FAILS) {
+                needs_config = true;
+                fails = 0;
             }
             continue;
         }
-        /* Whatever broke the reads may have reset the sensor to its sleeping defaults. */
+        /* Whatever broke the reads may have reset the sensor to its sleeping defaults. A
+         * short run needs no wait, as it has most likely not slept. */
         if (fails > 0) {
             configure();
             fails = 0;
         }
         if (memcmp(data, last, sizeof(data)) == 0) {
-            if (++frozen % REINIT_EVERY_FROZEN == 0) {
-                configure();
+            if (++frozen >= REINIT_AFTER_FROZEN) {
+                needs_config = true;
+                frozen = 0;
             }
         } else {
             frozen = 0;
@@ -167,5 +178,5 @@ static void imu_task(void *arg) {
 void yg_imu_start(yg_imu_sample_cb_t on_sample, yg_imu_failed_cb_t on_failed) {
     s_on_sample = on_sample;
     s_on_failed = on_failed;
-    xTaskCreate(imu_task, "yg_imu", 3072, NULL, 6, NULL);
+    xTaskCreate(imu_task, "yg_imu", 4096, NULL, 6, NULL);
 }

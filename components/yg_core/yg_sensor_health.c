@@ -26,6 +26,7 @@ static void fail(yg_sensor_health_t *h, yg_sensor_err_t err) {
 void yg_sensor_health_init(yg_sensor_health_t *h, uint32_t now) {
     memset(h, 0, sizeof(*h));
     h->state = YG_SENSOR_STARTING;
+    h->started = now;
     h->last_good = now;
 }
 
@@ -49,16 +50,24 @@ void yg_sensor_health_on_sample(yg_sensor_health_t *h, uint32_t now, const yg_im
             float mean = h->start_sum / (float)h->start_n;
             if (fabsf(mean - 1.0f) <= GRAVITY_TOLERANCE) {
                 h->state = YG_SENSOR_OK;
-            } else {
+            } else if (now - h->started >= SILENT_MS) {
                 fail(h, YG_SENSOR_ERR_GRAVITY);
+            } else {
+                h->start_sum = 0;
+                h->start_n = 0;
             }
         }
         return;
     }
 
     if (h->state == YG_SENSOR_FAILED) {
-        bool sane = fabsf(magnitude(s) - 1.0f) <= GRAVITY_TOLERANCE;
-        h->good_run = changed && sane ? (uint16_t)(h->good_run + 1) : 0;
+        /* A repeated sample says nothing either way: the sensor's clock is not the poller's,
+         * so a slow one repeats itself now and then. A frozen sensor never gets this far. */
+        if (fabsf(magnitude(s) - 1.0f) > GRAVITY_TOLERANCE) {
+            h->good_run = 0;
+        } else if (changed) {
+            h->good_run++;
+        }
         if (h->good_run >= RECOVERY_RUN) {
             h->state = YG_SENSOR_OK;
             h->err = YG_SENSOR_ERR_NONE;

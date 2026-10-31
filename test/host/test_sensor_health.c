@@ -39,17 +39,55 @@ static void good_start_becomes_ok(void) {
     CHECK_INT(h.err, YG_SENSOR_ERR_NONE);
 }
 
-static void wrong_gravity_at_start_fails(void) {
+static void wrong_gravity_at_start_fails_only_if_it_lasts(void) {
     setup();
-    feed(0.5f, 30);
+    feed(0.5f, 240);
+    CHECK_INT(h.state, YG_SENSOR_STARTING);
+    feed(0.5f, 40);
     CHECK_INT(h.state, YG_SENSOR_FAILED);
     CHECK_INT(h.err, YG_SENSOR_ERR_GRAVITY);
     setup();
-    feed(1.5f, 30);
+    feed(1.5f, 280);
     CHECK_INT(h.err, YG_SENSOR_ERR_GRAVITY);
     setup();
     feed(0.75f, 30);
     CHECK_INT(h.state, YG_SENSOR_OK);
+}
+
+static void wrong_gravity_that_comes_right_is_fine(void) {
+    /* For instance a sensor that had not woken up yet. */
+    setup();
+    feed(0.2f, 60);
+    feed(1.0f, 50);
+    CHECK_INT(h.state, YG_SENSOR_OK);
+    CHECK_INT(h.err, YG_SENSOR_ERR_NONE);
+}
+
+static void repeated_samples_do_not_stop_recovery(void) {
+    /* The sensor's clock is not the poller's: a slow one repeats a sample now and then. */
+    setup();
+    feed(1.0f, 30);
+    reads_fail(5100, false);
+    CHECK_INT(h.state, YG_SENSOR_FAILED);
+    yg_imu_sample_t s = sample(1.0f);
+    for (int i = 0; i < 400 && h.state == YG_SENSOR_FAILED; i++) {
+        if (i % 50 != 0) s = sample(1.0f);
+        yg_sensor_health_on_sample(&h, now, &s);
+        now += 20;
+    }
+    CHECK_INT(h.state, YG_SENSOR_OK);
+}
+
+static void a_frozen_sensor_does_not_recover(void) {
+    setup();
+    feed(1.0f, 30);
+    reads_fail(5100, false);
+    yg_imu_sample_t frozen = sample(1.0f);
+    for (int i = 0; i < 1000; i++) {
+        yg_sensor_health_on_sample(&h, now, &frozen);
+        now += 20;
+        CHECK_INT(h.state, YG_SENSOR_FAILED);
+    }
 }
 
 static void short_dropouts_change_nothing(void) {
@@ -130,7 +168,10 @@ static void sensor_found_soon_after_power_on_is_fine(void) {
 
 int main(void) {
     RUN(good_start_becomes_ok);
-    RUN(wrong_gravity_at_start_fails);
+    RUN(wrong_gravity_at_start_fails_only_if_it_lasts);
+    RUN(wrong_gravity_that_comes_right_is_fine);
+    RUN(repeated_samples_do_not_stop_recovery);
+    RUN(a_frozen_sensor_does_not_recover);
     RUN(short_dropouts_change_nothing);
     RUN(five_seconds_with_no_good_read_fails);
     RUN(identical_samples_for_five_seconds_fail);

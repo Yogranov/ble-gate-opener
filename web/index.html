@@ -78,6 +78,7 @@ input.changed, select.changed { border-color: var(--accent); box-shadow: 0 0 0 1
 .cand:first-child { border-top: 0; }
 .cand code { font-size: 14.5px; }
 .cand small { display: block; color: var(--muted); font-size: 12.5px; overflow-wrap: anywhere; }
+.cand.stale { opacity: .55; }
 code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 #toast { position: fixed; left: 16px; right: 16px; bottom: 76px; z-index: 5; max-width: 560px; margin: 0 auto; padding: 11px 14px; border-radius: 10px; background: var(--text); color: var(--bg); font-size: 14.5px; opacity: 0; transition: opacity .15s; pointer-events: none; }
 #toast.show { opacity: 1; }
@@ -91,7 +92,7 @@ pre { margin: 8px 0 0; font-size: 12.5px; white-space: pre-wrap; overflow-wrap: 
 <body>
 <header><b>YogiGate</b><span id="sub">Connecting</span></header>
 <main>
-  <div id="lost" class="banner bad" hidden>Not connected to the unit. Check that this phone is on its hotspot. The hotspot turns off when the car moves or its time runs out.</div>
+  <div id="lost" class="banner bad" hidden>The unit is not answering. It may be busy with a download, or this phone may have left its hotspot, which turns off when the car moves or its time runs out.</div>
   <div id="warn" class="banner" hidden></div>
 
   <section id="status">
@@ -297,8 +298,8 @@ function chart(canvas, opts) {
 }
 
 /* Status */
-let st = null, livePoints = [], pollBusy = false, pollPaused = 0;
-const POLL_TIMEOUT_MS = 3000;
+let st = null, livePoints = [], pollBusy = false, pollPaused = 0, pollFails = 0;
+const POLL_TIMEOUT_MS = 3000, POLL_FAILS_TO_WARN = 3;
 const STATE = { armed: "Armed", pressing: "Pressing", hold: "Pressed", unpaired: "No beacon" };
 const dbm = v => v === null || v === undefined ? "-" : v === "any" ? "Any" : v + " dBm";
 const clock = s => s >= 60 ? Math.floor(s / 60) + "m " + (s % 60) + "s" : s + "s";
@@ -366,19 +367,23 @@ async function poll() {
   pollBusy = true;
   try {
     render(await api("/api/status", null, POLL_TIMEOUT_MS));
+    pollFails = 0;
     $("lost").hidden = true;
     if (tab === "beacon" && st.pair_mode === "list") renderCandidates(await api("/api/pair/candidates", null, POLL_TIMEOUT_MS));
     if (tab === "system" && st.debug) $("dLive").textContent = JSON.stringify(await api("/api/debug/live", null, POLL_TIMEOUT_MS));
   } catch (e) {
-    $("lost").hidden = false;
-    $("sub").textContent = "Not connected";
+    /* One slow answer is not a lost connection: a download holds up the one server task. */
+    if (++pollFails >= POLL_FAILS_TO_WARN) {
+      $("lost").hidden = false;
+      $("sub").textContent = "Not answering";
+    }
   }
   pollBusy = false;
 }
 $("press").addEventListener("click", act(() => post("/api/press"), "Pressing the remote"));
 
 /* Beacon */
-let lastPairMode = "idle", pairStartBeacon = null;
+let lastPairMode = "idle", pairStartSaves = 0;
 const candRows = new Map();
 function clearCandidates() { candRows.clear(); $("pList").textContent = ""; }
 function renderPairing(s) {
@@ -387,17 +392,20 @@ function renderPairing(s) {
   $("pScan").textContent = list ? "Stop" : "Scan";
   $("pAutoState").hidden = !auto;
   if (auto) $("pAutoState").textContent = "Listening. Hold the beacon against the unit.";
-  if (auto && lastPairMode !== "auto") pairStartBeacon = s.beacon;
-  if (lastPairMode === "auto" && !auto) toast(s.beacon !== pairStartBeacon ? "Beacon saved" : "No beacon saved", s.beacon === pairStartBeacon);
+  if (auto && lastPairMode !== "auto") pairStartSaves = s.pair_saves;
+  if (lastPairMode === "auto" && !auto) toast(s.pair_saves !== pairStartSaves ? "Beacon saved" : "No beacon saved", s.pair_saves === pairStartSaves);
   if (!list && lastPairMode === "list") clearCandidates();
   lastPairMode = s.pair_mode;
 }
-/* Rows stay where they first appeared, because they sit under the user's finger. */
+/* Rows stay where they first appeared until the scan ends, because they sit under the
+ * user's finger. One that goes quiet stays, greyed, and can still be chosen. */
 function renderCandidates(data) {
   const list = $("pList");
   const heard = new Set(data.candidates.map(c => c.mac));
-  candRows.forEach((row, mac) => { if (!heard.has(mac)) { row.el.remove(); candRows.delete(mac); } });
-  if (!data.candidates.length) {
+  candRows.forEach((row, mac) => {
+    if (!heard.has(mac)) { row.el.classList.add("stale"); row.signal.textContent = "Not heard now"; }
+  });
+  if (!data.candidates.length && !candRows.size) {
     if (!list.firstChild) list.append(el("p", "muted", "Listening. Nothing heard yet."));
     return;
   }
@@ -414,6 +422,7 @@ function renderCandidates(data) {
       candRows.set(c.mac, row);
       list.append(row.el);
     }
+    row.el.classList.remove("stale");
     row.signal.textContent = c.rssi + " dBm · major " + c.major + ", minor " + c.minor;
   });
 }

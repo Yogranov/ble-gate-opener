@@ -314,6 +314,7 @@ const char *yg_error_name(uint8_t code) {
     case YG_ERROR_SENSOR_STUCK: return "sensor_stuck";
     case YG_ERROR_SENSOR_RECOVERED: return "sensor_recovered";
     case YG_ERROR_QUEUE_DROPPED: return "queue_dropped";
+    case YG_ERROR_SENSOR_GLITCH: return "sensor_glitch";
     default: return "unknown";
     }
 }
@@ -337,6 +338,15 @@ static const char *pair_event_name(uint8_t event) {
     case YG_PAIR_EVENT_SAVED: return "saved";
     case YG_PAIR_EVENT_TIMEOUT: return "timeout";
     case YG_PAIR_EVENT_FORGET: return "forget";
+    default: return "unknown";
+    }
+}
+
+static const char *rearm_name(uint8_t reason) {
+    switch (reason) {
+    case YG_REARM_GONE: return "gone";
+    case YG_REARM_STILL: return "still";
+    case YG_REARM_MOVED: return "moved";
     default: return "unknown";
     }
 }
@@ -411,7 +421,7 @@ static void json_body(yg_jw_t *w, const yg_record_t *r) {
         json_set_point(w, (int8_t)p[6]);
         break;
     case YG_REC_REARM:
-        yg_jw_raw(w, "\"k\":\"rearm\",\"reason\":\"%s\"", p[0] == YG_REARM_GONE ? "gone" : "still");
+        yg_jw_raw(w, "\"k\":\"rearm\",\"reason\":\"%s\"", rearm_name(p[0]));
         break;
     case YG_REC_HOTSPOT:
         yg_jw_raw(w, "\"k\":\"hotspot\",\"on\":%s,\"clients\":%u", p[0] ? "true" : "false", p[1]);
