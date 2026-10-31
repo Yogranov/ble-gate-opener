@@ -8,24 +8,29 @@ It presses **once, when the car has moved in the last minute and can hear the be
 
 ## Hardware
 
-- ESP32-C6 devkit (ESP32-C6-DevKitC-1 style)
+- MuseLab ESP32-C6 board with two USB-C ports. The ESP32-C6-DevKitC-1 has the same GPIOs, but a different size and pin order
 - MPU6050 module
-- MOSFET across the remote's button, with a resistor from gate to GND
+- P30N06LE MOSFET across the remote's button, with 220 Ω in series with the gate and 10 kΩ from gate to GND. IRLB8743 also works. IRF520 and IRF540N are not suitable, because 3.3 V may not turn them on
 - A BLE beacon, normally an iBeacon
-- Optional: a buzzer and an external button
+- Optional: an active buzzer and an external button
 
-| Function | GPIO | Header | Notes |
+The hole-by-hole layout for a 50 × 70 mm matrix board is in [hardware/](hardware/). The holes below are from that layout.
+
+| Function | GPIO | Hole | Notes |
 |---|---|---|---|
-| Remote MOSFET gate | 10 | J1-10 | **Needs a 10-100 kΩ resistor from gate to GND** |
-| Buzzer (optional) | 11 | J1-11 | Off by default |
-| MPU6050 SDA | 2 | J1-12 | |
-| MPU6050 SCL | 3 | J1-13 | |
-| MPU6050 VCC | 3V3 | J1-1 | |
-| MPU6050 GND | GND | J1-15 | |
-| Button | 9 | on-board BOOT | An external one can be added at J3-11 to GND |
+| Remote MOSFET gate | 10 | Q11 | **Through 220 Ω, with 10 kΩ from gate to GND** |
+| Buzzer (optional) | 11 | Q12 | Active buzzer, + to the pin and − to GND. Must draw under about 20 mA at 3.3 V. Off by default |
+| MPU6050 SDA | 2 | G2 | |
+| MPU6050 SCL | 3 | G3 | |
+| MPU6050 VCC | 3V3 | Q2 | |
+| MPU6050 GND | GND | G1 | |
+| Button | 9 | on-board BOOT | |
+| External button (optional) | 7 | Q7 | To GND. Works the same as the on-board button |
 | RGB LED | 8 | on board | |
 
-Do not use GPIO18-23 for the MOSFET: on the C6 they are pulled up during reset, which could press the remote at every power-on. Pins can be changed in `idf.py menuconfig`, under YogiGate pins.
+Do not use GPIO18-23 for the MOSFET: on the C6 they are pulled up during reset, which could press the remote at every power-on. Do not put an external button on GPIO9: held down at power-on, it stops the unit starting. Pins can be changed in `idf.py menuconfig`, under YogiGate pins.
+
+Keep the remote on its own battery. Its only link to the unit is then through the MOSFET, so car voltage spikes cannot reach it. The firmware cannot see a dead remote battery, so replace it every year.
 
 Fix the unit so it cannot slide or tumble. Any orientation works.
 
@@ -45,7 +50,7 @@ idf.py build
 idf.py -p COM3 flash
 ```
 
-Connect through the C6's native USB port for the console.
+Connect through the C6's native USB port, marked ESP32C6, for the console.
 
 ## First setup
 
@@ -129,3 +134,4 @@ Every POST to the API needs the header `X-YogiGate: 1`, which stops a page on an
 | `web/index.html` | The page, embedded gzipped into the firmware |
 | `test/host`, `test/bench` | Logic tests and on-device checks |
 | `tools` | Serial helper, log tools, mock API |
+| `hardware` | Board layout, part choices, and details of the real parts |

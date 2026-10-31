@@ -58,22 +58,25 @@ Chosen over the three other boards the owner has. The hearing limit is the datas
 | S3 devkit | -97.5 dBm | No hearing advantage over the C6, and modules with R8 in the part number are rated to only 65 °C |
 | D1 mini (ESP32) | -93 dBm | Weakest hearing and BLE 4.2. It stays in the car on the old firmware until step 3 of the rollout, as the fallback |
 
-The owner's board reads as ESP32-C6 (QFN40) revision 0.2 with 16 MB of flash. It keeps the 8 MB layout, per section 9.3.
+The owner's board reads as ESP32-C6 (QFN40) revision 0.2 with 16 MB of flash. It keeps the 8 MB layout, per section 9.3. It is marked MUSE LAB, and has the same GPIOs as the official board but a different size and pin order.
 
 ### 4.2 Wiring
 
-| Function | GPIO | Header | Notes |
+| Function | GPIO | Hole | Notes |
 |---|---|---|---|
-| Remote MOSFET gate | 10 | J1-10 | **Requires a 10-100 kΩ resistor from gate to GND** |
-| Buzzer (optional) | 11 | J1-11 | Off by default, safe to leave unfitted |
-| MPU6050 SDA | 2 | J1-12 | The module has its own I²C pull-ups |
-| MPU6050 SCL | 3 | J1-13 | |
-| MPU6050 VCC | 3V3 | J1-1 | |
-| MPU6050 GND | GND | J1-15 | |
-| Button | 9 | on-board BOOT | An external button can be added at J3-11 to GND |
+| Remote MOSFET gate | 10 | Q11 | **Through 220 Ω, with 10 kΩ from gate to GND** |
+| Buzzer (optional) | 11 | Q12 | Active buzzer, + to the pin and − to GND. Off by default, safe to leave unfitted |
+| MPU6050 SDA | 2 | G2 | The module has its own I²C pull-ups |
+| MPU6050 SCL | 3 | G3 | |
+| MPU6050 VCC | 3V3 | Q2 | |
+| MPU6050 GND | GND | G1 | |
+| Button | 9 | on-board BOOT | |
+| External button (optional) | 7 | Q7 | To GND. Works the same as the on-board button |
 | RGB LED | 8 | on board | Addressable, driven with `espressif/led_strip` |
 
 MPU6050 AD0 stays unconnected and INT is unused. Firmware probes addresses `0x68` and `0x69`.
+
+Part choices and the hole-by-hole layout are in [hardware/](../../../hardware/), which is also where the holes above come from.
 
 **Why GPIO10 and not the current GPIO18.** On the C6, GPIO18-23 have their internal pull-up enabled during reset. On the MOSFET, that could press the remote at every ignition. GPIO10 has no reset pull and is not a strapping pin. The resistor is still required, because a floating gate is also unsafe.
 
