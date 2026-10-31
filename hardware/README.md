@@ -22,7 +22,7 @@ To build it, open [board-layout.html](board-layout.html) in a browser. It needs 
 | P30N06LE MOSFET | | Have |
 | BFT remote, 2 buttons, 12 V 23A battery | 64 × 40 × 17 | Have |
 | Active buzzer | About 12 across | Have |
-| Momentary panel button | 16 across, 25 long | Have |
+| Momentary panel button | 16 across, 25 long, 20 pressed | Have |
 | 220 Ω and 10 kΩ resistors, 1 of each | | Needed |
 | 15-pin female headers | | 2 needed |
 | 15-pin male headers, for the C6 | | 2 needed |
@@ -49,3 +49,4 @@ Remove each of these once it has been tested.
 - **Remote range:** being against the board could shorten it. If the gate does not open reliably, the remote goes on longer wires, off the board.
 - **Buzzer:** its current and loudness at 3.3 V are unmeasured, and its size is estimated from a photo. If it fails, it needs a MOSFET and 5 V, and the layout changes.
 - **C6 position:** how far the pins sit from each end of the C6 comes from a photo, so the distances at each edge could be off by about 1 mm.
+- **Assumed sizes:** [design.md](design.md#details-of-the-real-parts) lists every size that was assumed rather than measured. Measure those parts before designing a case or drilling the button's hole.

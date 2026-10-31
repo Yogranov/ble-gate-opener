@@ -226,7 +226,7 @@ function View(id, mirrored) {
 
 function base(v) {
   v.rect(1 - MX, 1 - MY, 18 + MX, 24 + MY, "board");
-  for (const [c, r] of [[1 - .75, 1 - 1.5], [18 + .75, 1 - 1.5], [1 - .75, 24 + 1.5], [18 + .75, 24 + 1.5]]) v.circle(c, r, 4.5, "mount");
+  for (const [c, r] of [[1 - .55, 1 - 1.5], [18 + .55, 1 - 1.5], [1 - .55, 24 + 1.5], [18 + .55, 24 + 1.5]]) v.circle(c, r, 7.9, "mount");
   for (let c = 1; c <= 18; c++) {
     for (let r = 1; r <= 24; r++) v.circle(c, r, 2.6, "hole");
     v.tx(c, -2, String(c).padStart(2, "0"), "t", "middle");

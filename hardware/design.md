@@ -43,7 +43,35 @@ The layout depends on these. They were read from close-up photos of the owner's 
 
 **Buzzer.** Round, black, with two pins on the underside. The owner has active and passive ones, and this layout needs an active one.
 
-**Matrix board.** 18 columns and 24 rows of holes at 2.54 mm, with a mounting hole at each corner. The first hole is 3.41 mm in from a long edge and 5.79 mm in from a short edge.
+**Matrix board.** 18 columns and 24 rows of holes at 2.54 mm, with a mounting hole at each corner. The first hole is 3.41 mm in from a long edge and 5.79 mm in from a short edge. A row of long oval pads, one per column, runs along each short edge. The long edges have only printed labels.
+
+**Sizes assumed, not measured.** These come from typical parts or from estimates on the photos, so measure the real parts before relying on them for a case or drilling a hole. The owner measured the button as 16 across, 25 long and 20 pressed. This table assumes that 16 is its widest part, and that 25 and 20 leave out the terminals.
+
+| Item | Size (mm) |
+|---|---|
+| Matrix board thickness | 1.6 |
+| Female header height | 8.5 |
+| Male header plastic, between the female header and the C6 | 2.5 |
+| C6 board thickness | 1.6 |
+| C6 module and USB ports, above its board | 3.2 |
+| MPU6050 height above the matrix board, including pin tips | 5.5 |
+| MOSFET height, lying flat | 5 |
+| Buzzer height | 9.5 |
+| Resistor body, 220 Ω and 10 kΩ | 6.3 long, 2.5 across |
+| USB plug thickness | 7 |
+| USB plug width | 12 |
+| USB plug length, out of the port | 30 |
+| Foam tape thickness | 3 |
+| Matrix board corner holes | 2 across, with centres 2 in from each edge, so 46 × 66 apart |
+| MPU6050 mounting holes | 3.3 across, 16.5 apart, with centres 2 in from the far edge |
+| Buzzer pin spacing | 7.6 |
+| Button threaded body, and the panel hole for it | 12 across |
+| Button nut | 16 across at its widest, 3 thick |
+| Button flange | 15 across, 2 thick |
+| Button cap above the flange | 5 |
+| Button body behind the flange | 20, plus 4.5 for the terminals |
+
+The stack is about 38 mm high: 17 for the remote, 3 for the tape, 1.6 for the board, 11 for the headers, 1.6 for the C6 board and 3.2 for its module.
 
 ## 2. Decisions
 
@@ -70,7 +98,7 @@ The remote's current is not published, and is estimated at tens of mA. At that l
 
 **No zip ties through the board.** The holes are about 1 mm, and even a small zip tie is about 2.5 mm wide. The button wires pass through free holes instead, so a pull cannot reach their joints.
 
-**External button on GPIO7, not GPIO9.** GPIO9 is a strapping pin. If something in the glove box holds a button on it at ignition, the chip stays in its download mode for that whole drive. The firmware reads GPIO7 and GPIO9 together, so BOOT still works and nothing changes if the external button is not fitted. The button is too large for the board, so it stays on two wires, in a 16 mm panel hole.
+**External button on GPIO7, not GPIO9.** GPIO9 is a strapping pin. If something in the glove box holds a button on it at ignition, the chip stays in its download mode for that whole drive. The firmware reads GPIO7 and GPIO9 together, so BOOT still works and nothing changes if the external button is not fitted. The button is too large for the board, so it stays on two wires, in a panel hole assumed to be 12 mm.
 
 **Active buzzer straight on GPIO11, with no MOSFET and no diode.** An active buzzer has its own driver, so the pin only supplies its power. The pin's default drive is about 20 mA. This is quieter than the buzzer would be on 5 V, and it needs a bench check first: under about 20 mA at 3.3 V, and loud enough with the glove box closed. If it fails that check, the buzzer needs a MOSFET and 5 V, and this layout has to change. A passive buzzer cannot use this wiring. The `buzzer_type` setting must be set to active on the page when the buzzer is turned on.
 
