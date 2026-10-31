@@ -109,9 +109,9 @@ These run on a real unit over USB, using the ESP-IDF Python:
 | Check | What it does |
 |---|---|
 | `test/bench/api_check.py` | Every API endpoint, including bad requests |
-| `test/bench/ota_check.py` | Firmware update and rollback. About three minutes |
+| `test/bench/ota_check.py` | Firmware update and rollback. About three minutes. **Erases the logs** |
 | `test/bench/log_check.py` | Erasing full logs and a factory reset. **Erases the settings, and the hotspot gets a new password** |
-| `test/bench/soak_check.py` | Repeated restarts and hotspot cycles, watching for crashes and leaks |
+| `test/bench/soak_check.py` | Repeated restarts and hotspot cycles, watching for crashes and leaks. **Erases the logs** |
 
 `tools/mock_api.py` serves the page with a fake API, for working on it without a unit, and `test/bench/page_check.py` tests the page against that in headless Edge.
 

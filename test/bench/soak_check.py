@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Restarts a real unit repeatedly, then cycles the hotspot and scanning for a while,
-watching for crashes and memory leaks. Run with the ESP-IDF Python.
+watching for crashes and memory leaks. It erases the logs first, because it reads
+them back. Run with the ESP-IDF Python.
 
     python test/bench/soak_check.py [--port COM3] [--restarts 20] [--minutes 10]
 """
@@ -130,6 +131,7 @@ def main():
     args = parser.parse_args()
     port = args.port
     command("set debug 0")
+    command("log-clear", 240)
     command("reboot", 2)
     time.sleep(4)
     restarts(args.restarts)

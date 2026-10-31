@@ -50,6 +50,13 @@ def main():
     parser.add_argument("--port", default="COM3")
     args = parser.parse_args()
     s = yg_serial.open_port(args.port)
+    # An interrupted soak check leaves a short hotspot time behind.
+    yg_serial.run_command(s, "set hotspot_s 300", 5)
+    # A new trip, so that it has a boot record even if the logs were just erased.
+    yg_serial.reset(s)
+    s.close()
+    time.sleep(6)
+    s = yg_serial.open_port(args.port)
     # Restarts the hotspot and its timer, because the web server runs with it.
     yg_serial.run_command(s, "wifi", 5)
     time.sleep(2)

@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Checks firmware update and rollback on a real unit, with no Wi-Fi client: the
 unit uploads its own running image to its own /api/ota, through the real HTTP code.
-Run with the ESP-IDF Python. Takes about two minutes.
+It erases the logs first, because it reads them back. Run with the ESP-IDF Python.
+Takes about three minutes.
 
     python test/bench/ota_check.py [--port COM3]
 """
@@ -68,6 +69,9 @@ def main():
     args = parser.parse_args()
     port = args.port
 
+    # An interrupted soak check leaves a short hotspot time behind.
+    command("set hotspot_s 300")
+    command("log-clear", 240)
     start_slot, _ = system()
     other_slot = "ota_1" if start_slot == "ota_0" else "ota_0"
     print(f"Running from {start_slot}")

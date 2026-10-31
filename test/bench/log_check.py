@@ -45,6 +45,8 @@ def main():
     parser.add_argument("--port", default="COM3")
     args = parser.parse_args()
     s = yg_serial.open_port(args.port)
+    # An interrupted soak check leaves a short hotspot time behind.
+    yg_serial.run_command(s, "set hotspot_s 300", 5)
 
     fill(s)
     first, _ = status(s)
@@ -59,10 +61,11 @@ def main():
     r = yg_serial.run_command(s, "logs nocapture", 20)
     check("the unit logs again afterwards", "#END" in r, r[-200:])
 
+    yg_serial.run_command(s, "set press_ms 1500", 5)
+    fill(s)
+    # Restarts the hotspot and its timer, because the web server runs with it.
     yg_serial.run_command(s, "wifi", 5)
     time.sleep(2)
-    yg_serial.run_command(s, 'set press_ms 1500', 5)
-    fill(s)
     r = yg_serial.run_command(s, 'api POST /api/factory-reset "{\\"x\\":1}"', 240)
     check("factory reset on full logs answers", '"ok":true' in r, r[-300:])
     s.close()
