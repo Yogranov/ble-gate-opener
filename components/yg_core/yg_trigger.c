@@ -127,7 +127,7 @@ yg_rearm_reason_t yg_trigger_tick(yg_trigger_t *t, const yg_settings_t *s, uint3
     if (t->until_gone) {
         /* Pressed with no motion to go on, so the car may sit in earshot for good. A sensor
          * that keeps dropping out must not press again, but a driver leaving must. */
-        if (yg_trigger_moved_recently(t, s, now) && elapsed(now, t->press_time) >= still_ms) {
+        if (yg_trigger_moved_recently(t, s, now) && elapsed(t->last_motion, t->press_time) >= still_ms) {
             t->state = YG_TRIG_ARMED;
             return YG_REARM_MOVED;
         }

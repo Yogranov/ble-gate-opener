@@ -340,6 +340,20 @@ static void a_fallback_press_uses_up_the_motion_before_it(void) {
     }
 }
 
+static void motion_from_before_still_s_does_not_end_the_wait_later(void) {
+    /* It moved a little after the press, and parked. Time passing is not motion. */
+    setup();
+    yg_trigger_set_sensor_ok(&t, false);
+    CHECK_INT(yg_trigger_on_advert(&t, &s, SEC(1), -80), YG_PRESS_FALLBACK);
+    yg_trigger_set_sensor_ok(&t, true);
+    yg_trigger_tick(&t, &s, SEC(5));
+    yg_trigger_on_motion(&t, SEC(66));
+    for (uint32_t now = SEC(67); now <= SEC(300); now += SEC(1)) {
+        CHECK_INT(yg_trigger_on_advert(&t, &s, now, -80), YG_PRESS_NONE);
+        CHECK_INT(yg_trigger_tick(&t, &s, now), YG_REARM_NONE);
+    }
+}
+
 static void motion_right_after_a_fallback_press_does_not_press_again(void) {
     /* The gate has only just been told to open, by that press. */
     setup();
@@ -376,6 +390,7 @@ int main(void) {
     RUN(the_beacon_going_uses_up_motion_too);
     RUN(real_motion_ends_the_wait_after_a_fallback_press);
     RUN(a_fallback_press_uses_up_the_motion_before_it);
+    RUN(motion_from_before_still_s_does_not_end_the_wait_later);
     RUN(motion_right_after_a_fallback_press_does_not_press_again);
     RUN(fallback_press_waits_for_the_beacon_to_go_even_after_recovery);
     RUN(ignition_in_spot_with_beacon_heard_never_presses);

@@ -39,21 +39,16 @@ typedef struct
     uint32_t first_ms;
     uint32_t last_ms;
 
-    uint16_t still_n;
-    float still_sum[6];
-    float still_min[6];
-    float still_max[6];
-    uint16_t avg_n;
-    float avg_sum[6];
-    float avg_last[6];
-    bool avg_valid;
-    bool avg_steady;
+    uint16_t window_n;
+    float window_sum[6];
+    bool has_prev_mean;
 
     float gravity[3];
     float bias[3];
     float horizontal[3];
 
     float prev_mean[6];
+    uint32_t next_gap_hold;
     uint16_t rest_windows;
     float rest_mean[6];
 

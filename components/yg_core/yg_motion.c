@@ -3,29 +3,24 @@
 #include <math.h>
 #include <string.h>
 
-#define STILL_SAMPLES        50        /* 1 s at 50 Hz */
-#define AVERAGE_SAMPLES      100       /* 2 s at 50 Hz */
-#define WINDOW_S             1.0f      /* STILL_SAMPLES at 50 Hz. */
-#define STILL_GYRO_SPREAD    3.0f      /* degrees per second, peak to peak */
-#define STILL_ACCEL_SPREAD   0.02f     /* g, peak to peak */
+#define WINDOW_SAMPLES       50        /* 1 s at 50 Hz */
+#define WINDOW_S             1.0f
 #define SAME_ACCEL           0.006f    /* g: means this close show that nothing has moved. */
 #define SAME_GYRO            0.3f      /* degrees per second, the same. */
 #define MIN_GRAVITY          0.7f      /* g: anything else is not a sensor at rest. */
 #define MAX_GRAVITY          1.3f
-#define CALIBRATE_DEADLINE   10000u    /* ms: calibrate from averages after this, if they agree. */
-#define CALIBRATE_LAST       20000u    /* ms: calibrate after this, whatever they say. */
+#define CALIBRATE_LAST       20000u    /* ms: calibrate after this, whatever the means say. */
 #define REST_WINDOWS         30        /* Seconds of unchanged means before trusting the sensor again. */
 #define TILT_RATE            8.0f      /* degrees per second */
 #define TILT_HOLD_MS         1000u
 #define TILT_CATCH_UP_MS     100u      /* Hold on this much longer while gravity is still off. */
+#define GAP_HOLD_EVERY_MS    5000u     /* A bus losing most reads must not hold for ever. */
 #define HORIZONTAL_TAU_S     0.08f     /* About 2 Hz. */
-#define GRAVITY_TAU_S        2.0f      /* A gyro zero error under DRIFT_RATE then stays under 35 mg. */
+#define GRAVITY_TAU_S        3.0f      /* A fading gyro zero error under DRIFT_RATE stays under the threshold. */
 #define GRAVITY_TAU_ABOVE_S  30.0f     /* While above the threshold: braking must not look like a tilt after. */
 #define GRAVITY_TAU_TILT_S   1.0f      /* Soon after a move, though a door's shove must not count for much. */
 #define BIAS_TAU_S           10.0f
 #define DRIFT_RATE           1.0f      /* degrees per second: a whole second slower than this is drift. */
-#define GYRO_DISAGREES       0.25f     /* Gravity moved less than this share of what the gyro says. */
-#define GYRO_FIX_SHARE       0.5f      /* A real error goes in a few seconds, and noise does little. */
 #define NEAR_MISS_FRACTION   0.5f
 #define BUCKET_MS            100u
 #define DEG_TO_RAD           0.017453293f
@@ -38,15 +33,6 @@ static float length(const float v[3]) {
     return sqrtf(dot(v, v));
 }
 
-static void reset_still_window(yg_motion_t *m) {
-    m->still_n = 0;
-    for (int i = 0; i < 6; i++) {
-        m->still_sum[i] = 0;
-        m->still_min[i] = 1e9f;
-        m->still_max[i] = -1e9f;
-    }
-}
-
 static void set_calibration(yg_motion_t *m, const float mean[6]) {
     for (int i = 0; i < 3; i++) {
         m->gravity[i] = mean[i];
@@ -57,9 +43,18 @@ static void set_calibration(yg_motion_t *m, const float mean[6]) {
     m->calibrated = true;
 }
 
-static bool means_agree(const float a[6], const float b[6]) {
-    for (int i = 0; i < 6; i++) {
-        if (fabsf(a[i] - b[i]) >= (i < 3 ? SAME_ACCEL : SAME_GYRO)) {
+static bool accel_agrees(const float a[6], const float b[6]) {
+    for (int i = 0; i < 3; i++) {
+        if (fabsf(a[i] - b[i]) >= SAME_ACCEL) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool gyro_agrees(const float a[6], const float b[6]) {
+    for (int i = 3; i < 6; i++) {
+        if (fabsf(a[i] - b[i]) >= SAME_GYRO) {
             return false;
         }
     }
@@ -71,103 +66,63 @@ static bool gravity_plausible(const float mean[6]) {
     return g >= MIN_GRAVITY && g <= MAX_GRAVITY;
 }
 
-/* Adds a sample to the 1 s window. When the window fills, returns true and gives
- * its mean, and whether it was quiet. */
-static bool window_add(yg_motion_t *m, const float v[6], float mean[6], bool *still) {
+/* Adds a sample to the 1 s window. When the window fills, returns true and gives its
+ * mean, in which engine shake has cancelled out. */
+static bool window_add(yg_motion_t *m, const float v[6], float mean[6]) {
     for (int i = 0; i < 6; i++) {
-        m->still_sum[i] += v[i];
-        m->still_min[i] = v[i] < m->still_min[i] ? v[i] : m->still_min[i];
-        m->still_max[i] = v[i] > m->still_max[i] ? v[i] : m->still_max[i];
+        m->window_sum[i] += v[i];
     }
-    m->still_n++;
-    if (m->still_n < STILL_SAMPLES) {
+    m->window_n++;
+    if (m->window_n < WINDOW_SAMPLES) {
         return false;
     }
-    *still = true;
     for (int i = 0; i < 6; i++) {
-        float spread = m->still_max[i] - m->still_min[i];
-        *still = *still && spread < (i < 3 ? STILL_ACCEL_SPREAD : STILL_GYRO_SPREAD);
-        mean[i] = m->still_sum[i] / (float)m->still_n;
+        mean[i] = m->window_sum[i] / (float)m->window_n;
+        m->window_sum[i] = 0;
     }
-    reset_still_window(m);
+    m->window_n = 0;
     return true;
 }
 
-/* Finds gravity and gyro bias: from 1 s of stillness, or from 2 s averages if stillness
- * does not come. A passenger leaning the car during an average would spoil it, so two
- * in a row must agree, unless the car is really moving and they never will. */
+/* Finds gravity and gyro bias, once two seconds in a row agree. That leaves little room
+ * for a slow lean to pass as bias, and a passenger getting in only delays it. A car
+ * already rolling may never agree, so after a while it takes what there is. */
 static void calibrate(yg_motion_t *m, uint32_t now, const float v[6]) {
     float mean[6];
-    bool still;
-    if (window_add(m, v, mean, &still) && still && gravity_plausible(mean)) {
-        set_calibration(m, mean);
+    if (!window_add(m, v, mean)) {
         return;
     }
-    for (int i = 0; i < 6; i++) {
-        m->avg_sum[i] += v[i];
+    bool steady = m->has_prev_mean && accel_agrees(mean, m->prev_mean) && gyro_agrees(mean, m->prev_mean);
+    bool time_up = now - m->first_ms >= CALIBRATE_LAST;
+    if ((steady || time_up) && gravity_plausible(mean)) {
+        set_calibration(m, mean);
     }
-    m->avg_n++;
-    if (m->avg_n >= AVERAGE_SAMPLES) {
-        float avg[6];
-        for (int i = 0; i < 6; i++) {
-            avg[i] = m->avg_sum[i] / (float)m->avg_n;
-            m->avg_sum[i] = 0;
-        }
-        m->avg_steady = m->avg_valid && means_agree(avg, m->avg_last);
-        memcpy(m->avg_last, avg, sizeof(m->avg_last));
-        m->avg_n = 0;
-        m->avg_valid = true;
-    }
-    uint32_t waited = now - m->first_ms;
-    bool time_up = waited >= CALIBRATE_LAST || (waited >= CALIBRATE_DEADLINE && m->avg_steady);
-    if (m->avg_valid && time_up && gravity_plausible(m->avg_last)) {
-        set_calibration(m, m->avg_last);
-    }
+    memcpy(m->prev_mean, mean, sizeof(m->prev_mean));
+    m->has_prev_mean = true;
 }
 
-/* Once a second the engine's shake has averaged out, and the gyro can be checked. */
-static void check_gyro(yg_motion_t *m, const float mean[6]) {
-    float glen = length(m->gravity);
-    float up[3], rot[3], tilt[3];
+/* The gyro's zero moves as the car warms up. Over a whole second the engine's shake
+ * averages out, and what little is left is that drift. */
+static void follow_drift(yg_motion_t *m, const float mean[6]) {
+    float rot[3];
     for (int i = 0; i < 3; i++) {
-        up[i] = m->gravity[i] / glen;
         rot[i] = mean[i + 3] - m->bias[i];
     }
-    float yaw = dot(rot, up);
-    for (int i = 0; i < 3; i++) {
-        tilt[i] = rot[i] - yaw * up[i];
-    }
-    float tilt_rate = length(tilt);
-
-    /* The gyro's zero moves as the car warms up, and what little is left is that drift. */
-    if (tilt_rate < DRIFT_RATE) {
+    if (length(rot) < DRIFT_RATE) {
         for (int i = 0; i < 3; i++) {
-            m->bias[i] += tilt[i] * WINDOW_S / BIAS_TAU_S;
-        }
-        return;
-    }
-
-    /* The gyro says the unit is tilting, but gravity stayed where it was, so it is the
-     * gyro that is wrong. Around the vertical gravity cannot show this: see the rest. */
-    float moved[3];
-    for (int i = 0; i < 3; i++) {
-        moved[i] = mean[i] - m->prev_mean[i];
-    }
-    if (length(moved) < GYRO_DISAGREES * tilt_rate * DEG_TO_RAD * WINDOW_S) {
-        for (int i = 0; i < 3; i++) {
-            m->bias[i] += tilt[i] * GYRO_FIX_SHARE;
-            m->gravity[i] = mean[i];
+            m->bias[i] += rot[i] * WINDOW_S / BIAS_TAU_S;
         }
     }
 }
 
 /* A unit at rest for a long time tells the truth about gravity and gyro bias, whatever
  * went wrong before, such as calibrating in a bend. Whole-second means are steady with
- * the engine shaking too. Real rotation shows as means that move, except around the
- * vertical at a steady rate, as in a long bend, which this takes for bias until the
- * next rest. */
+ * the engine shaking too. Gravity must stay where the rest began, as a slow turn moves it
+ * a little at a time, while the gyro's zero may drift, so it is only compared with the
+ * second before. A steady rate around the vertical, as in a long bend, looks like rest,
+ * and is taken for bias until the next one. */
 static void watch_for_rest(yg_motion_t *m, const float mean[6]) {
-    if (m->rest_windows == 0 || !means_agree(mean, m->rest_mean)) {
+    if (m->rest_windows == 0 || !accel_agrees(mean, m->rest_mean) || !gyro_agrees(mean, m->prev_mean)) {
         memcpy(m->rest_mean, mean, sizeof(m->rest_mean));
         m->rest_windows = 0;
     }
@@ -208,7 +163,6 @@ static float yaw_window_sum(yg_motion_t *m, const yg_settings_t *s, uint32_t now
 
 void yg_motion_init(yg_motion_t *m) {
     memset(m, 0, sizeof(*m));
-    reset_still_window(m);
 }
 
 void yg_motion_update(yg_motion_t *m, const yg_settings_t *s, uint32_t now, const yg_imu_sample_t *in, yg_motion_out_t *out) {
@@ -233,9 +187,10 @@ void yg_motion_update(yg_motion_t *m, const yg_settings_t *s, uint32_t now, cons
 
     float dt = (float)(now - m->last_ms) / 1000.0f;
     m->last_ms = now;
-    if (dt > 0.1f) {
+    if (dt > 0.1f && (int32_t)(now - m->next_gap_hold) >= 0) {
         /* The unit may have been moved while no samples came. */
         m->tilt_until = now + TILT_HOLD_MS;
+        m->next_gap_hold = now + GAP_HOLD_EVERY_MS;
     }
     if (dt <= 0.0f || dt > 0.1f) {
         dt = 0.02f;
@@ -274,7 +229,7 @@ void yg_motion_update(yg_motion_t *m, const yg_settings_t *s, uint32_t now, cons
 
     /* After a move that the gyro could not follow, gravity is still off when the hold ends. */
     bool tilting = (int32_t)(m->tilt_until - now) > 0;
-    if (tilting && horizontal_mg >= threshold) {
+    if (tilting && horizontal_mg >= threshold && (int32_t)(m->tilt_until - now) < (int32_t)TILT_CATCH_UP_MS) {
         m->tilt_until = now + TILT_CATCH_UP_MS;
     }
     if (tilting) {
@@ -314,9 +269,8 @@ void yg_motion_update(yg_motion_t *m, const yg_settings_t *s, uint32_t now, cons
     }
 
     float mean[6];
-    bool still;
-    if (window_add(m, v, mean, &still)) {
-        check_gyro(m, mean);
+    if (window_add(m, v, mean)) {
+        follow_drift(m, mean);
         watch_for_rest(m, mean);
         memcpy(m->prev_mean, mean, sizeof(m->prev_mean));
     }

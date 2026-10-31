@@ -48,8 +48,9 @@ static esp_err_t configure(void) {
     if (err == ESP_OK) err = write_reg(REG_CONFIG, 5);
     if (err == ESP_OK) err = write_reg(REG_GYRO_CFG, 0);
     if (err == ESP_OK) err = write_reg(REG_ACCEL_CFG, 0);
-    /* MPU-6500 clones filter the accelerometer separately. Unused on a real MPU6050. */
-    if (err == ESP_OK) err = write_reg(REG_ACCEL_CFG2, 5);
+    /* MPU-6500 clones filter the accelerometer separately. A real MPU6050 has no use for
+     * this, and a chip that refuses it must not count as failing. */
+    if (err == ESP_OK) write_reg(REG_ACCEL_CFG2, 5);
     return err;
 }
 
