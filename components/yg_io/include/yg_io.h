@@ -24,6 +24,5 @@ void yg_io_start(yg_io_gesture_cb_t on_gesture);
 void yg_io_led(yg_led_event_t e);
 void yg_io_buzz(yg_buzz_event_t e, uint8_t buzzer_type);
 
-/* For the page's test buttons, which work whatever the settings say. */
+/* For the page's test button, which works whatever the settings say. */
 void yg_io_test_led(void);
-void yg_io_test_beep(uint8_t buzzer_type);

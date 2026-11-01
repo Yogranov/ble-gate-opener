@@ -243,6 +243,16 @@ static esp_err_t post_settings(httpd_req_t *req) {
     return result;
 }
 
+static void fn_settings_reset(yg_engine_t *e, uint32_t now, void *arg) {
+    (void)arg;
+    yg_app_settings_reset(e, now);
+}
+
+static esp_err_t post_settings_reset(httpd_req_t *req) {
+    yg_app_call(fn_settings_reset, NULL);
+    return send_ok(req);
+}
+
 typedef struct
 {
     const cJSON *root;
@@ -289,12 +299,23 @@ static esp_err_t post_test_led(httpd_req_t *req) {
 
 static void fn_test_beep(yg_engine_t *e, uint32_t now, void *arg) {
     (void)now;
-    (void)arg;
-    yg_io_test_beep(e->s->buzzer_type);
+    yg_io_buzz(*(yg_buzz_event_t *)arg, e->s->buzzer_type);
 }
 
+/* Plays whatever the settings say, so that a sound can be tried before it is turned on. */
 static esp_err_t post_test_beep(httpd_req_t *req) {
-    yg_app_call(fn_test_beep, NULL);
+    yg_buzz_event_t sound = YG_BUZZ_SAVED;
+    cJSON *root = read_body(req);
+    if (root == NULL) {
+        return ESP_OK;
+    }
+    const cJSON *name = cJSON_GetObjectItem(root, "sound");
+    bool known = !cJSON_IsString(name) || yg_sound_parse(name->valuestring, &sound);
+    cJSON_Delete(root);
+    if (!known) {
+        return send_error(req, "400 Bad Request", "unknown sound");
+    }
+    yg_app_call(fn_test_beep, &sound);
     return send_ok(req);
 }
 
@@ -456,8 +477,25 @@ static esp_err_t get_export(httpd_req_t *req) {
     return stream_end(&s);
 }
 
+static void fn_trips_restart(yg_engine_t *e, uint32_t now, void *arg) {
+    (void)now;
+    (void)arg;
+    yg_app_trips_restart(e);
+}
+
+static void fn_trips_restarted(yg_engine_t *e, uint32_t now, void *arg) {
+    (void)arg;
+    yg_app_trips_restarted(e, now);
+}
+
+/* There is no restart, because that would turn off the hotspot this request came through. */
 static esp_err_t post_logs_clear(httpd_req_t *req) {
-    return yg_log_clear() == 0 ? send_ok(req) : send_error(req, "500 Internal Server Error", "clear failed");
+    yg_app_call(fn_trips_restart, NULL);
+    if (yg_log_clear() != 0) {
+        return send_error(req, "500 Internal Server Error", "clear failed");
+    }
+    yg_app_call(fn_trips_restarted, NULL);
+    return send_ok(req);
 }
 
 typedef struct
@@ -623,6 +661,7 @@ static const httpd_uri_t ROUTES[] = {
     { .uri = "/api/system", .method = HTTP_GET, .handler = get_system },
     { .uri = "/api/settings", .method = HTTP_GET, .handler = get_settings },
     { .uri = "/api/settings", .method = HTTP_POST, .handler = post_settings },
+    { .uri = "/api/settings/reset", .method = HTTP_POST, .handler = post_settings_reset },
     { .uri = "/api/setpoint", .method = HTTP_POST, .handler = post_setpoint },
     { .uri = "/api/press", .method = HTTP_POST, .handler = post_press },
     { .uri = "/api/test/led", .method = HTTP_POST, .handler = post_test_led },

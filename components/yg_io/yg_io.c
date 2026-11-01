@@ -26,9 +26,8 @@ static volatile yg_led_event_t s_led_event;
 static volatile bool s_led_changed;
 static yg_led_event_t s_led_base;
 
-static volatile uint8_t s_beeps_requested;
-static volatile uint16_t s_beep_on_ms;
-static volatile uint8_t s_beep_type;
+static volatile int8_t s_sound_request = -1;
+static volatile uint8_t s_sound_type;
 static bool s_ledc_ready;
 
 static void press_end(void *arg) {
@@ -102,6 +101,9 @@ static bool led_draw(yg_led_event_t e, uint32_t ms) {
     case YG_LED_UNPAIRED:
         led_color((ms / 500) % 2 ? 0 : LED_LEVEL, (ms / 500) % 2 ? 0 : LED_LEVEL / 2, 0);
         return ms < 30000;
+    case YG_LED_HOTSPOT:
+        led_color(0, LED_LEVEL, LED_LEVEL);
+        return ms < 2000;
     default:
         led_off();
         return true;
@@ -142,9 +144,9 @@ static void io_task(void *arg) {
     (void)arg;
     yg_led_event_t current = YG_LED_OFF;
     uint32_t pattern_start = 0;
-    uint8_t beeps_left = 0;
-    uint32_t beep_next = 0;
-    bool beep_on = false;
+    const yg_sound_t *sound = NULL;
+    uint8_t sound_step = 0;
+    uint32_t sound_next = 0;
     TickType_t wake = xTaskGetTickCount();
     for (;;) {
         vTaskDelayUntil(&wake, pdMS_TO_TICKS(TASK_PERIOD_MS));
@@ -170,18 +172,21 @@ static void io_task(void *arg) {
             pattern_start = now;
         }
 
-        if (s_beeps_requested > 0 && beeps_left == 0) {
-            beeps_left = s_beeps_requested;
-            s_beeps_requested = 0;
-            beep_next = now;
-            beep_on = false;
-        }
-        if (beeps_left > 0 && (int32_t)(now - beep_next) >= 0) {
-            beep_on = !beep_on;
-            buzzer_output(beep_on, s_beep_type);
-            beep_next = now + (beep_on ? s_beep_on_ms : 120u);
-            if (!beep_on) {
-                beeps_left--;
+        int8_t request = s_sound_request;
+        if (request >= 0) {
+            s_sound_request = -1;
+            sound = yg_sound_get((yg_buzz_event_t)request);
+            sound_step = 0;
+            sound_next = now + sound->steps[0];
+            buzzer_output(true, s_sound_type);
+        } else if (sound != NULL && (int32_t)(now - sound_next) >= 0) {
+            sound_step++;
+            if (sound_step >= sound->count) {
+                buzzer_output(false, s_sound_type);
+                sound = NULL;
+            } else {
+                buzzer_output(sound_step % 2 == 0, s_sound_type);
+                sound_next = now + sound->steps[sound_step];
             }
         }
     }
@@ -235,27 +240,10 @@ void yg_io_led(yg_led_event_t e) {
 }
 
 void yg_io_buzz(yg_buzz_event_t e, uint8_t buzzer_type) {
-    s_beep_type = buzzer_type;
-    switch (e) {
-    case YG_BUZZ_SAVED:
-        s_beep_on_ms = 80;
-        s_beeps_requested = 2;
-        break;
-    case YG_BUZZ_REJECTED:
-        s_beep_on_ms = 600;
-        s_beeps_requested = 1;
-        break;
-    default:
-        s_beep_on_ms = 80;
-        s_beeps_requested = 1;
-        break;
-    }
+    s_sound_type = buzzer_type;
+    s_sound_request = (int8_t)e;
 }
 
 void yg_io_test_led(void) {
     yg_io_led(YG_LED_SAVED);
-}
-
-void yg_io_test_beep(uint8_t buzzer_type) {
-    yg_io_buzz(YG_BUZZ_SAVED, buzzer_type);
 }

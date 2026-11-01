@@ -114,7 +114,7 @@ def soak(minutes):
         cycles += 1
     st, _ = status()
     check(f"{cycles} hotspot and scan cycles with no restart", st["trip"] == start_trip, (start_trip, st["trip"]))
-    command("set hotspot_s 300")
+    command("set hotspot_s 0")
     if len(readings) >= 4:
         early = sum(readings[1:3]) / 2
         late = sum(readings[-2:]) / 2

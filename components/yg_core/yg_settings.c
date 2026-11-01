@@ -24,13 +24,13 @@ static const yg_setting_desc_t TABLE[] = {
     { "pair_margin_db", "pair_margin", YG_SET_U8, FIELD(pair_margin_db), 3, 40, 15 },
     { "pair_hold_s", "pair_hold", YG_SET_U8, FIELD(pair_hold_s), 1, 10, 2 },
     { "pair_timeout_s", "pair_timeout", YG_SET_U16, FIELD(pair_timeout_s), 10, 300, 60 },
-    { "hotspot_s", "hotspot_s", YG_SET_U16, FIELD(hotspot_s), 0, 3600, 300 },
+    { "hotspot_s", "hotspot_s", YG_SET_U16, FIELD(hotspot_s), 0, 3600, 0 },
     { "hotspot_ssid", "ssid", YG_SET_STR, FIELD(hotspot_ssid), 1, YG_SSID_MAX, 0 },
     { "hotspot_password", "password", YG_SET_PASSWORD, FIELD(hotspot_password), YG_PASSWORD_MIN, YG_PASSWORD_MAX, 0 },
     { "wifi_tx_dbm", "wifi_tx", YG_SET_U8, FIELD(wifi_tx_dbm), 2, 20, 8 },
     { "led_enabled", "led_en", YG_SET_BOOL, FIELD(led_enabled), 0, 1, 1 },
-    { "buzzer_enabled", "buzzer_en", YG_SET_BOOL, FIELD(buzzer_enabled), 0, 1, 0 },
-    { "buzzer_type", "buzzer_type", YG_SET_BUZZER_TYPE, FIELD(buzzer_type), YG_BUZZER_PASSIVE, YG_BUZZER_ACTIVE, YG_BUZZER_PASSIVE },
+    { "buzzer_enabled", "buzzer_en", YG_SET_BOOL, FIELD(buzzer_enabled), 0, 1, 1 },
+    { "buzzer_type", "buzzer_type", YG_SET_BUZZER_TYPE, FIELD(buzzer_type), YG_BUZZER_PASSIVE, YG_BUZZER_ACTIVE, YG_BUZZER_ACTIVE },
     { "debug", "debug", YG_SET_BOOL, FIELD(debug), 0, 1, 0 },
 };
 
@@ -63,6 +63,7 @@ void yg_settings_defaults(yg_settings_t *s) {
     for (size_t i = 0; i < TABLE_COUNT; i++) {
         store_int(s, &TABLE[i], TABLE[i].def);
     }
+    strcpy(s->hotspot_password, YG_PASSWORD_DEFAULT);
 }
 
 const yg_setting_desc_t *yg_settings_table(size_t *count) {
@@ -141,6 +142,21 @@ bool yg_settings_set_str(yg_settings_t *s, const char *key, const char *value) {
         return false;
     }
     return yg_settings_set_int(s, key, (int32_t)number);
+}
+
+int yg_settings_format(const yg_settings_t *s, const yg_setting_desc_t *d, char *buf, size_t len) {
+    int32_t value = yg_settings_get_int(s, d);
+    int n;
+    if (d->type == YG_SET_STR || d->type == YG_SET_PASSWORD) {
+        n = snprintf(buf, len, "%s", (const char *)s + d->offset);
+    } else if (d->type == YG_SET_BUZZER_TYPE) {
+        n = snprintf(buf, len, "%s", value == YG_BUZZER_ACTIVE ? "active" : "passive");
+    } else if (d->type == YG_SET_DBM_OR_ANY && value == YG_SET_POINT_ANY) {
+        n = snprintf(buf, len, "any");
+    } else {
+        n = snprintf(buf, len, "%d", (int)value);
+    }
+    return n < 0 || (size_t)n >= len ? -1 : n;
 }
 
 int yg_settings_to_json(const yg_settings_t *s, char *buf, size_t len, bool include_password) {

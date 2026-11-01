@@ -20,12 +20,41 @@ static void defaults_match_spec(void) {
     CHECK_INT(s.pair_margin_db, 15);
     CHECK_INT(s.pair_hold_s, 2);
     CHECK_INT(s.pair_timeout_s, 60);
-    CHECK_INT(s.hotspot_s, 300);
+    CHECK_INT(s.hotspot_s, 0);
     CHECK_INT(s.wifi_tx_dbm, 8);
     CHECK(s.led_enabled);
-    CHECK(!s.buzzer_enabled);
-    CHECK_INT(s.buzzer_type, YG_BUZZER_PASSIVE);
+    CHECK(s.buzzer_enabled);
+    CHECK_INT(s.buzzer_type, YG_BUZZER_ACTIVE);
+    CHECK(strcmp(s.hotspot_password, "password") == 0);
     CHECK(!s.debug);
+}
+
+/* Reset to defaults logs each setting it changes in this form, and a log replay reads it back. */
+static void text_form_reads_back_as_the_same_value(void) {
+    yg_settings_t changed;
+    yg_settings_defaults(&s);
+    s.set_point_dbm = -77;
+    s.press_ms = 1500;
+    s.fallback_dbm = -80;
+    s.motion_enabled = false;
+    s.pair_hold_s = 4;
+    s.buzzer_type = YG_BUZZER_PASSIVE;
+    strcpy(s.hotspot_ssid, "Unit A");
+    strcpy(s.hotspot_password, "secret123");
+    size_t count = 0;
+    const yg_setting_desc_t *table = yg_settings_table(&count);
+    yg_settings_defaults(&changed);
+    for (size_t i = 0; i < count; i++) {
+        char text[YG_PASSWORD_MAX + 1];
+        CHECK(yg_settings_format(&s, &table[i], text, sizeof(text)) > 0);
+        CHECK(yg_settings_set_str(&changed, table[i].key, text));
+    }
+    CHECK(memcmp(&changed, &s, sizeof(s)) == 0);
+
+    char text[8];
+    s.set_point_dbm = YG_SET_POINT_ANY;
+    CHECK(yg_settings_format(&s, yg_settings_find("set_point_dbm"), text, sizeof(text)) > 0);
+    CHECK(strcmp(text, "any") == 0);
 }
 
 static void numeric_ranges_are_enforced(void) {
@@ -143,8 +172,8 @@ static void json_describes_every_setting(void) {
     CHECK_HAS(buf, "{\"settings\":[");
     CHECK_HAS(buf, "\"key\":\"press_ms\",\"type\":\"int\",\"value\":2000,\"min\":200,\"max\":5000");
     CHECK_HAS(buf, "\"key\":\"set_point_dbm\",\"type\":\"dbm_or_any\",\"value\":\"any\",\"min\":-100,\"max\":-30");
-    CHECK_HAS(buf, "\"key\":\"buzzer_enabled\",\"type\":\"bool\",\"value\":false");
-    CHECK_HAS(buf, "\"key\":\"buzzer_type\",\"type\":\"enum\",\"value\":\"passive\",\"options\":[\"passive\",\"active\"]");
+    CHECK_HAS(buf, "\"key\":\"buzzer_enabled\",\"type\":\"bool\",\"value\":true");
+    CHECK_HAS(buf, "\"key\":\"buzzer_type\",\"type\":\"enum\",\"value\":\"active\",\"options\":[\"passive\",\"active\"]");
     CHECK_HAS(buf, "\"key\":\"hotspot_password\",\"type\":\"password\"");
     CHECK_LACKS(buf, "supersecret1");
     CHECK_HAS(buf, "Unit \\\"A\\\"");
@@ -158,6 +187,7 @@ static void json_describes_every_setting(void) {
 
 int main(void) {
     RUN(defaults_match_spec);
+    RUN(text_form_reads_back_as_the_same_value);
     RUN(numeric_ranges_are_enforced);
     RUN(set_point_accepts_any_or_range);
     RUN(booleans_and_enums);

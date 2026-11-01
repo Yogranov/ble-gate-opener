@@ -15,6 +15,7 @@
 #include "yg_record.h"
 #include "yg_sensor_health.h"
 #include "yg_settings.h"
+#include "yg_sound.h"
 #include "yg_trace.h"
 #include "yg_trigger.h"
 #include "yg_types.h"
@@ -28,14 +29,8 @@ typedef enum
     YG_LED_REJECTED,       /* Three red blinks. */
     YG_LED_SENSOR_FAILED,  /* Red double blink every 10 s until the next event. */
     YG_LED_UNPAIRED,       /* Slow amber blink for 30 s. */
+    YG_LED_HOTSPOT,        /* Cyan for 2 s. */
 } yg_led_event_t;
-
-typedef enum
-{
-    YG_BUZZ_PRESS,      /* One short beep. */
-    YG_BUZZ_SAVED,      /* Two beeps. */
-    YG_BUZZ_REJECTED,   /* One long beep. */
-} yg_buzz_event_t;
 
 typedef enum
 {
@@ -52,7 +47,8 @@ typedef struct
     void (*log)(void *ctx, const yg_record_t *r);
     void (*capture)(void *ctx, const yg_record_t *r);
     void (*hotspot)(void *ctx, bool on);
-    void (*scan)(void *ctx, yg_scan_mode_t mode, const yg_beacon_t *beacon);
+    /* share_radio: leave most of the shared radio to Wi-Fi, and hear fewer adverts for it. */
+    void (*scan)(void *ctx, yg_scan_mode_t mode, const yg_beacon_t *beacon, bool share_radio);
     void (*save_beacon)(void *ctx, const yg_beacon_t *b);
     void (*save_settings)(void *ctx);
     void (*env_start)(void *ctx);
@@ -87,6 +83,7 @@ typedef struct
     uint32_t boot_time;
     const char *fw;
     uint8_t sensor_id;
+    uint8_t reset_reason;
 
     yg_trigger_t trigger;
     yg_motion_t motion;
@@ -120,6 +117,7 @@ typedef struct
     uint32_t sensor_out_since;
     bool glitch_logged;
     uint32_t last_glitch_log;
+    bool sensor_sounded;
     uint16_t pair_saves;
     uint32_t recent_time[YG_ENGINE_RECENT_ADVERTS];
     int8_t recent_rssi[YG_ENGINE_RECENT_ADVERTS];
@@ -128,6 +126,9 @@ typedef struct
     uint32_t second_start;
     uint16_t adverts_this_second;
     uint16_t adverts_per_second;
+    uint32_t live_start;
+    float live_mg, live_prev_mg;
+    float live_yaw, live_prev_yaw;
     yg_env_phase_t env_phase;
     uint32_t env_started;
 } yg_engine_t;
@@ -155,6 +156,15 @@ bool yg_engine_capture_now(yg_engine_t *e, uint32_t now);       /* Debug flag on
 
 /* Call after a setting changes. The value is logged, never for the password. */
 void yg_engine_setting_changed(yg_engine_t *e, uint32_t now, const char *key, const char *value);
+
+/* Puts every setting back to its default, keeping the beacon, logs and trip count. The
+ * default hotspot name comes from the unit's address, so the caller supplies it. */
+void yg_engine_settings_reset(yg_engine_t *e, uint32_t now, const char *default_ssid);
+
+/* Reset logs. Call the first before erasing, so that whatever is logged during the erase
+ * already counts as trip 1, and the second after it, to start this trip's log again. */
+void yg_engine_trips_restart(yg_engine_t *e);
+void yg_engine_log_restarted(yg_engine_t *e, uint32_t now);
 bool yg_engine_rate_trip(yg_engine_t *e, uint32_t now, uint32_t trip, const char *rating);
 void yg_engine_time_anchor(yg_engine_t *e, uint32_t now, uint32_t epoch_s);
 void yg_engine_log_ota(yg_engine_t *e, uint32_t now, uint8_t event);

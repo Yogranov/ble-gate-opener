@@ -26,7 +26,7 @@ static void op_led(void *ctx, yg_led_event_t e) { (void)ctx; (void)e; }
 static void op_buzz(void *ctx, yg_buzz_event_t e) { (void)ctx; (void)e; }
 static void op_capture(void *ctx, const yg_record_t *r) { (void)ctx; (void)r; }
 static void op_hotspot(void *ctx, bool on) { (void)ctx; (void)on; }
-static void op_scan(void *ctx, yg_scan_mode_t m, const yg_beacon_t *b) { (void)ctx; (void)m; (void)b; }
+static void op_scan(void *ctx, yg_scan_mode_t m, const yg_beacon_t *b, bool share_radio) { (void)ctx; (void)m; (void)b; (void)share_radio; }
 static void op_save_beacon(void *ctx, const yg_beacon_t *b) { (void)ctx; (void)b; }
 static void op_save_settings(void *ctx) { (void)ctx; }
 static void op_env_start(void *ctx) { (void)ctx; }

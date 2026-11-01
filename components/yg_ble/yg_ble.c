@@ -11,6 +11,7 @@
 
 #define SCAN_MS_UNITS(ms) ((uint16_t)((ms) * 1000 / 625))
 #define SCAN_PERIOD SCAN_MS_UNITS(100)
+#define SCAN_SHARED_WINDOW SCAN_MS_UNITS(25)
 #define COUNT_MAX 64
 
 static const char *TAG = "yg_ble";
@@ -19,6 +20,7 @@ static yg_ble_advert_cb_t s_on_advert;
 static volatile bool s_synced;
 static yg_scan_mode_t s_mode = YG_SCAN_OFF;
 static yg_beacon_t s_beacon;
+static bool s_share_radio;
 static uint8_t s_own_addr_type;
 
 static volatile bool s_counting;
@@ -105,7 +107,7 @@ static void apply_scan(void) {
     }
     struct ble_gap_disc_params params = {
         .itvl = SCAN_PERIOD,
-        .window = SCAN_PERIOD,
+        .window = s_share_radio ? SCAN_SHARED_WINDOW : SCAN_PERIOD,
         .filter_policy = BLE_HCI_SCAN_FILT_NO_WL,
         .limited = 0,
         .passive = 1,
@@ -163,9 +165,10 @@ void yg_ble_start(yg_ble_advert_cb_t on_advert) {
     nimble_port_freertos_init(host_task);
 }
 
-void yg_ble_scan(yg_scan_mode_t mode, const yg_beacon_t *beacon) {
+void yg_ble_scan(yg_scan_mode_t mode, const yg_beacon_t *beacon, bool share_radio) {
     s_mode = mode;
     s_beacon = *beacon;
+    s_share_radio = share_radio;
     apply_scan();
 }
 

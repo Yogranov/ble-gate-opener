@@ -3,10 +3,8 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "bootloader_random.h"
 #include "esp_log.h"
 #include "esp_mac.h"
-#include "esp_random.h"
 #include "nvs.h"
 #include "nvs_flash.h"
 
@@ -14,7 +12,6 @@
 #define KEY_BEACON "beacon"
 #define KEY_TRIP   "trip"
 #define KEY_TEST_FLAG "test_fail"
-#define PASSWORD_LEN 12
 
 static const char *TAG = "yg_nvs";
 
@@ -57,23 +54,15 @@ static void load_setting(nvs_handle_t h, yg_settings_t *s, const yg_setting_desc
     }
 }
 
+void yg_nvs_default_ssid(char *out, size_t len) {
+    uint8_t mac[6] = { 0 };
+    esp_read_mac(mac, ESP_MAC_WIFI_SOFTAP);
+    snprintf(out, len, "YogiGate-%02X%02X", mac[4], mac[5]);
+}
+
 static void create_identity(yg_settings_t *s) {
     if (s->hotspot_ssid[0] == 0) {
-        uint8_t mac[6] = { 0 };
-        esp_read_mac(mac, ESP_MAC_WIFI_SOFTAP);
-        snprintf(s->hotspot_ssid, sizeof(s->hotspot_ssid), "YogiGate-%02X%02X", mac[4], mac[5]);
-    }
-    if (s->hotspot_password[0] == 0) {
-        /* The radio is not running yet, so ask for the entropy source directly. */
-        static const char ALPHABET[] = "abcdefghjkmnpqrstuvwxyz23456789";
-        uint8_t random[PASSWORD_LEN];
-        bootloader_random_enable();
-        esp_fill_random(random, sizeof(random));
-        bootloader_random_disable();
-        for (int i = 0; i < PASSWORD_LEN; i++) {
-            s->hotspot_password[i] = ALPHABET[random[i] % (sizeof(ALPHABET) - 1)];
-        }
-        s->hotspot_password[PASSWORD_LEN] = 0;
+        yg_nvs_default_ssid(s->hotspot_ssid, sizeof(s->hotspot_ssid));
     }
 }
 
@@ -94,7 +83,7 @@ bool yg_nvs_load(yg_settings_t *s, yg_beacon_t *b) {
         }
         nvs_close(h);
     }
-    bool new_identity = s->hotspot_ssid[0] == 0 || s->hotspot_password[0] == 0;
+    bool new_identity = s->hotspot_ssid[0] == 0;
     create_identity(s);
     if (new_identity) {
         yg_nvs_save_settings(s);
@@ -162,6 +151,15 @@ uint32_t yg_nvs_next_trip(void) {
         nvs_close(h);
     }
     return trip;
+}
+
+void yg_nvs_set_trip(uint32_t trip) {
+    nvs_handle_t h;
+    if (nvs_open(NAMESPACE, NVS_READWRITE, &h) == ESP_OK) {
+        nvs_set_u32(h, KEY_TRIP, trip);
+        nvs_commit(h);
+        nvs_close(h);
+    }
 }
 
 esp_err_t yg_nvs_factory_reset(void) {

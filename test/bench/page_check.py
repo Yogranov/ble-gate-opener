@@ -124,6 +124,168 @@ f.onload = async () => {
     win.fetch = realFetch;
     out.empty_trip_numbers_do_not_hide_older_trips = q("#tripList").textContent.includes("Trip 9");
     out.no_more_button_at_the_end = q("#tripMore").hidden;
+
+    // The logo and favicon are in the page itself, because a phone on the hotspot has no internet.
+    const logo = q("header img");
+    out.the_header_shows_the_logo = !!logo && logo.naturalWidth > 0 && logo.alt === "YogiGate";
+    out.the_header_logo_is_small = !!logo && logo.src.startsWith("data:image/") && logo.src.length < 12000 && logo.getBoundingClientRect().height <= 36;
+    out.the_header_keeps_the_trip_and_version = q("#sub").textContent.includes("Trip");
+    const icon = q('link[rel="icon"]');
+    out.the_favicon_is_small = !!icon && icon.href.startsWith("data:image/png") && icon.href.length < 2000;
+    out.the_page_loads_nothing_from_elsewhere = [...doc.querySelectorAll("img, script[src], link[href]")].every(x => (x.src || x.href || "").startsWith("data:") || !(x.src || x.href));
+
+    // Simple by default, with everything one switch away.
+    const shown = el => !!el && el.getClientRects().length > 0;
+    const fields = () => [...doc.querySelectorAll("#setForm .field")].filter(shown).map(x => x.textContent);
+    out.a_new_phone_starts_in_simple_mode = !js("advanced");
+
+    // The manual is on the page, for when the printed one is gone.
+    const helpTab = q('nav button[data-tab="help"]');
+    out.help_is_a_tab_in_simple_mode = shown(helpTab);
+    helpTab.click();
+    const help = q("#help");
+    out.help_opens_on_its_own = shown(help) && !shown(q("#status"));
+    out.help_gives_the_way_in = ["Triple-click", "password", "192.168.4.1"].every(text => help.textContent.includes(text));
+    out.help_lists_every_sound = help.querySelectorAll("[data-sound]").length === 7;
+    out.help_draws_every_rhythm = help.querySelectorAll(".r").length === 7 && [...help.querySelectorAll(".r")].every(r => r.querySelector("i"));
+    out.help_lists_every_colour = help.querySelectorAll(".led-dot").length === 8;
+    out.help_lists_every_gesture = ["Triple", "Hold 3"].every(text => help.textContent.includes(text));
+    out.help_fits_the_phone = doc.documentElement.scrollWidth <= win.innerWidth;
+    out.six_tabs_fit_the_bar = doc.querySelectorAll("nav button").length === 6 && [...doc.querySelectorAll("nav button")].every(b => b.scrollWidth <= b.clientWidth);
+    const helpPosts = [], beforeHelp = win.fetch;
+    win.fetch = (path, options) => {
+      if (options && options.method === "POST") helpPosts.push({ path, body: options.body });
+      return realFetch(path, options);
+    };
+    q('#help [data-sound="error"] button').click();
+    await wait(100);
+    out.a_sound_in_help_can_be_played = helpPosts.some(p => p.path === "/api/test/beep" && JSON.parse(p.body).sound === "error");
+    win.fetch = beforeHelp;
+    js('showTab("status")');
+    out.simple_status_hides_the_details = !shown(q("#mAdv")) && !shown(q("#mTemp")) && !shown(q("#mHot"));
+    out.simple_status_keeps_the_signal = shown(q("#mRssi")) && shown(q("#mSet")) && shown(q("#mMoved"));
+    out.simple_status_shows_live_motion = shown(q("#liveAccel")) && shown(q("#liveYaw"));
+    js('showTab("system")');
+    out.simple_system_hides_firmware_and_reset = !shown(q("#otaGo")) && !shown(q("#sReset")) && !shown(q("#soundList"));
+    out.simple_system_keeps_the_tests = shown(q("#tLed")) && shown(q("#tBeep")) && shown(q("#sReboot"));
+    js('showTab("logs")');
+    out.simple_logs_hide_erase = !shown(q("#logClear"));
+    out.simple_logs_keep_the_trips_and_download = shown(q("#tripList")) && shown(q("a.button"));
+    await js('showTab("settings"); loadSettings()');
+    const simple = fields();
+    out.simple_settings_are_short = simple.length === 3;
+    out.simple_settings_are_the_useful_ones = ["Set point", "Buzzer", "LED"].every(name => simple.some(text => text.startsWith(name)));
+    out.simple_settings_offer_the_password_page = shown(q("#sPassword"));
+    out.simple_settings_hide_reset_to_defaults = !shown(q("#sDefaults"));
+
+    q("#advMode").click();
+    out.advanced_shows_every_setting_but_the_password = fields().length === 22;
+    out.advanced_is_remembered = win.localStorage.getItem("yg_advanced") === "1";
+    js('showTab("system")');
+    out.advanced_system_shows_firmware_reset_and_sounds = shown(q("#otaGo")) && shown(q("#sReset")) && shown(q("#soundList"));
+    js('showTab("logs")');
+    out.advanced_logs_show_erase = shown(q("#logClear"));
+    js('showTab("status")');
+    out.advanced_status_shows_the_details = shown(q("#mAdv")) && shown(q("#mTemp")) && shown(q("#mHot"));
+
+    // Reset to defaults, on the settings tab in advanced mode.
+    js('showTab("settings")');
+    out.advanced_shows_reset_to_defaults = shown(q("#sDefaults"));
+    const sent = [];
+    win.fetch = (path, options) => {
+      if (options && options.method === "POST") sent.push(path);
+      return realFetch(path, options);
+    };
+    const realConfirm = win.confirm;
+    let asked = "";
+    win.confirm = text => { asked = text; return false; };
+    q("#sDefaults").click();
+    await wait(100);
+    out.reset_to_defaults_asks_first = asked.includes("beacon and logs stay") && asked.includes("password");
+    out.declining_resets_nothing = sent.length === 0;
+    win.confirm = () => true;
+    await js('post("/api/settings", { press_ms: 1234 })');
+    await js("loadSettings()");
+    out.a_setting_can_be_changed_before_the_reset = num("Press time").value === "1234";
+    sent.length = 0;
+    q("#sDefaults").click();
+    await wait(300);
+    out.accepting_resets_the_settings = sent.includes("/api/settings/reset");
+    out.the_form_shows_the_defaults_afterwards = num("Press time").value === "2000";
+    win.confirm = realConfirm;
+    win.fetch = realFetch;
+
+    // Trying each sound, on the system tab.
+    let posted = [];
+    win.fetch = (path, options) => {
+      if (options && options.method === "POST") posted.push({ path, body: options.body });
+      return realFetch(path, options);
+    };
+    js('showTab("system")');
+    const sounds = [...doc.querySelectorAll("#soundList button")];
+    out.all_seven_sounds_can_be_tried = sounds.length === 7;
+    sounds[4].click();
+    await wait(100);
+    out.a_sound_button_names_its_sound = posted.some(p => p.path === "/api/test/beep" && JSON.parse(p.body).sound === "error");
+
+    js('showTab("settings")');
+    q("#advMode").click();
+    out.simple_mode_comes_back = !js("advanced") && win.localStorage.getItem("yg_advanced") === "0";
+
+    // Reset logs: everything erased, and the numbers start again, with no restart.
+    js('showTab("logs")');
+    out.the_button_says_reset_logs = q("#logClear").textContent === "Reset logs";
+    const resetPosts = [], fetchBefore = win.fetch;
+    win.fetch = (path, options) => {
+      if (options && options.method === "POST") resetPosts.push(path);
+      return realFetch(path, options);
+    };
+    const keepConfirm = win.confirm;
+    let question = "";
+    win.confirm = text => { question = text; return false; };
+    q("#logClear").click();
+    await wait(100);
+    out.reset_logs_asks_first = question.includes("from 1") && resetPosts.length === 0;
+    win.confirm = () => true;
+    q("#logClear").click();
+    await wait(600);
+    out.reset_logs_erases_them = resetPosts.includes("/api/logs/clear");
+    out.reset_logs_gives_the_new_log_a_time = resetPosts.includes("/api/time");
+    out.reset_logs_never_restarts_the_unit = !resetPosts.includes("/api/reboot");
+    await js("poll()");
+    out.the_trip_number_starts_again = q("#sub").textContent.startsWith("Trip 1 ");
+    out.the_trip_list_starts_again = q("#tripList").textContent.includes("Trip 1") && !q("#tripList").textContent.includes("Trip 42");
+    win.confirm = keepConfirm;
+    win.fetch = fetchBefore;
+
+    // The password page.
+    posted = [];
+    q("#sPassword").click();
+    out.password_page_opens_on_its_own = shown(q("#pw1")) && shown(q("#pw2")) && !shown(q("#setForm"));
+    out.password_page_stays_under_settings = q('nav button[aria-selected="true"]').dataset.tab === "settings";
+    out.password_is_not_autofilled_on_its_page = q("#pw1").autocomplete === "new-password";
+    q("#pw1").value = "short"; q("#pw2").value = "short"; q("#pwSave").click();
+    await wait(50);
+    out.short_password_is_refused = posted.length === 0 && shown(q("#pwError"));
+    q("#pw1").value = "longenough1"; q("#pw2").value = "different1"; q("#pwSave").click();
+    await wait(50);
+    out.different_passwords_are_refused = posted.length === 0 && shown(q("#pwError"));
+    q("#pw2").value = "longenough1"; q("#pwSave").click();
+    await wait(300);
+    out.a_good_password_is_sent = posted.length === 1 && JSON.parse(posted[0].body).hotspot_password === "longenough1";
+    out.it_goes_back_to_settings_with_the_fields_empty = shown(q("#setForm")) && q("#pw1").value === "" && q("#pw2").value === "";
+    win.fetch = realFetch;
+
+    // The motion graphs.
+    js('showTab("status")');
+    const motionBase = { ...js("st"), sensor: "ok", calibrated: true, motion_accel_mg: 40, motion_yaw_deg: 15 };
+    js("render")({ ...motionBase, uptime_ms: 9000000, motion_mg_peak: 120, motion_yaw_peak: 22.5 });
+    out.motion_graphs_take_the_peaks = js("accelPoints[accelPoints.length - 1].v") === 120 && js("yawPoints[yawPoints.length - 1].v") === 22.5;
+    js("render")({ ...motionBase, uptime_ms: 9000500, sensor: "failed", motion_mg_peak: 500, motion_yaw_peak: 90 });
+    out.a_failed_sensor_leaves_a_gap = js("accelPoints[accelPoints.length - 1].v") === null && js("yawPoints[yawPoints.length - 1].v") === null;
+    js("render")({ ...motionBase, uptime_ms: 9001000, calibrated: false, motion_mg_peak: 500, motion_yaw_peak: 90 });
+    out.an_uncalibrated_sensor_leaves_a_gap = js("accelPoints[accelPoints.length - 1].v") === null;
+    out.motion_scale_covers_the_threshold = js("niceTop([{ v: 3 }], 40)") >= 40 && js("niceTop([{ v: 260 }], 40)") >= 260 && js("niceTop([{ v: null }], 15)") >= 15;
   } catch (e) {
     out.script_error = String(e);
   }

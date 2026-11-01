@@ -70,7 +70,7 @@ def main():
     port = args.port
 
     # An interrupted soak check leaves a short hotspot time behind.
-    command("set hotspot_s 300")
+    command("set hotspot_s 0")
     command("log-clear", 240)
     start_slot, _ = system()
     other_slot = "ota_1" if start_slot == "ota_0" else "ota_0"

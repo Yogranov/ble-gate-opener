@@ -30,3 +30,12 @@ uint32_t yg_app_current_trip(void);
 
 /* For use inside yg_app_call, after a setting in e->s has changed. */
 void yg_app_setting_changed(yg_engine_t *e, uint32_t now, const char *key, const char *value);
+
+/* Puts every setting back to its default, keeping the beacon and logs. Call it from a function given to yg_app_call. */
+void yg_app_settings_reset(yg_engine_t *e, uint32_t now);
+
+/* Reset logs, from functions given to yg_app_call. Before the erase, this trip becomes number 1.
+ * After an erase that worked, the stored counter follows, so a power cut in between only
+ * leaves a higher trip number at the next start. */
+void yg_app_trips_restart(yg_engine_t *e);
+void yg_app_trips_restarted(yg_engine_t *e, uint32_t now);

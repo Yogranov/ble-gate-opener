@@ -51,7 +51,7 @@ def main():
     args = parser.parse_args()
     s = yg_serial.open_port(args.port)
     # An interrupted soak check leaves a short hotspot time behind.
-    yg_serial.run_command(s, "set hotspot_s 300", 5)
+    yg_serial.run_command(s, "set hotspot_s 0", 5)
     # A new trip, so that it has a boot record even if the logs were just erased.
     yg_serial.reset(s)
     s.close()
@@ -117,6 +117,13 @@ def main():
     meta = r[r.index('{"k":"meta"'):].split("\n")[0]
     check("export meta is valid JSON with a quote in the SSID", json.loads(meta)["ssid"] == 'a"b', meta)
     api(s, "POST", "/api/settings", {"hotspot_ssid": ssid})
+    api(s, "POST", "/api/settings", {"press_ms": 1500, "buzzer_enabled": False})
+    check("reset to defaults", '"ok":true' in api(s, "POST", "/api/settings/reset", {"x": 1}))
+    after = {i["key"]: i.get("value") for i in json.loads(body_of(api(s, "GET", "/api/settings")))["settings"]}
+    check("settings are back to their defaults", after["press_ms"] == 2000 and after["buzzer_enabled"] is True and after["hotspot_s"] == 0, str(after))
+    check("the hotspot name comes back from the unit's address", after["hotspot_ssid"].startswith("YogiGate-"), after["hotspot_ssid"])
+    check("reset to defaults needs the guard header", "403" in yg_serial.run_command(s, "api NOGUARD /api/settings/reset " + quoted('{"x":1}'), 20))
+    api(s, "POST", "/api/settings", {"hotspot_ssid": ssid})
 
     after = json.loads(yg_serial.run_command(s, "status", 5).split("\n")[0])
     check("none of those restarted the unit", after["uptime_ms"] > before["uptime_ms"], (before, after))
@@ -138,6 +145,11 @@ def main():
 
     check("test LED", '"ok":true' in api(s, "POST", "/api/test/led", {"x": 1}))
     check("test beep with no buzzer fitted", '"ok":true' in api(s, "POST", "/api/test/beep", {"x": 1}))
+    for sound in ("press", "pairing", "hotspot", "success", "error", "no_beacon", "sensor"):
+        check(f"test sound {sound}", '"ok":true' in api(s, "POST", "/api/test/beep", {"sound": sound}))
+    check("unknown sound refused", "400" in api(s, "POST", "/api/test/beep", {"sound": "loud"}))
+    r = api(s, "GET", "/api/status")
+    check("status has the live motion values", all(k in r for k in ('"motion_mg_peak":', '"motion_yaw_peak":', '"motion_accel_mg":', '"motion_yaw_deg":')), r)
 
     check("pair scan", '"ok":true' in api(s, "POST", "/api/pair/scan", {"x": 1}))
     r = api(s, "GET", "/api/pair/candidates")

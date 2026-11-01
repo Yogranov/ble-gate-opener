@@ -2,7 +2,7 @@
 
 Logs are exported as NDJSON: one JSON object per line. `GET /api/logs/export`, the page's Download button and `tools/yg_logs.py fetch` all produce this format.
 
-A **trip** is one power-on period. Every record has:
+A **trip** is one power-on period. Trip numbers start again from 1 after Reset logs or a factory reset, so they are only unique within one log file. Every record has:
 
 | Field | Meaning |
 |---|---|
@@ -73,7 +73,7 @@ These are written only with the debug flag on, to a separate log. They cover abo
 
 1. Did motion ever fire while parked? Look at captures with cause `motion` that are not followed by a real drive, and at owner ratings of `too_early` or `no_reason`.
 2. How much warning does a press give? `tools/yg_logs.py summary` shows the time from press to peak signal.
-3. Do bad days show weaker signal or fewer adverts? Compare parked signal, peak signal and adverts per second across trips. The summary's adverts per second covers only the seconds when the beacon was heard, so a long drive does not lower it. A trip that never reached a 1 s trace period shows `-`.
+3. Do bad days show weaker signal or fewer adverts? Leave out any time with the hotspot on, when the scan listens a quarter of the time. Compare parked signal, peak signal and adverts per second across trips. The summary's adverts per second covers only the seconds when the beacon was heard, so a long drive does not lower it. A trip that never reached a 1 s trace period shows `-`.
 4. Does temperature or the `env` snapshot line up with bad days?
 5. Do the owner's ratings agree with the data?
 

@@ -3,6 +3,7 @@
 
     python tools/mock_api.py [port]        then open http://localhost:8765
 """
+import copy
 import json
 import math
 import os
@@ -31,15 +32,17 @@ SETTINGS = [
     {"key": "pair_margin_db", "type": "int", "value": 15, "min": 3, "max": 40},
     {"key": "pair_hold_s", "type": "int", "value": 2, "min": 1, "max": 10},
     {"key": "pair_timeout_s", "type": "int", "value": 60, "min": 10, "max": 300},
-    {"key": "hotspot_s", "type": "int", "value": 300, "min": 0, "max": 3600},
+    {"key": "hotspot_s", "type": "int", "value": 0, "min": 0, "max": 3600},
     {"key": "hotspot_ssid", "type": "string", "value": "YogiGate-0F01", "min": 1, "max": 32},
     {"key": "hotspot_password", "type": "password", "min": 8, "max": 63},
     {"key": "wifi_tx_dbm", "type": "int", "value": 8, "min": 2, "max": 20},
     {"key": "led_enabled", "type": "bool", "value": True},
-    {"key": "buzzer_enabled", "type": "bool", "value": False},
-    {"key": "buzzer_type", "type": "enum", "value": "passive", "options": ["passive", "active"]},
+    {"key": "buzzer_enabled", "type": "bool", "value": True},
+    {"key": "buzzer_type", "type": "enum", "value": "active", "options": ["passive", "active"]},
     {"key": "debug", "type": "bool", "value": True},
 ]
+
+DEFAULTS = copy.deepcopy(SETTINGS)
 
 TRIPS = [
     {"trip": 42, "fw": "2.0.0", "reset": 1, "duration_ms": 184000, "first_heard": {"t": 800, "rssi": -91},
@@ -80,7 +83,7 @@ def trip_records(number):
     return out
 
 
-state = {"pair_mode": "idle", "pressing_until": 0}
+state = {"trip": 43, "pair_mode": "idle", "pressing_until": 0}
 
 
 polls = {"count": 200}
@@ -94,10 +97,13 @@ def status():
     rssi = -82 + int(8 * math.sin(polls["count"] / 9)) + random.randint(-3, 3)
     pressing = now < state["pressing_until"]
     return {
-        "fw": "2.0.0", "trip": 43, "uptime_ms": uptime, "state": "pressing" if pressing else "armed", "paired": True,
+        "fw": "2.0.0", "trip": state["trip"], "uptime_ms": uptime, "state": "pressing" if pressing else "armed", "paired": True,
         "beacon": "c5:b0:e6:53:59:02", "set_point": SETTINGS[0]["value"], "effective_set_point": SETTINGS[0]["value"],
         "rssi": rssi, "rssi_age_ms": 240, "adverts_per_s": random.randint(2, 4), "moved_recently": False,
-        "calibrated": True, "tilting": False, "motion_mg": 3, "motion_yaw": 0.2, "sensor": "ok", "sensor_err": "none",
+        "calibrated": True, "tilting": False, "motion_mg": 3, "motion_yaw": 0.2,
+        "motion_mg_peak": max(0, int(18 + 16 * math.sin(polls["count"] / 7)) + random.randint(-3, 3)),
+        "motion_yaw_peak": round(abs(4 * math.sin(polls["count"] / 11)), 1), "motion_accel_mg": 40, "motion_yaw_deg": 15,
+        "sensor": "ok", "sensor_err": "none",
         "sensor_id": 104, "temp_c": 36.5, "hotspot_on": True, "hotspot_left_s": max(0, 300 - int(now - START)),
         "clients": 1, "pair_mode": state["pair_mode"], "pair_saves": 0, "debug": True, "fallback": False, "capturing": False,
     }
@@ -152,7 +158,7 @@ class Handler(BaseHTTPRequestHandler):
             before = re.search(r"before=(\d+)", self.path)
             trips = [t for t in TRIPS if not before or t["trip"] < int(before.group(1))]
             older = trips[10].get("trip") + 1 if len(trips) > 10 else 0
-            self.send_json({"current": 43, "trips": trips[:10], "next_before": older})
+            self.send_json({"current": state["trip"], "trips": trips[:10], "next_before": older})
         elif path.startswith("/api/trips/"):
             number = int(path.rsplit("/", 1)[1])
             self.send_body("\n".join(json.dumps(r) for r in trip_records(number)) + "\n", "application/x-ndjson")
@@ -184,6 +190,13 @@ class Handler(BaseHTTPRequestHandler):
             for s in SETTINGS:
                 if s["key"] in changes and s["type"] != "password":
                     s["value"] = changes[s["key"]]
+        elif path == "/api/logs/clear":
+            # Like the unit: everything is erased, and the running trip becomes number 1.
+            state["trip"] = 1
+            TRIPS[:] = [{"trip": 1, "fw": "2.0.0", "reset": 1, "duration_ms": 1000, "first_heard": None, "first_motion": None, "presses": 0,
+                         "first_press": None, "parked_best": None, "peak": None, "warning_ms": None, "adverts": 0, "temp_c": None, "errors": 0, "rating": None}]
+        elif path == "/api/settings/reset":
+            SETTINGS[:] = copy.deepcopy(DEFAULTS)
         elif path == "/api/setpoint":
             data = json.loads(body)
             SETTINGS[0]["value"] = "any" if data.get("any") else data.get("dbm", -82)

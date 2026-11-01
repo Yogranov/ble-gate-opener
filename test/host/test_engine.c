@@ -10,7 +10,7 @@
 static struct {
     int presses;
     uint32_t last_press_ms;
-    int beeps[3];
+    int beeps[YG_BUZZ_COUNT];
     yg_led_event_t last_led;
     int led_events;
     yg_record_t *records;
@@ -19,6 +19,8 @@ static struct {
     bool hotspot_on;
     int hotspot_calls;
     yg_scan_mode_t scan;
+    bool scan_shares;
+    bool shared_before_hotspot_started;
     yg_beacon_t scan_beacon;
     yg_beacon_t saved_beacon;
     int beacon_saves;
@@ -35,8 +37,8 @@ static void op_log(void *ctx, const yg_record_t *r) {
     if (fake.record_count < MAX_RECORDS) fake.records[fake.record_count++] = *r;
 }
 static void op_capture(void *ctx, const yg_record_t *r) { (void)ctx; (void)r; fake.capture_count++; }
-static void op_hotspot(void *ctx, bool on) { (void)ctx; fake.hotspot_on = on; fake.hotspot_calls++; }
-static void op_scan(void *ctx, yg_scan_mode_t mode, const yg_beacon_t *b) { (void)ctx; fake.scan = mode; fake.scan_beacon = *b; }
+static void op_hotspot(void *ctx, bool on) { (void)ctx; fake.hotspot_on = on; fake.hotspot_calls++; if (on) fake.shared_before_hotspot_started = fake.scan_shares; }
+static void op_scan(void *ctx, yg_scan_mode_t mode, const yg_beacon_t *b, bool share_radio) { (void)ctx; fake.scan = mode; fake.scan_beacon = *b; fake.scan_shares = share_radio; }
 static void op_save_beacon(void *ctx, const yg_beacon_t *b) { (void)ctx; fake.saved_beacon = *b; fake.beacon_saves++; }
 static void op_save_settings(void *ctx) { (void)ctx; fake.settings_saves++; }
 static void op_env_start(void *ctx) { (void)ctx; fake.env_starts++; }
@@ -118,6 +120,20 @@ static void sensor_asleep(uint32_t ms, uint32_t advert_ms, int8_t rssi) {
         if (t % 100 == 0) yg_engine_tick(e, now);
         now += 20;
     }
+}
+
+static int total_beeps(void) {
+    int n = 0;
+    for (int i = 0; i < YG_BUZZ_COUNT; i++) n += fake.beeps[i];
+    return n;
+}
+
+static int status_int(const char *key) {
+    static char buf[1024];
+    CHECK(yg_engine_status_json(e, now, buf, sizeof(buf)) > 0);
+    const char *at = strstr(buf, key);
+    CHECK(at != NULL);
+    return at == NULL ? -1 : atoi(at + strlen(key));
 }
 
 static int count_error(uint8_t code) {
@@ -510,6 +526,213 @@ static void set_point_here_uses_the_strongest_recent_advert(void) {
     CHECK_INT(count_records(YG_REC_SETTING), 1);
 }
 
+/* The bench unit's own name, which only the hardware layer can work out. */
+#define UNIT_SSID "YogiGate-0F01"
+
+static void reset_to_defaults_restores_every_setting(void) {
+    setup(true);
+    s.press_ms = 500;
+    s.set_point_dbm = -70;
+    s.buzzer_enabled = false;
+    s.buzzer_type = YG_BUZZER_PASSIVE;
+    s.hotspot_s = 300;
+    s.motion_accel_mg = 100;
+    strcpy(s.hotspot_ssid, "Custom");
+    strcpy(s.hotspot_password, "secret123");
+
+    yg_engine_settings_reset(e, now, UNIT_SSID);
+
+    yg_settings_t wanted;
+    yg_settings_defaults(&wanted);
+    strcpy(wanted.hotspot_ssid, UNIT_SSID);
+    CHECK(memcmp(&s, &wanted, sizeof(s)) == 0);
+    CHECK(strcmp(s.hotspot_password, "password") == 0);
+    CHECK_INT(fake.settings_saves, 1);
+}
+
+static void reset_to_defaults_keeps_the_beacon_and_presses_nothing(void) {
+    setup(true);
+    s.buzzer_enabled = false;
+    still(SEC(3), 300, -85);
+    uint32_t trip = e->trip;
+
+    yg_engine_settings_reset(e, now, UNIT_SSID);
+
+    CHECK(e->beacon.paired);
+    CHECK_INT(fake.beacon_saves, 0);
+    CHECK_INT(e->trip, trip);
+    CHECK_INT(fake.presses, 0);
+    CHECK_INT(e->trigger.state, YG_TRIG_ARMED);
+    CHECK_INT(fake.scan, YG_SCAN_FILTERED);
+}
+
+static void reset_to_defaults_logs_only_what_changed(void) {
+    setup(true);
+    strcpy(s.hotspot_ssid, UNIT_SSID);
+    int before = fake.record_count;
+    yg_engine_settings_reset(e, now, UNIT_SSID);
+    CHECK_INT(fake.record_count, before);
+
+    s.press_ms = 500;
+    strcpy(s.hotspot_password, "secret123");
+    yg_engine_settings_reset(e, now, UNIT_SSID);
+    CHECK_INT(fake.record_count, before + 2);
+    /* The old value of a password never reaches a log, and neither does the new one. */
+    const yg_record_t *last = &fake.records[fake.record_count - 1];
+    CHECK(memcmp(last->payload, "hotspot_password", 17) == 0);
+    CHECK(strcmp((const char *)last->payload + 17, "changed") == 0);
+    const yg_record_t *first = &fake.records[fake.record_count - 2];
+    CHECK(memcmp(first->payload, "press_ms", 9) == 0);
+    CHECK(strcmp((const char *)first->payload + 9, "2000") == 0);
+}
+
+static void reset_to_defaults_answers_with_success(void) {
+    setup(true);
+    s.buzzer_enabled = false;
+    s.led_enabled = false;
+    yg_engine_settings_reset(e, now, UNIT_SSID);
+    CHECK_INT(fake.beeps[YG_BUZZ_SAVED], 1);
+    CHECK_INT(fake.last_led, YG_LED_SAVED);
+}
+
+static void reset_to_defaults_ends_debug_captures(void) {
+    setup(true);
+    s.debug = true;
+    yg_engine_setting_changed(e, now, "debug", "1");
+    CHECK(e->capture != NULL);
+    yg_engine_settings_reset(e, now, UNIT_SSID);
+    CHECK(!s.debug);
+    CHECK(e->capture == NULL);
+}
+
+static void restarting_the_trip_count_makes_this_trip_number_one(void) {
+    setup(true);
+    still(SEC(3), 300, -85);
+    CHECK_INT(e->trip, 7);
+    CHECK_INT(count_records(YG_REC_FIRST_HEARD), 1);
+    fake.record_count = 0;
+
+    yg_engine_trips_restart(e);
+    CHECK_INT(e->trip, 1);
+    CHECK_INT(status_int("\"trip\":"), 1);
+    /* The erase takes a while, and whatever is logged during it must not carry the old number,
+     * including a trace that was already being collected. */
+    still(SEC(8), 300, -85);
+    CHECK(fake.record_count > 0);
+    for (int i = 0; i < fake.record_count; i++) {
+        CHECK_INT(fake.records[i].trip, 1);
+    }
+
+    /* The erased log took this trip's boot record with it, and a replay starts from that. */
+    fake.record_count = 0;
+    yg_engine_log_restarted(e, now);
+    CHECK_INT(count_records(YG_REC_BOOT), 1);
+    still(SEC(2), 300, -85);
+    CHECK_INT(count_records(YG_REC_FIRST_HEARD), 1);
+    for (int i = 0; i < fake.record_count; i++) {
+        CHECK_INT(fake.records[i].trip, 1);
+    }
+}
+
+static void restarting_the_trip_count_changes_nothing_else(void) {
+    setup(true);
+    still(SEC(3), 300, -85);
+    yg_engine_trips_restart(e);
+    yg_engine_log_restarted(e, now);
+    CHECK_INT(fake.presses, 0);
+    CHECK_INT(e->trigger.state, YG_TRIG_ARMED);
+    CHECK(e->beacon.paired);
+    CHECK_INT(fake.beacon_saves, 0);
+    CHECK_INT(fake.settings_saves, 0);
+    /* The rule still works afterwards. */
+    pull_out(SEC(2), 300, -85);
+    CHECK_INT(fake.presses, 1);
+}
+
+static void scanning_has_the_whole_radio_with_the_hotspot_off(void) {
+    setup(true);
+    still(SEC(3), 300, -85);
+    CHECK_INT(fake.scan, YG_SCAN_FILTERED);
+    CHECK(!fake.scan_shares);
+}
+
+/* Measured on a real unit: a scan at full time left a phone on the page no requests at all. */
+static void scanning_shares_the_radio_while_the_hotspot_is_on(void) {
+    setup(true);
+    yg_engine_on_gesture(e, now, YG_GESTURE_TRIPLE);
+    still(SEC(1), 0, 0);
+    CHECK(fake.hotspot_on);
+    CHECK(fake.scan_shares);
+    CHECK_INT(fake.scan, YG_SCAN_FILTERED);
+    CHECK(fake.shared_before_hotspot_started);
+
+    still(SEC(300), 0, 0);
+    CHECK(!fake.hotspot_on);
+    CHECK(!fake.scan_shares);
+    CHECK_INT(fake.scan, YG_SCAN_FILTERED);
+}
+
+static void a_scan_for_pairing_shares_the_radio_too(void) {
+    setup(true);
+    yg_engine_on_gesture(e, now, YG_GESTURE_TRIPLE);
+    still(SEC(1), 0, 0);
+    yg_engine_pair_start(e, now, YG_PAIR_LIST);
+    CHECK_INT(fake.scan, YG_SCAN_OPEN);
+    CHECK(fake.scan_shares);
+    yg_engine_pair_cancel(e, now);
+    CHECK_INT(fake.scan, YG_SCAN_FILTERED);
+    CHECK(fake.scan_shares);
+}
+
+static void the_hotspot_does_not_start_a_scan_with_no_beacon(void) {
+    setup(false);
+    yg_engine_on_gesture(e, now, YG_GESTURE_TRIPLE);
+    still(SEC(1), 0, 0);
+    CHECK(fake.hotspot_on);
+    CHECK_INT(fake.scan, YG_SCAN_OFF);
+}
+
+static void the_hotspot_keeps_a_debug_snapshot_scanning(void) {
+    setup(true);
+    s.debug = true;
+    yg_engine_setting_changed(e, now, "debug", "1");
+    still(SEC(11), 0, 0);
+    CHECK_INT(fake.scan, YG_SCAN_OPEN);
+    CHECK(!fake.scan_shares);
+    yg_engine_on_gesture(e, now, YG_GESTURE_TRIPLE);
+    still(SEC(1), 0, 0);
+    CHECK_INT(fake.scan, YG_SCAN_OPEN);
+    CHECK(fake.scan_shares);
+    still(SEC(10), 0, 0);
+    CHECK_INT(fake.scan, YG_SCAN_FILTERED);
+    CHECK(fake.scan_shares);
+}
+
+/* Set here is always used with the hotspot on, when far fewer adverts are heard. */
+static void set_here_looks_further_back_while_sharing_the_radio(void) {
+    setup(true);
+    yg_engine_on_advert(e, now, &GATE, -77, &ib);
+    still(SEC(4), 0, 0);
+    CHECK(!yg_engine_setpoint_here(e, now));
+
+    setup(true);
+    yg_engine_on_gesture(e, now, YG_GESTURE_TRIPLE);
+    still(SEC(1), 0, 0);
+    yg_engine_on_advert(e, now, &GATE, -77, &ib);
+    still(SEC(8), 0, 0);
+    CHECK(yg_engine_setpoint_here(e, now));
+    CHECK_INT(s.set_point_dbm, -77);
+}
+
+static void the_gate_still_opens_while_sharing_the_radio(void) {
+    setup(true);
+    yg_engine_on_gesture(e, now, YG_GESTURE_TRIPLE);
+    still(SEC(3), 1200, -85);
+    CHECK_INT(fake.presses, 0);
+    pull_out(SEC(2), 1200, -85);
+    CHECK_INT(fake.presses, 1);
+}
+
 static void set_point_by_value_and_any(void) {
     setup(true);
     CHECK(yg_engine_setpoint_dbm(e, now, -85));
@@ -522,18 +745,119 @@ static void set_point_by_value_and_any(void) {
     CHECK_INT(s.set_point_dbm, YG_SET_POINT_ANY);
 }
 
-static void buzzer_is_silent_unless_enabled(void) {
+static void automatic_presses_are_silent(void) {
     setup(true);
     still(SEC(3), 300, -85);
     pull_out(SEC(2), 300, -85);
     CHECK_INT(fake.presses, 1);
-    CHECK_INT(fake.beeps[YG_BUZZ_PRESS], 0);
+    CHECK_INT(total_beeps(), 0);
+}
+
+static void fallback_presses_are_silent(void) {
+    setup(true);
+    s.motion_enabled = false;
+    still(SEC(1), 300, -85);
+    CHECK_INT(fake.presses, 1);
+    CHECK_INT(total_beeps(), 0);
+}
+
+static void presses_by_hand_beep(void) {
+    setup(true);
+    yg_engine_on_gesture(e, now, YG_GESTURE_SINGLE);
+    CHECK_INT(fake.beeps[YG_BUZZ_PRESS], 1);
+    still(SEC(3), 0, 0);
+    CHECK(yg_engine_press(e, now, YG_PRESS_WEB));
+    CHECK_INT(fake.beeps[YG_BUZZ_PRESS], 2);
+}
+
+static void asking_for_the_hotspot_answers_with_sound_and_light(void) {
+    setup(true);
+    yg_engine_on_gesture(e, now, YG_GESTURE_TRIPLE);
+    CHECK_INT(fake.beeps[YG_BUZZ_HOTSPOT], 1);
+    CHECK_INT(fake.last_led, YG_LED_HOTSPOT);
+}
+
+static void holding_the_button_answers_that_pairing_started(void) {
+    setup(true);
+    yg_engine_on_gesture(e, now, YG_GESTURE_HOLD);
+    CHECK_INT(fake.beeps[YG_BUZZ_PAIRING], 1);
 
     setup(true);
-    s.buzzer_enabled = true;
-    still(SEC(3), 300, -85);
-    pull_out(SEC(2), 300, -85);
-    CHECK_INT(fake.beeps[YG_BUZZ_PRESS], 1);
+    yg_engine_pair_start(e, now, YG_PAIR_LIST);
+    CHECK_INT(fake.beeps[YG_BUZZ_PAIRING], 0);
+}
+
+static void pairing_results_have_their_own_sounds(void) {
+    setup(true);
+    yg_engine_pair_set(e, now, GATE.addr, GATE.type);
+    CHECK_INT(fake.beeps[YG_BUZZ_SAVED], 1);
+
+    setup(true);
+    yg_engine_pair_start(e, now, YG_PAIR_AUTO);
+    still(SEC(61), 0, 0);
+    CHECK_INT(fake.beeps[YG_BUZZ_REJECTED], 1);
+}
+
+static void starting_with_no_beacon_sounds_only_then(void) {
+    setup(false);
+    CHECK_INT(fake.beeps[YG_BUZZ_NO_BEACON], 1);
+    still(SEC(5), 0, 0);
+    CHECK_INT(fake.beeps[YG_BUZZ_NO_BEACON], 1);
+
+    setup(true);
+    still(SEC(5), 0, 0);
+    CHECK_INT(total_beeps(), 0);
+}
+
+static void a_failed_sensor_sounds_once_per_trip(void) {
+    setup(true);
+    sensor_down(SEC(6), true, 0, 0);
+    CHECK_INT(fake.beeps[YG_BUZZ_SENSOR], 1);
+    still(SEC(7), 0, 0);
+    sensor_down(SEC(6), true, 0, 0);
+    CHECK_INT(fake.beeps[YG_BUZZ_SENSOR], 1);
+}
+
+static void a_sensor_turned_off_on_purpose_stays_quiet(void) {
+    setup(true);
+    s.motion_enabled = false;
+    sensor_down(SEC(6), true, 0, 0);
+    CHECK_INT(fake.beeps[YG_BUZZ_SENSOR], 0);
+}
+
+static void turning_the_buzzer_off_silences_everything(void) {
+    setup(true);
+    s.buzzer_enabled = false;
+    boot(false);
+    yg_engine_on_gesture(e, now, YG_GESTURE_SINGLE);
+    yg_engine_on_gesture(e, now, YG_GESTURE_DOUBLE);
+    yg_engine_on_gesture(e, now, YG_GESTURE_TRIPLE);
+    yg_engine_on_gesture(e, now, YG_GESTURE_HOLD);
+    still(SEC(61), 0, 0);
+    sensor_down(SEC(6), true, 0, 0);
+    CHECK_INT(total_beeps(), 0);
+}
+
+static void status_holds_motion_peaks_for_the_live_graph(void) {
+    setup(true);
+    still(SEC(3), 0, 0);
+    CHECK_INT(status_int("\"motion_accel_mg\":"), 40);
+    CHECK_INT(status_int("\"motion_yaw_deg\":"), 15);
+    CHECK(status_int("\"motion_mg_peak\":") < 20);
+
+    pull_out(SEC(1), 0, 0);
+    int peak = status_int("\"motion_mg_peak\":");
+    CHECK(peak >= 40);
+    /* The page reads this twice a second, so a short peak has to stay long enough to be seen. */
+    still(400, 0, 0);
+    CHECK_INT(status_int("\"motion_mg_peak\":"), peak);
+    still(SEC(5), 0, 0);
+    CHECK(status_int("\"motion_mg_peak\":") < 20);
+
+    run(SEC(1), 0, 30.0f, 0, 0);
+    CHECK(status_int("\"motion_yaw_peak\":") >= 15);
+    run(SEC(1), 0, -30.0f, 0, 0);
+    CHECK(status_int("\"motion_yaw_peak\":") >= 0);
 }
 
 static void led_off_suppresses_led_events(void) {
@@ -579,8 +903,24 @@ static void every_gesture_does_its_job(void) {
     CHECK_INT(fake.scan, YG_SCAN_OPEN);
 }
 
-static void hotspot_starts_on_and_stops_when_the_car_moves(void) {
+static void hotspot_stays_off_until_someone_asks(void) {
     setup(true);
+    still(SEC(5), 0, 0);
+    CHECK(!fake.hotspot_on);
+    CHECK_INT(count_records(YG_REC_HOTSPOT), 0);
+    yg_engine_on_gesture(e, now, YG_GESTURE_TRIPLE);
+    still(SEC(1), 0, 0);
+    CHECK(fake.hotspot_on);
+    pull_out(SEC(2), 0, 0);
+    CHECK(fake.hotspot_on);
+    still(SEC(300), 0, 0);
+    CHECK(!fake.hotspot_on);
+}
+
+static void a_timed_hotspot_starts_on_and_stops_when_the_car_moves(void) {
+    setup(true);
+    s.hotspot_s = 300;
+    yg_hotspot_init(&e->hotspot, &s, now, false);
     still(SEC(2), 0, 0);
     CHECK(fake.hotspot_on);
     pull_out(SEC(2), 0, 0);
@@ -590,6 +930,8 @@ static void hotspot_starts_on_and_stops_when_the_car_moves(void) {
 
 static void hotspot_stays_while_a_client_is_connected(void) {
     setup(true);
+    s.hotspot_s = 300;
+    yg_hotspot_init(&e->hotspot, &s, now, false);
     still(SEC(2), 0, 0);
     yg_engine_on_clients(e, now, 1);
     pull_out(SEC(2), 0, 0);
@@ -753,7 +1095,7 @@ static void status_reports_the_live_state(void) {
     CHECK_HAS(buf, "\"sensor\":\"ok\"");
     CHECK_HAS(buf, "\"sensor_id\":104");
     CHECK_HAS(buf, "\"temp_c\":33.5");
-    CHECK_HAS(buf, "\"hotspot_on\":true");
+    CHECK_HAS(buf, "\"hotspot_on\":false");
     CHECK_HAS(buf, "\"pair_mode\":\"idle\"");
     CHECK_HAS(buf, "\"debug\":false");
     CHECK_HAS(buf, "\"fallback\":false");
@@ -806,12 +1148,37 @@ int main(void) {
     RUN(typed_mac_saves_with_any_type);
     RUN(forgetting_stops_presses_and_scanning);
     RUN(set_point_here_uses_the_strongest_recent_advert);
+    RUN(reset_to_defaults_restores_every_setting);
+    RUN(reset_to_defaults_keeps_the_beacon_and_presses_nothing);
+    RUN(reset_to_defaults_logs_only_what_changed);
+    RUN(reset_to_defaults_answers_with_success);
+    RUN(reset_to_defaults_ends_debug_captures);
+    RUN(restarting_the_trip_count_makes_this_trip_number_one);
+    RUN(restarting_the_trip_count_changes_nothing_else);
+    RUN(scanning_has_the_whole_radio_with_the_hotspot_off);
+    RUN(scanning_shares_the_radio_while_the_hotspot_is_on);
+    RUN(a_scan_for_pairing_shares_the_radio_too);
+    RUN(the_hotspot_does_not_start_a_scan_with_no_beacon);
+    RUN(the_hotspot_keeps_a_debug_snapshot_scanning);
+    RUN(set_here_looks_further_back_while_sharing_the_radio);
+    RUN(the_gate_still_opens_while_sharing_the_radio);
     RUN(set_point_by_value_and_any);
-    RUN(buzzer_is_silent_unless_enabled);
+    RUN(automatic_presses_are_silent);
+    RUN(fallback_presses_are_silent);
+    RUN(presses_by_hand_beep);
+    RUN(asking_for_the_hotspot_answers_with_sound_and_light);
+    RUN(holding_the_button_answers_that_pairing_started);
+    RUN(pairing_results_have_their_own_sounds);
+    RUN(starting_with_no_beacon_sounds_only_then);
+    RUN(a_failed_sensor_sounds_once_per_trip);
+    RUN(a_sensor_turned_off_on_purpose_stays_quiet);
+    RUN(turning_the_buzzer_off_silences_everything);
+    RUN(status_holds_motion_peaks_for_the_live_graph);
     RUN(led_off_suppresses_led_events);
     RUN(press_lights_the_led_and_it_goes_out_after);
     RUN(every_gesture_does_its_job);
-    RUN(hotspot_starts_on_and_stops_when_the_car_moves);
+    RUN(hotspot_stays_off_until_someone_asks);
+    RUN(a_timed_hotspot_starts_on_and_stops_when_the_car_moves);
     RUN(hotspot_stays_while_a_client_is_connected);
     RUN(first_heard_logs_once_and_motion_logs_are_limited);
     RUN(temperature_logs_once_a_minute);

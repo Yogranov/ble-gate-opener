@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
 <title>YogiGate</title>
+<link rel="icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAMAAABEpIrGAAAAwFBMVEUmIBtcU1RfKCHT09HaLS2wsKo9P0HHvL7NamngrQW4kAugT0+bHyH64pD82F+/wL0bHiIcICL+xAH5+fUpKCEAAAASFhnwuQE+OB0bHyLkKinobWvsGRn05+PWDAzcGxscHx8bHyEcICIbGyQaHSEeHh49QEFLOCqSk5PiDAz1c3GKh3z4896vKyvMnwhZX2AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACek9UWAAAAMHRSTlP//////////////////////v3///8B////iv///////1Db1hxNGf////////////9+tq5cAAABFUlEQVR42tWT2XbCMAxElQDdFw1eIGnYoQlQ4P//rrLTQ+PEwDN6zFyNjhUNGWNW2ZIjtcxWIpIxcwAxQD7PHbCOyzWyNrThi7oQvKHsSj8YGS0uANBsLbCgfzwgYUknn98WFI78g0Uvq55SDUBLwROAtZROd0o1gZeR1FGz67VJ1S+2Xw0ArEdDV6W0UyLW+WzqgYcWQJy+Oe9JDQxOMjIA9o+5957kRfFUkbUcAO/q7N0/lHBbCAHlvbc71dtrWNb1oxvAj/eevZ6c9XlrLeCQapF1Y3nBiEECv0eOAx9Dou6fay/qOjC+ByCNAf5ocXT6s+4AcrTu7MViLNXV3dn74CA42jA4dfQARBLqo3c7vDfi/wvvpkiMeFmmFwAAAABJRU5ErkJggg==">
 <style>
 :root {
   --bg: #f4f5f7; --card: #fff; --text: #14171a; --muted: #5b646e; --line: #dfe3e8;
@@ -21,8 +22,8 @@
 * { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
 body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-header { position: sticky; top: 0; z-index: 2; background: var(--bg); border-bottom: 1px solid var(--line); padding: 10px 16px; padding-top: max(10px, env(safe-area-inset-top)); display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
-header b { font-size: 18px; letter-spacing: .2px; }
+header { position: sticky; top: 0; z-index: 2; background: var(--bg); border-bottom: 1px solid var(--line); padding: 10px 16px; padding-top: max(10px, env(safe-area-inset-top)); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+header img { display: block; height: 32px; width: auto; }
 header span { color: var(--muted); font-size: 13px; text-align: right; }
 main { max-width: 640px; margin: 0 auto; padding: 12px 16px 96px; }
 nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 3; display: flex; background: var(--card); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); }
@@ -42,9 +43,11 @@ p { margin: 0 0 10px; }
 .grid dd { margin: 0; font-size: 17px; font-weight: 600; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
 dl { margin: 0; }
 canvas { display: block; width: 100%; height: 170px; margin-top: 8px; }
+canvas.short { height: 110px; margin-top: 2px; }
 button, .button { font: inherit; font-weight: 600; min-height: 44px; padding: 8px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--soft); color: var(--text); cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
 button:disabled { opacity: .5; cursor: default; }
 [hidden] { display: none !important; }
+body:not(.adv) .adv-only { display: none !important; }
 button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
 button.danger { color: var(--bad); }
 button.wide, .button.wide { width: 100%; }
@@ -86,13 +89,24 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 progress { width: 100%; height: 10px; margin-top: 8px; }
 .legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); margin-top: 4px; }
 .legend i { display: inline-block; width: 10px; height: 3px; margin-right: 4px; vertical-align: middle; border-radius: 2px; }
+.stack { display: grid; gap: 10px; }
+.stack label { display: grid; gap: 4px; font-weight: 500; }
+#pwError { color: var(--bad); margin: 0; }
+.help-steps { margin: 0; padding-left: 20px; display: grid; gap: 8px; font-size: 14.5px; line-height: 1.38; }
+.help-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-top: 1px solid var(--line); font-size: 14.5px; line-height: 1.3; }
+.help-row:first-of-type { border-top: 0; }
+.help-row > span:not(.r):not(.led-dot) { flex: 1; min-width: 0; }
+.help-row button { flex: none; min-height: 36px; padding: 4px 11px; font-size: 13px; }
+.r { position: relative; display: block; flex: none; width: 80px; height: 12px; border-radius: 2px; overflow: hidden; background: var(--soft); }
+.r i { position: absolute; top: 2px; bottom: 2px; background: var(--text); }
+.led-dot { flex: none; width: 14px; height: 14px; border-radius: 50%; background: var(--c); border: 1px solid var(--line); }
 pre { margin: 8px 0 0; font-size: 12.5px; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--muted); }
 </style>
 </head>
 <body>
-<header><b>YogiGate</b><span id="sub">Connecting</span></header>
+<header><img alt="YogiGate" width="96" height="32" src="data:image/webp;base64,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"><span id="sub">Connecting</span></header>
 <main>
-  <div id="lost" class="banner bad" hidden>The unit is not answering. It may be busy with a download, or this phone may have left its hotspot, which turns off when the car moves or its time runs out.</div>
+  <div id="lost" class="banner bad" hidden>The unit is not answering. It may be busy with a download, or this phone may have left its hotspot, which turns off when nobody is connected and its time runs out. Triple-click the button to start it again.</div>
   <div id="warn" class="banner" hidden></div>
 
   <section id="status">
@@ -101,17 +115,25 @@ pre { margin: 8px 0 0; font-size: 12.5px; white-space: pre-wrap; overflow-wrap: 
       <p id="stateText" class="muted" style="margin:2px 0 12px">&nbsp;</p>
       <dl class="grid">
         <div><dt>Signal</dt><dd id="mRssi">-</dd></div>
-        <div><dt>Adverts/s</dt><dd id="mAdv">-</dd></div>
+        <div class="adv-only"><dt>Adverts/s</dt><dd id="mAdv">-</dd></div>
         <div><dt>Set point</dt><dd id="mSet">-</dd></div>
         <div><dt>Car moved</dt><dd id="mMoved">-</dd></div>
-        <div><dt>Temperature</dt><dd id="mTemp">-</dd></div>
-        <div><dt>Hotspot left</dt><dd id="mHot">-</dd></div>
+        <div class="adv-only"><dt>Temperature</dt><dd id="mTemp">-</dd></div>
+        <div class="adv-only"><dt>Hotspot left</dt><dd id="mHot">-</dd></div>
       </dl>
     </div>
     <div class="card">
       <h2>Live signal</h2>
       <canvas id="live"></canvas>
       <div class="legend"><span><i style="background:var(--accent)"></i>Beacon, last 2 minutes</span><span><i style="background:var(--warn)"></i>Set point</span></div>
+    </div>
+    <div class="card">
+      <h2>Live motion</h2>
+      <h3>Push, in mg</h3>
+      <canvas id="liveAccel" class="short"></canvas>
+      <h3>Turn, in degrees</h3>
+      <canvas id="liveYaw" class="short"></canvas>
+      <div class="legend"><span><i style="background:var(--accent)"></i>Sensor, last 2 minutes</span><span><i style="background:var(--warn)"></i>Counts as moving</span><span><i style="background:var(--good)"></i>Car moved</span></div>
     </div>
     <button id="press" class="primary wide">Press the remote</button>
   </section>
@@ -145,6 +167,31 @@ pre { margin: 8px 0 0; font-size: 12.5px; white-space: pre-wrap; overflow-wrap: 
   <section id="settings" hidden>
     <div id="setForm"></div>
     <div class="savebar"><button id="setSave" class="primary wide" hidden>Save</button></div>
+    <div class="card">
+      <h2>Hotspot password</h2>
+      <p class="muted">The default is <code>password</code>. You can change it if you want to.</p>
+      <button id="sPassword" class="wide">Change password</button>
+    </div>
+    <div class="card adv-only">
+      <h2>Reset settings</h2>
+      <p class="muted">Puts every setting back to its default, including the hotspot name and password. The beacon and logs stay. To erase those too, use Factory reset on the System tab.</p>
+      <button id="sDefaults" class="danger wide">Reset to defaults</button>
+    </div>
+    <div class="card">
+      <label class="row" style="justify-content:space-between;font-weight:500"><span>Advanced mode</span><input id="advMode" type="checkbox"></label>
+      <p class="muted" style="margin:6px 0 0">Shows every setting, sounds, firmware upload, factory reset, log reset and debug tools. Remembered on this phone.</p>
+    </div>
+  </section>
+
+  <section id="password" hidden>
+    <div class="card stack">
+      <h2>Change the hotspot password</h2>
+      <p class="muted" style="margin:0">8 to 63 characters. It applies the next time the hotspot starts, and your phone will need it to join again.</p>
+      <label>New password<input id="pw1" class="full" type="password" autocomplete="new-password" maxlength="63"></label>
+      <label>Repeat it<input id="pw2" class="full" type="password" autocomplete="new-password" maxlength="63"></label>
+      <p id="pwError" hidden></p>
+      <div class="row"><button id="pwBack">Back</button><button id="pwSave" class="primary">Change password</button></div>
+    </div>
   </section>
 
   <section id="logs" hidden>
@@ -157,7 +204,7 @@ pre { margin: 8px 0 0; font-size: 12.5px; white-space: pre-wrap; overflow-wrap: 
       <h2>All logs</h2>
       <p id="logUse" class="muted">&nbsp;</p>
       <a class="button wide" href="/api/logs/export" download="yogigate-logs.ndjson">Download everything</a>
-      <div class="row" style="margin-top:8px"><button id="logClear" class="danger">Erase all logs</button></div>
+      <div class="row adv-only" style="margin-top:8px"><button id="logClear" class="danger">Reset logs</button></div>
     </div>
   </section>
 
@@ -169,7 +216,12 @@ pre { margin: 8px 0 0; font-size: 12.5px; white-space: pre-wrap; overflow-wrap: 
         <button id="tBeep">Beep</button>
       </div>
     </div>
-    <div class="card">
+    <div class="card adv-only">
+      <h2>Sounds</h2>
+      <p class="muted">Plays each sound, even with the buzzer turned off.</p>
+      <div id="soundList" class="row"></div>
+    </div>
+    <div class="card adv-only">
       <h2>Firmware</h2>
       <p id="sysInfo" class="muted">&nbsp;</p>
       <input id="otaFile" type="file" accept=".bin" style="max-width:100%">
@@ -177,7 +229,7 @@ pre { margin: 8px 0 0; font-size: 12.5px; white-space: pre-wrap; overflow-wrap: 
       <progress id="otaBar" max="100" value="0" hidden></progress>
       <p id="otaState" class="muted" style="margin:8px 0 0" hidden></p>
     </div>
-    <div class="card" id="debugCard" hidden>
+    <div class="card adv-only" id="debugCard" hidden>
       <h2>Debug tools</h2>
       <div class="row">
         <button id="dMotion">Simulate motion</button>
@@ -189,8 +241,66 @@ pre { margin: 8px 0 0; font-size: 12.5px; white-space: pre-wrap; overflow-wrap: 
       <h2>Unit</h2>
       <div class="row">
         <button id="sReboot">Restart</button>
-        <button id="sReset" class="danger">Factory reset</button>
+        <button id="sReset" class="danger adv-only">Factory reset</button>
       </div>
+    </div>
+  </section>
+  <section id="help" hidden>
+    <div class="card">
+      <h2>Set it up</h2>
+      <ol class="help-steps">
+        <li><b>Fit the unit.</b> Stick the case in the glove box with Velcro. Any position works, but it must not slide or tumble.</li>
+        <li><b>Power it.</b> Plug in a USB supply that turns off with the ignition, and start the car. One long beep means no beacon is paired yet.</li>
+        <li><b>Start the hotspot.</b> Triple-click the button on top of the case. You hear three short beeps. It does not start by itself.</li>
+        <li><b>Join it.</b> In your phone's Wi-Fi settings, choose <code>YogiGate-XXXX</code>. The password is <code>password</code>. If the phone warns about no internet, stay connected.</li>
+        <li><b>Open this page.</b> Go to <code>http://192.168.4.1</code>, and type the <code>http://</code> too.</li>
+        <li><b>Pair the beacon.</b> On the Beacon tab, either type its MAC, or tap Scan and then Use. At the bench, you can also hold the button for 3&nbsp;s and hold the beacon against the unit. You hear short, short, long.</li>
+        <li><b>Test it, parked.</b> On the Status tab, Signal shows a number and Live motion moves when you shake the unit. Close the glove box and tap Press the remote. You hear one short beep, and the gate must open from the parking spot.</li>
+        <li><b>Test it, driving.</b> Start the car and wait: the gate must stay shut. Drive off: the gate opens within a few seconds, with no beep.</li>
+      </ol>
+    </div>
+    <div class="card">
+      <h2>What each sound means</h2>
+      <p class="muted">No beep when the gate opens by itself. That is correct.</p>
+      <div class="help-row" data-sound="press"><span class="r" data-seg="0-80"></span><span><b>One short:</b> you pressed the remote by hand</span><button>Play</button></div>
+      <div class="help-row" data-sound="pairing"><span class="r" data-seg="0-80,200-280"></span><span><b>Two short:</b> pairing started, so hold the beacon close</span><button>Play</button></div>
+      <div class="help-row" data-sound="hotspot"><span class="r" data-seg="0-80,200-280,400-480"></span><span><b>Three short:</b> the hotspot is starting</span><button>Play</button></div>
+      <div class="help-row" data-sound="success"><span class="r" data-seg="0-80,160-240,320-640"></span><span><b>Short, short, long:</b> success, saved</span><button>Play</button></div>
+      <div class="help-row" data-sound="error"><span class="r" data-seg="0-40,80-120,160-200,240-280,320-360,400-440,600-640,680-720,760-800,840-880,920-960,1000-1040"></span><span><b>Two rattles:</b> that did not work, so try again</span><button>Play</button></div>
+      <div class="help-row" data-sound="no_beacon"><span class="r" data-seg="0-700"></span><span><b>One long at power-on:</b> no beacon is paired yet</span><button>Play</button></div>
+      <div class="help-row" data-sound="sensor"><span class="r" data-seg="0-500,700-1200,1400-1900"></span><span><b>Three long:</b> the motion sensor failed</span><button>Play</button></div>
+    </div>
+    <div class="card">
+      <h2>What each colour means</h2>
+      <p class="muted">The LED is on the C6 board inside the case, so you only see it with the case open.</p>
+      <div class="help-row"><span class="led-dot" style="--c:#f4f4f0"></span><span><b>White:</b> pressing the remote</span></div>
+      <div class="help-row"><span class="led-dot" style="--c:#3b82e6"></span><span><b>Fast blue:</b> pairing</span></div>
+      <div class="help-row"><span class="led-dot" style="--c:#2fbf6b"></span><span><b>Green, 2&nbsp;s:</b> saved</span></div>
+      <div class="help-row"><span class="led-dot" style="--c:#2ccfcf"></span><span><b>Cyan, 2&nbsp;s:</b> hotspot starting</span></div>
+      <div class="help-row"><span class="led-dot" style="--c:#f03e3e"></span><span><b>3 red blinks:</b> that did not work</span></div>
+      <div class="help-row"><span class="led-dot" style="--c:#f03e3e"></span><span><b>2 red, every 10&nbsp;s:</b> motion sensor failed</span></div>
+      <div class="help-row"><span class="led-dot" style="--c:#ff9f1c"></span><span><b>Slow amber:</b> no beacon, first 30&nbsp;s after a start</span></div>
+      <div class="help-row"><span class="led-dot" style="--c:#6b7075"></span><span><b>Off:</b> normal</span></div>
+    </div>
+    <div class="card">
+      <h2>The button</h2>
+      <div class="help-row"><span><b>One click:</b> press the remote</span></div>
+      <div class="help-row"><span><b>Two clicks:</b> set the set point here, from the current signal</span></div>
+      <div class="help-row"><span><b>Triple click:</b> start the hotspot</span></div>
+      <div class="help-row"><span><b>Hold 3&nbsp;s:</b> pair a beacon held close</span></div>
+    </div>
+    <div class="card">
+      <h2>If it goes wrong</h2>
+      <div class="help-row"><span><b>Page will not open:</b> join by hand in Wi-Fi settings, and type <code>http://</code></span></div>
+      <div class="help-row"><span><b>Gate stays shut:</b> check the remote's battery and range, then the Signal on the Status tab</span></div>
+      <div class="help-row"><span><b>Opens from the street:</b> raise the set point on the Settings tab</span></div>
+      <div class="help-row"><span><b>Opens while parked:</b> fix the unit so it cannot move, then rate that trip on the Logs tab</span></div>
+      <div class="help-row"><span><b>Three long beeps:</b> check the sensor's four wires. Until fixed, the gate can open from the spot</span></div>
+      <div class="help-row"><span><b>Remote's LED stays on:</b> its two wires are swapped</span></div>
+    </div>
+    <div class="card">
+      <h2>Good to know</h2>
+      <p class="muted" style="margin:0">Replace the remote's battery every year, because the unit cannot tell when it dies. Advanced mode, at the bottom of the Settings tab, shows every setting, Reset to defaults, Reset logs, Factory reset and firmware upload.</p>
     </div>
   </section>
 </main>
@@ -201,6 +311,7 @@ pre { margin: 8px 0 0; font-size: 12.5px; white-space: pre-wrap; overflow-wrap: 
   <button data-tab="settings" role="tab">Settings</button>
   <button data-tab="logs" role="tab">Logs</button>
   <button data-tab="system" role="tab">System</button>
+  <button data-tab="help" role="tab">Help</button>
 </nav>
 <script>
 "use strict";
@@ -218,6 +329,7 @@ async function api(path, options, timeoutMs) {
     return data;
   } finally { clearTimeout(timer); }
 }
+const sendTime = () => post("/api/time", { epoch: Math.floor(Date.now() / 1000) }).catch(() => {});
 const post = (path, body) => api(path, { method: "POST", headers: { "Content-Type": "application/json", "X-YogiGate": "1" }, body: JSON.stringify(body || { go: 1 }) });
 
 let toastTimer;
@@ -242,7 +354,8 @@ function showTab(name) {
   if (!$(name)) name = "status";
   tab = name;
   document.querySelectorAll("main section").forEach(s => { s.hidden = s.id !== name; });
-  document.querySelectorAll("nav button").forEach(b => b.setAttribute("aria-selected", b.dataset.tab === name));
+  const navTab = name === "password" ? "settings" : name;
+  document.querySelectorAll("nav button").forEach(b => b.setAttribute("aria-selected", b.dataset.tab === navTab));
   if (location.hash !== "#" + name) history.replaceState(null, "", "#" + name);
   if (name === "settings") loadSettings();
   if (name === "logs") loadTrips(true);
@@ -262,12 +375,13 @@ function chart(canvas, opts) {
   c.setTransform(ratio, 0, 0, ratio, 0, 0);
   c.clearRect(0, 0, w, h);
   const left = 34, right = 6, top = 6, bottom = 20;
-  const yMin = -100, yMax = -30;
+  const yMin = opts.yMin === undefined ? -100 : opts.yMin, yMax = opts.yMax === undefined ? -30 : opts.yMax;
+  const step = opts.step || 20;
   const x = t => left + (t - opts.tMin) / Math.max(opts.tMax - opts.tMin, 1) * (w - left - right);
   const y = v => top + (yMax - v) / (yMax - yMin) * (h - top - bottom);
   c.font = "11px system-ui, sans-serif";
   c.textBaseline = "middle";
-  for (let v = -100; v <= -30; v += 20) {
+  for (let v = yMin; v <= yMax; v += step) {
     c.strokeStyle = css("--line"); c.lineWidth = 1;
     c.beginPath(); c.moveTo(left, y(v)); c.lineTo(w - right, y(v)); c.stroke();
     c.fillStyle = css("--muted"); c.textAlign = "right"; c.fillText(String(v), left - 5, y(v));
@@ -298,7 +412,8 @@ function chart(canvas, opts) {
 }
 
 /* Status */
-let st = null, livePoints = [], pollBusy = false, pollPaused = 0, pollFails = 0;
+let st = null, livePoints = [], accelPoints = [], yawPoints = [], movedMarks = [], wasMoved = false;
+let pollBusy = false, pollPaused = 0, pollFails = 0;
 const POLL_TIMEOUT_MS = 3000, POLL_FAILS_TO_WARN = 3;
 const STATE = { armed: "Armed", pressing: "Pressing", hold: "Pressed", unpaired: "No beacon" };
 const dbm = v => v === null || v === undefined ? "-" : v === "any" ? "Any" : v + " dBm";
@@ -345,11 +460,20 @@ function render(s) {
 
   const now = s.uptime_ms / 1000;
   /* After a restart the unit's clock starts again. */
-  if (livePoints.length && now < livePoints[livePoints.length - 1].t) livePoints = [];
+  if (livePoints.length && now < livePoints[livePoints.length - 1].t) {
+    livePoints = []; accelPoints = []; yawPoints = []; movedMarks = [];
+  }
   if (!livePoints.length || now > livePoints[livePoints.length - 1].t) {
     livePoints.push({ t: now, v: s.rssi !== null && s.rssi_age_ms < 1500 ? s.rssi : null });
+    const trusted = s.sensor === "ok" && s.calibrated;
+    accelPoints.push({ t: now, v: trusted ? s.motion_mg_peak : null });
+    yawPoints.push({ t: now, v: trusted ? s.motion_yaw_peak : null });
+    if (s.moved_recently && !wasMoved) movedMarks.push({ t: now, color: "--good" });
+    wasMoved = s.moved_recently;
   }
-  livePoints = livePoints.filter(p => now - p.t <= 120);
+  const recent = p => now - p.t <= 120;
+  livePoints = livePoints.filter(recent); accelPoints = accelPoints.filter(recent);
+  yawPoints = yawPoints.filter(recent); movedMarks = movedMarks.filter(recent);
   if (tab === "status") drawLive();
   if (tab === "beacon") renderPairing(s);
 }
@@ -358,8 +482,21 @@ function drawLive() {
   if (!st) return;
   const now = st.uptime_ms / 1000;
   const set = typeof st.effective_set_point === "number" ? st.effective_set_point : undefined;
-  chart($("live"), { tMin: now - 120, tMax: now, points: livePoints, gap: 3, setPoint: set,
-    ticks: [{ t: now - 120, label: "2 min" }, { t: now - 60, label: "1 min" }, { t: now - 1, label: "now" }] });
+  const ticks = [{ t: now - 120, label: "2 min" }, { t: now - 60, label: "1 min" }, { t: now - 1, label: "now" }];
+  chart($("live"), { tMin: now - 120, tMax: now, points: livePoints, gap: 3, setPoint: set, ticks });
+  const motion = (canvas, points, limit) => {
+    const top = niceTop(points, limit);
+    chart($(canvas), { tMin: now - 120, tMax: now, points, gap: 3, setPoint: limit, markers: movedMarks, ticks, yMin: 0, yMax: top, step: top / 2 });
+  };
+  motion("liveAccel", accelPoints, st.motion_accel_mg);
+  motion("liveYaw", yawPoints, st.motion_yaw_deg);
+}
+
+/* Top of a motion graph: room for the line that counts as moving, and for whatever was seen. */
+function niceTop(points, limit) {
+  const seen = Math.max(limit * 2, ...points.map(p => p.v || 0));
+  const unit = Math.pow(10, Math.floor(Math.log10(seen)));
+  return Math.ceil(seen / unit * 2) / 2 * unit;
 }
 
 async function poll() {
@@ -448,23 +585,23 @@ const LABELS = {
   pair_margin_db: ["Stronger than others by", "dB."],
   pair_hold_s: ["Hold for", "Seconds."],
   pair_timeout_s: ["Give up after", "Seconds."],
-  hotspot_s: ["Hotspot time", "Seconds after start. 0 means only on request."],
+  hotspot_s: ["Hotspot time", "Seconds it stays on at each start. 0 means only when you triple-click the button."],
   hotspot_ssid: ["Hotspot name", "Applies the next time the hotspot starts."],
-  hotspot_password: ["New hotspot password", "Leave empty to keep the current one. Applies the next time the hotspot starts."],
   wifi_tx_dbm: ["Wi-Fi power", "dBm. Low keeps the hotspot close to the car."],
   led_enabled: ["LED", ""],
-  buzzer_enabled: ["Buzzer", "Only if one is fitted."],
-  buzzer_type: ["Buzzer type", ""],
+  buzzer_enabled: ["Buzzer", "Answers what you do on the unit. It stays quiet when the gate opens by itself."],
+  buzzer_type: ["Buzzer type", "Active, unless a passive one is fitted."],
   debug: ["Debug mode", "Records raw captures and adds tools on the System tab. Keeps the hotspot on while moving."],
 };
 const GROUPS = [
   ["When to press", ["set_point_dbm", "press_ms", "moved_window_s", "gone_s", "still_s", "fallback_dbm"]],
   ["Motion", ["motion_enabled", "motion_accel_mg", "motion_accel_ms", "motion_yaw_deg", "motion_yaw_window_ms"]],
-  ["Hotspot", ["hotspot_s", "hotspot_ssid", "hotspot_password", "wifi_tx_dbm"]],
+  ["Hotspot", ["hotspot_s", "hotspot_ssid", "wifi_tx_dbm"]],
   ["Lights and sound", ["led_enabled", "buzzer_enabled", "buzzer_type"]],
   ["Pairing by holding close", ["pair_min_dbm", "pair_margin_db", "pair_hold_s", "pair_timeout_s"]],
   ["Debug", ["debug"]],
 ];
+const SIMPLE = new Set(["set_point_dbm", "led_enabled", "buzzer_enabled"]);
 let original = {}, inputs = {};
 
 function readInput(s) {
@@ -478,7 +615,7 @@ function changedSettings() {
   const out = {};
   Object.values(original).forEach(s => {
     const v = readInput(s);
-    if (s.type === "password" ? v !== "" : v !== s.value) out[s.key] = v;
+    if (v !== s.value) out[s.key] = v;
   });
   return out;
 }
@@ -488,7 +625,7 @@ function updateSave() {
   $("setSave").textContent = "Save " + n + (n === 1 ? " change" : " changes");
 }
 function field(s) {
-  const f = el("div", "field");
+  const f = el("div", SIMPLE.has(s.key) ? "field" : "field adv-only");
   const [title, help] = LABELS[s.key] || [s.key, ""];
   const label = el("label");
   label.append(el("span", "", title));
@@ -519,9 +656,9 @@ function field(s) {
     return f;
   } else {
     input = el("input");
-    input.type = s.type === "int" ? "number" : s.type === "password" ? "password" : "text";
+    input.type = s.type === "int" ? "number" : "text";
     if (s.type === "int") { input.min = s.min; input.max = s.max; if (s.min >= 0) input.inputMode = "numeric"; }
-    else { input.maxLength = s.max; input.className = "long"; input.autocomplete = s.type === "password" ? "new-password" : "off"; }
+    else { input.maxLength = s.max; input.className = "long"; input.autocomplete = "off"; }
     input.value = s.value === undefined ? "" : s.value;
     label.append(input); inputs[s.key] = input;
   }
@@ -533,19 +670,21 @@ function field(s) {
 async function loadSettings() {
   const data = await api("/api/settings");
   original = {}; inputs = {};
-  data.settings.forEach(s => { original[s.key] = s; });
+  /* The password has its own page. */
+  const shown = data.settings.filter(s => s.type !== "password");
+  shown.forEach(s => { original[s.key] = s; });
   const form = $("setForm");
   form.textContent = "";
   const placed = new Set();
   GROUPS.forEach(([title, keys]) => {
-    const card = el("div", "card");
+    const card = el("div", keys.some(k => SIMPLE.has(k)) ? "card" : "card adv-only");
     card.append(el("h2", "", title));
     keys.filter(k => original[k]).forEach(k => { card.append(field(original[k])); placed.add(k); });
     form.append(card);
   });
-  const rest = data.settings.filter(s => !placed.has(s.key));
+  const rest = shown.filter(s => !placed.has(s.key));
   if (rest.length) {
-    const card = el("div", "card");
+    const card = el("div", "card adv-only");
     card.append(el("h2", "", "Other"));
     rest.forEach(s => card.append(field(s)));
     form.append(card);
@@ -553,6 +692,46 @@ async function loadSettings() {
   updateSave();
 }
 $("setSave").addEventListener("click", act(async () => { await post("/api/settings", changedSettings()); await loadSettings(); }, "Saved"));
+
+$("sDefaults").addEventListener("click", () => {
+  if (!confirm("Put every setting back to its default, including the hotspot name and password? The beacon and logs stay. The new name and password apply the next time the hotspot starts.")) return;
+  act(async () => { await post("/api/settings/reset"); await loadSettings(); }, "Settings are back to their defaults")();
+});
+
+/* Advanced mode only changes what this page shows, so it belongs to the phone and not the unit. */
+let advanced = false;
+try { advanced = localStorage.getItem("yg_advanced") === "1"; } catch (e) { /* Private window. */ }
+function setAdvanced(on) {
+  advanced = on;
+  document.body.classList.toggle("adv", on);
+  $("advMode").checked = on;
+}
+setAdvanced(advanced);
+$("advMode").addEventListener("change", () => {
+  setAdvanced($("advMode").checked);
+  try { localStorage.setItem("yg_advanced", advanced ? "1" : "0"); } catch (e) { /* Private window. */ }
+});
+
+/* Password page */
+function passwordProblem(a, b) {
+  if (a.length < 8 || a.length > 63) return "Use 8 to 63 characters.";
+  return a === b ? "" : "The two passwords are different.";
+}
+function closePassword() {
+  $("pw1").value = ""; $("pw2").value = ""; $("pwError").hidden = true;
+  showTab("settings");
+}
+$("sPassword").addEventListener("click", () => showTab("password"));
+$("pwBack").addEventListener("click", closePassword);
+$("pwSave").addEventListener("click", act(async () => {
+  const problem = passwordProblem($("pw1").value, $("pw2").value);
+  $("pwError").textContent = problem;
+  $("pwError").hidden = !problem;
+  if (problem) return;
+  await post("/api/settings", { hotspot_password: $("pw1").value });
+  closePassword();
+  toast("Password changed. Use it the next time the hotspot starts.");
+}));
 
 /* Logs */
 const RATINGS = [["good", "Good"], ["too_early", "Too early"], ["too_late", "Too late"], ["did_not_open", "Didn't open"], ["no_reason", "Opened for no reason"]];
@@ -651,7 +830,7 @@ async function loadTrips(reset) {
   $("logUse").textContent = "Trip log " + percent(sys.log_used, sys.log_total) + "% full, debug captures " + percent(sys.capture_used, sys.capture_total) + "% full. The oldest data is overwritten.";
 }
 $("tripMore").addEventListener("click", act(() => loadTrips(false)));
-$("logClear").addEventListener("click", () => { if (confirm("Erase all logs? This cannot be undone.")) { toast("Erasing. Full logs can take a minute."); act(whilePaused(async () => { await post("/api/logs/clear"); await loadTrips(true); }), "Logs erased")(); } });
+$("logClear").addEventListener("click", () => { if (confirm("Erase all logs and start counting trips from 1 again? This cannot be undone.")) { toast("Erasing. Full logs can take a minute."); act(whilePaused(async () => { await post("/api/logs/clear"); await sendTime(); await loadTrips(true); }), "Logs reset. Trips start again from 1")(); } });
 
 /* System */
 async function loadSystem() {
@@ -660,10 +839,16 @@ async function loadSystem() {
 }
 $("tLed").addEventListener("click", act(() => post("/api/test/led"), "LED should flash green"));
 $("tBeep").addEventListener("click", act(() => post("/api/test/beep"), "Beeped, if a buzzer is fitted"));
+const SOUNDS = [["press", "Pressed by hand"], ["pairing", "Pairing"], ["hotspot", "Hotspot on"], ["success", "Success"], ["error", "Error"], ["no_beacon", "No beacon"], ["sensor", "Sensor failed"]];
+SOUNDS.forEach(([sound, label]) => {
+  const b = el("button", "", label);
+  b.addEventListener("click", act(() => post("/api/test/beep", { sound })));
+  $("soundList").append(b);
+});
 $("dMotion").addEventListener("click", act(() => post("/api/debug/simulate-motion"), "Motion simulated"));
 $("dCapture").addEventListener("click", act(() => post("/api/debug/capture-now"), "Capturing for 30 seconds"));
 $("sReboot").addEventListener("click", () => { if (confirm("Restart the unit? The hotspot goes away for a moment.")) act(() => post("/api/reboot"), "Restarting")(); });
-$("sReset").addEventListener("click", () => { if (confirm("Erase all settings, the beacon and all logs? The hotspot gets a new password, which you can only read over USB.")) { toast("Erasing. Full logs can take a minute."); act(whilePaused(() => post("/api/factory-reset")), "Erased. Restarting")(); } });
+$("sReset").addEventListener("click", () => { if (confirm("Erase all settings, the beacon and all logs? The hotspot password goes back to password.")) { toast("Erasing. Full logs can take a minute."); act(whilePaused(() => post("/api/factory-reset")), "Erased. Restarting")(); } });
 $("otaFile").addEventListener("change", () => { $("otaGo").disabled = !$("otaFile").files.length; });
 $("otaGo").addEventListener("click", () => {
   const file = $("otaFile").files[0];
@@ -686,9 +871,15 @@ $("otaGo").addEventListener("click", () => {
   x.send(file);
 });
 
+/* Help: each rhythm drawn to scale, 2 s across, and each sound there to be played. */
+document.querySelectorAll(".r").forEach(r => {
+  r.innerHTML = r.dataset.seg.split(",").map(s => { const [a, b] = s.split("-"); return `<i style="left:${a * .04}px;width:${(b - a) * .04}px"></i>`; }).join("");
+});
+document.querySelectorAll("#help [data-sound] button").forEach(b => b.addEventListener("click", act(() => post("/api/test/beep", { sound: b.parentElement.dataset.sound }))));
+
 /* Start */
 window.addEventListener("resize", () => { if (tab === "status") drawLive(); });
-post("/api/time", { epoch: Math.floor(Date.now() / 1000) }).catch(() => {});
+sendTime();
 showTab(location.hash.slice(1) || "status");
 poll();
 setInterval(poll, 500);

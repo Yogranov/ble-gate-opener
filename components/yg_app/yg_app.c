@@ -149,13 +149,30 @@ void yg_app_setting_changed(yg_engine_t *e, uint32_t now, const char *key, const
     }
 }
 
+void yg_app_settings_reset(yg_engine_t *e, uint32_t now) {
+    char ssid[YG_SSID_MAX + 1];
+    yg_nvs_default_ssid(ssid, sizeof(ssid));
+    yg_engine_settings_reset(e, now, ssid);
+    set_debug_logging(e->s->debug);
+}
+
+void yg_app_trips_restart(yg_engine_t *e) {
+    yg_engine_trips_restart(e);
+    s_trip = e->trip;
+}
+
+void yg_app_trips_restarted(yg_engine_t *e, uint32_t now) {
+    yg_nvs_set_trip(e->trip);
+    yg_engine_log_restarted(e, now);
+}
+
 /* The engine's connection to the hardware. */
 static void op_press(void *ctx, uint32_t ms) { (void)ctx; yg_io_press(ms); }
 static void op_led(void *ctx, yg_led_event_t e) { (void)ctx; yg_io_led(e); }
 static void op_buzz(void *ctx, yg_buzz_event_t e) { (void)ctx; yg_io_buzz(e, s_settings.buzzer_type); }
 static void op_log(void *ctx, const yg_record_t *r) { (void)ctx; yg_log_trip(r); }
 static void op_capture(void *ctx, const yg_record_t *r) { (void)ctx; yg_log_capture(r); }
-static void op_scan(void *ctx, yg_scan_mode_t mode, const yg_beacon_t *b) { (void)ctx; yg_ble_scan(mode, b); }
+static void op_scan(void *ctx, yg_scan_mode_t mode, const yg_beacon_t *b, bool share_radio) { (void)ctx; yg_ble_scan(mode, b, share_radio); }
 static void op_save_beacon(void *ctx, const yg_beacon_t *b) { (void)ctx; yg_nvs_save_beacon(b); }
 static void op_save_settings(void *ctx) { (void)ctx; yg_nvs_save_settings(&s_settings); }
 

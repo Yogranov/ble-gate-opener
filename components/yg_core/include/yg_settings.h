@@ -10,6 +10,7 @@
 #define YG_SSID_MAX      32
 #define YG_PASSWORD_MIN  8
 #define YG_PASSWORD_MAX  63
+#define YG_PASSWORD_DEFAULT "password"
 
 typedef enum
 {
@@ -78,6 +79,10 @@ int32_t yg_settings_get_int(const yg_settings_t *s, const yg_setting_desc_t *d);
  * out of range or the key is unknown. */
 bool yg_settings_set_int(yg_settings_t *s, const char *key, int32_t value);
 bool yg_settings_set_str(yg_settings_t *s, const char *key, const char *value);
+
+/* Writes a setting's value as text that yg_settings_set_str reads back. Returns the
+ * length, or -1 if buf is too small. */
+int yg_settings_format(const yg_settings_t *s, const yg_setting_desc_t *d, char *buf, size_t len);
 
 /* Writes {"settings":[{key,type,value,min,max},...]}. Returns the length, or
  * -1 if buf is too small. The password value is written only when asked for. */

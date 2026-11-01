@@ -4,9 +4,25 @@
 static yg_hotspot_policy_t h;
 static yg_settings_t s;
 
+/* A hotspot on a timer, which anyone can still choose with the Hotspot time setting. */
 static void setup(void) {
     yg_settings_defaults(&s);
+    s.hotspot_s = 300;
     yg_hotspot_init(&h, &s, 0, false);
+}
+
+static void by_default_it_stays_off_until_requested(void) {
+    yg_settings_defaults(&s);
+    yg_hotspot_init(&h, &s, 0, false);
+    CHECK(!yg_hotspot_tick(&h, &s, 1000));
+    yg_hotspot_on_motion(&h);
+    CHECK(!yg_hotspot_tick(&h, &s, 60000));
+    yg_hotspot_request(&h, 70000);
+    CHECK(yg_hotspot_tick(&h, &s, 71000));
+    yg_hotspot_on_motion(&h);
+    CHECK(yg_hotspot_tick(&h, &s, 72000));
+    CHECK_INT(yg_hotspot_left_s(&h, &s, 72000), 298);
+    CHECK(!yg_hotspot_tick(&h, &s, 370000));
 }
 
 static void on_at_start_and_off_when_the_car_moves(void) {
@@ -96,6 +112,7 @@ static void forced_on_after_update_even_when_disabled(void) {
 }
 
 int main(void) {
+    RUN(by_default_it_stays_off_until_requested);
     RUN(on_at_start_and_off_when_the_car_moves);
     RUN(off_when_the_timer_expires);
     RUN(client_keeps_it_on_then_it_stops_30s_after_leaving);

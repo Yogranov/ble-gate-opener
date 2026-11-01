@@ -3,6 +3,7 @@
 **Date:** 2026-10-31
 **Status:** Approved by the owner and implemented on the `esp-idf-rewrite` branch
 **Scope:** Firmware and wiring. The case gets its own spec after this firmware has run in the car.
+**Amended 2026-11-01, by the owner:** the buzzer is on by default and answers people, with its own sounds. The hotspot starts only on request. The default password is `password`. The page is simple by default, with an Advanced mode. It has live motion graphs, Reset to defaults and Reset logs alongside factory reset, shows the logo, and carries the technician manual on a Help tab. These replace the earlier text below, where they differ.
 
 ## 1. Summary
 
@@ -23,7 +24,7 @@ Today's firmware is one Arduino file on PlatformIO with a hard-coded beacon addr
 - The beacon is on a parking lot gate. The owner's parking spot is 13 m from it.
 - With no RSSI limit, the gate opened from the spot right after ignition, before the driver was ready. `-90 dBm` usually prevents that, but leaves almost no margin: on bad days the car must get very close.
 - A second unit may go to someone whose spot is very close to the gate. It must work without per-spot tuning and can share the same beacon.
-- The owner wants to set it and forget it. No attention-seeking feedback by default.
+- The owner wants to set it and forget it. Nothing may sound on a normal trip: the buzzer answers people, and reports faults.
 - The repository is public, so no passwords or logs may be committed.
 
 ## 3. Goals and non-goals
@@ -33,7 +34,7 @@ Today's firmware is one Arduino file on PlatformIO with a hard-coded beacon addr
 1. Never press because the car started. Press once when the car is really leaving or arriving.
 2. Keep working on bad radio days as far as physics allows.
 3. Need no code changes to pair a beacon, tune behaviour or set up a second unit.
-4. Need no button: every setting and action is on the web page.
+4. Every setting and action is on the web page, except starting the hotspot, which takes the button or USB because the page needs the hotspot.
 5. Produce logs good enough to find out what really happens, and to tune from.
 
 **Non-goals for this spec**
@@ -65,13 +66,13 @@ The owner's board reads as ESP32-C6 (QFN40) revision 0.2 with 16 MB of flash. It
 | Function | GPIO | Hole | Notes |
 |---|---|---|---|
 | Remote MOSFET gate | 10 | Q11 | **Through 220 Ω, with 10 kΩ from gate to GND** |
-| Buzzer (optional) | 11 | Q12 | Active buzzer, + to the pin and − to GND. Off by default, safe to leave unfitted |
+| Buzzer (optional) | 11 | Q12 | Active buzzer, + to the pin and − to GND. On by default, safe to leave unfitted |
 | MPU6050 SDA | 2 | G2 | The module has its own I²C pull-ups |
 | MPU6050 SCL | 3 | G3 | |
 | MPU6050 VCC | 3V3 | Q2 | |
 | MPU6050 GND | GND | G1 | |
 | Button | 9 | on-board BOOT | |
-| External button (optional) | 7 | Q7 | To GND. Works the same as the on-board button |
+| External button (optional) | 7 | Q7 | Tactile button on the board: Q7 to R16, and U18 to GND. Works the same as the on-board button |
 | RGB LED | 8 | on board | Addressable, driven with `espressif/led_strip` |
 
 MPU6050 AD0 stays unconnected and INT is unused. Firmware probes addresses `0x68` and `0x69`.
@@ -134,7 +135,7 @@ The state is not saved. After a power cut the unit starts in `ARMED`, or `UNPAIR
 
 - "Any" is the default and gives the most warning.
 - It can be set by double-clicking the button, by "set here" on the page, or by typing a dBm value.
-- "Set here" stores the strongest advert of the last 3 s. If nothing was heard in that time, it fails and the page or LED says so.
+- "Set here" stores the strongest advert of the last 3 s, or 10 s while the hotspot is on, when fewer adverts are heard. If nothing was heard in that time, it fails and the page or LED says so.
 - Pairing a new beacon resets it to "any".
 
 The set point exists to stop presses when only driving past, and to keep presses within the remote's range (section 11). The trigger does not need it to handle the parking spot, which is the job of the motion check.
@@ -181,13 +182,13 @@ All are editable on the page and stored in NVS. Values are starting points, to b
 | `pair_margin_db` | 15 | 3-40 |
 | `pair_hold_s` | 2 | 1-10 |
 | `pair_timeout_s` | 60 | 10-300 |
-| `hotspot_s` | 300 | 0-3600. 0 means only by triple-click or USB |
+| `hotspot_s` | 0 | 0-3600. 0 means only by triple-click or USB. A requested hotspot lasts this long, or 300 s when it is 0 |
 | `hotspot_ssid` | `YogiGate-XXXX` | 1-32 characters |
-| `hotspot_password` | random | 8-63 characters |
+| `hotspot_password` | `password` | 8-63 characters |
 | `wifi_tx_dbm` | 8 | 2-20 |
 | `led_enabled` | on | on/off |
-| `buzzer_enabled` | **off** | on/off |
-| `buzzer_type` | passive | passive/active |
+| `buzzer_enabled` | on | on/off |
+| `buzzer_type` | active | passive/active |
 | `debug` | off | on/off |
 
 ## 6. Motion detection
@@ -246,12 +247,25 @@ Timing out after `pair_timeout_s` keeps the old beacon. A success saves the beac
 
 ### 8.1 Hotspot
 
-- It starts within moments of every power-on, unless `hotspot_s` is 0. It does not wait for the motion sensor, so the page can still report a sensor that is missing.
-- It stops when the car first moves, or when `hotspot_s` expires, whichever comes first. It stays on while a client is connected, and stops 30 s after the last client leaves if a stop condition has been met.
-- With `debug` on, motion does not stop it.
-- Once stopped, it stays off until the next power-on or a triple-click.
-- WPA2 with a random 12-character password created at first boot. The USB console shows it, and the page can change it. It never appears in the repository.
+- It starts only when asked, by a triple-click or the USB `wifi` command, because it is rarely needed and should not run on every trip. It answers with three short beeps and a cyan LED, because the LED cannot be seen through the case. Setting `hotspot_s` above 0 makes it also start at every power-on, as it used to.
+- It does not wait for the motion sensor, so the page can still report a sensor that is missing.
+- A requested hotspot ignores motion, and stops when its time runs out. It stays on while a client is connected, and stops 30 s after the last client leaves if its time has run out.
+- A hotspot started by `hotspot_s` also stops when the car first moves, unless `debug` is on.
+- Once stopped, it stays off until the next request.
+- WPA2 with the default password `password`, which the page can change on its own page. Being public is accepted, because the hotspot is only on after someone presses the button. While it is on, anyone in range who knows the password can press the remote or upload firmware, which is unsigned.
 - Low transmit power by default, to limit its reach and its peak current.
+
+**The scan gives way to Wi-Fi.** While the hotspot is on, the scan listens for 25 ms in every 100 ms, and at full time otherwise. It changes before the hotspot starts, so that a phone can join. Measured on the real unit with a phone on the page, which normally makes 2 requests a second:
+
+| Scan | Page requests a second | Adverts heard a second |
+|---|---|---|
+| None | 2.1 | 0 |
+| Open, 25 ms in 100 | 1.7 | 3 |
+| Open, 50 ms in 100 | 0.7 | 6 |
+| Open, 100 ms in 100 | 0 | 12 |
+| Filtered, 100 ms in 100, hearing nothing | 0 | 0 |
+
+So the cause is radio time and not the load of handling adverts. Before this, a paired unit's page did not work at all, because a paired unit always scans. The phone stays joined and recovers as soon as the scan gives way, so the unit sees no disconnect. The cost is that a press with the hotspot on can come about a second later, because a quarter of the adverts are heard. With the hotspot off, nothing changes.
 
 **Why it stops on motion.** Wi-Fi and BLE share one radio. Espressif rates BLE scanning alongside a hotspot as stable while beaconing, and unstable with a client connecting or connected, on the C6 as on the other chips. Stopping on motion gives BLE the radio as the car pulls out. Results during a drive with a phone connected are only a rough guide.
 
@@ -261,12 +275,18 @@ One HTML file with inline CSS and JavaScript, embedded gzipped, with no external
 
 | Section | Contents |
 |---|---|
-| Status | Live signal, adverts per second, motion, state, temperature, sensor state, hotspot time left, firmware version |
+| Status | State, live signal, live motion graphs, firmware version, press the remote. Advanced adds adverts per second, temperature and hotspot time left |
 | Beacon | Current beacon, pair by holding close, pick from list, type a MAC, forget |
-| Settings | Everything in 5.7, with a "set here" button for the set point |
-| Test | Press the remote, beep, flash the LED |
-| Logs | Trip list, a chart for each trip with motion and press markers, rate a trip, download all, clear |
-| System | Firmware upload, reboot, factory reset, debug flag |
+| Settings | The set point with a "set here" button, buzzer, LED, Change password, and the Advanced mode switch. Advanced adds everything else in 5.7, and Reset to defaults |
+| Logs | Trip list, a chart for each trip with motion and press markers, rate a trip, download all. Advanced adds Reset logs |
+| System | Flash the LED, beep, restart. Advanced adds each sound, firmware upload, factory reset and the debug tools |
+| Help | The technician manual, in case the printed one is gone: setup, each sound with a Play button, each colour, the button, and what to do when something goes wrong |
+
+Advanced mode only changes what the page shows, so it is stored in the browser and not on the unit. Each phone starts simple.
+
+Reset to defaults puts everything in 5.7 back, with the hotspot name worked out again from the unit's address, and keeps the beacon, logs and trip count. Each change is logged as an ordinary `setting` record, so a replay follows it. Factory reset stays what its name says, and erases the beacon and logs too. A flash keeps stored settings, so this is how a unit picks up a changed default.
+
+Live motion shows two graphs, each with a line at what counts as moving: the horizontal push against `motion_accel_mg`, and the summed turn against `motion_yaw_deg`. The page polls twice a second and the sensor runs at 50 Hz, so the status holds the strongest values of the last half second or more.
 
 ### 8.3 API
 
@@ -280,9 +300,10 @@ An upload that goes silent is abandoned after 30 s, so a phone dropping off Wi-F
 |---|---|
 | `GET /api/status` | Live state, polled at 2 Hz |
 | `GET`, `POST /api/settings` | Read, or partly update, settings |
+| `POST /api/settings/reset` | Put every setting back to its default |
 | `POST /api/setpoint` | `{"here":true}`, `{"dbm":-85}` or `{"any":true}` |
 | `POST /api/press` | Press the remote |
-| `POST /api/test/led`, `/api/test/beep` | Output tests |
+| `POST /api/test/led`, `/api/test/beep` | Output tests. They work whatever the settings say. A beep can name a sound, as `{"sound":"error"}` |
 | `POST /api/pair/auto`, `/scan`, `/cancel`, `/forget` | Pairing control |
 | `GET /api/pair/candidates` | Live candidate list |
 | `POST /api/pair/select`, `/api/pair/manual` | Save a beacon from the list, or a typed MAC |
@@ -290,7 +311,7 @@ An upload that goes silent is abandoned after 30 s, so a phone dropping off Wi-F
 | `GET /api/trips/N` | All records of one trip |
 | `POST /api/trips/N/rating` | `too_early`, `too_late`, `did_not_open`, `no_reason`, `good` |
 | `GET /api/logs/export` | Everything, as streamed NDJSON |
-| `POST /api/logs/clear` | Erase logs. Takes up to about a minute on full logs |
+| `POST /api/logs/clear` | Erase the logs, and make the running trip number 1. Takes up to about a minute on full logs. There is no restart, because that would turn off the hotspot the request came through |
 | `POST /api/time` | The browser's time, stored as a log anchor |
 | `POST /api/ota` | Upload firmware as a raw binary body |
 | `POST /api/reboot`, `/api/factory-reset` | System |
@@ -301,7 +322,7 @@ Unfitted hardware must never make an endpoint fail. A beep with no buzzer simply
 
 ### 8.4 Button
 
-Optional in practice, and fitted on this devkit. Every action below is also on the page.
+The only way to start the hotspot without USB. Every other action below is also on the page.
 
 | Gesture | Action |
 |---|---|
@@ -316,13 +337,17 @@ A single click waits 400 ms in case it becomes a double click.
 
 | Event | LED | Buzzer, if enabled |
 |---|---|---|
-| Pressing | White during the press | One short beep |
-| Pairing | Fast blue blink | None |
-| Pair saved | Green for 2 s | Two beeps |
-| Pair timeout or set point rejected | Three red blinks | One long beep |
-| Sensor failed | Red double blink every 10 s | None |
-| Unpaired | Slow amber blink, first 30 s after boot | None |
+| Automatic press | White during the press | None |
+| Press by hand, from the button or page | White during the press | One short |
+| Pairing | Fast blue blink | Two short, when holding close starts |
+| Hotspot requested | Cyan for 2 s | Three short |
+| Pair saved, set point set here, or settings reset to defaults | Green for 2 s | Short, short, long |
+| Pair timeout or set point rejected | Three red blinks | Two rattles |
+| Sensor failed | Red double blink every 10 s | Three long, at most once per trip, and not if the sensor is turned off |
+| Unpaired | Slow amber blink, first 30 s after boot | One long, at power-on |
 | Otherwise | Off | None |
+
+The buzzer answers people and reports faults, and stays silent on a normal trip. An active buzzer has one fixed tone, so each sound is a rhythm, set in `yg_core/sound`. The steps are multiples of the buzzer task's 20 ms, and a rattle is 40 ms on and off.
 
 ### 8.6 USB console
 
@@ -355,7 +380,7 @@ Bench commands, because the owner's PC has no Wi-Fi and so cannot reach the hots
 
 ### 9.1 What a trip is
 
-A **trip** is one power-on period, numbered in order from a counter in NVS. There is no clock across power cuts. When the page opens, the browser's time is stored as an anchor, so dates in between can be estimated. Power can vanish at any moment, so all logs are append-only and trip summaries are calculated when read.
+A **trip** is one power-on period, numbered in order from a counter in NVS, which Reset logs and a factory reset start again from 1. There is no clock across power cuts. When the page opens, the browser's time is stored as an anchor, so dates in between can be estimated. Power can vanish at any moment, so all logs are append-only and trip summaries are calculated when read.
 
 ### 9.2 Records
 
@@ -390,8 +415,8 @@ Raw flash partitions used as append-only rings, not a file system. Oldest data i
 
 | Partition | Size on 8 MB | Holds | Estimate |
 |---|---|---|---|
-| `triplog` | 2 MB | Records above | Over a year at 4 trips a day and about 1 kB per trip |
-| `capture` | about 2.4 MB | Debug captures | About 80 captures at 25-30 kB each |
+| `triplog` | 2 MB | Records above | At 4 trips a day, about 6 months of 20-minute trips at 2.8 kB each, and from 2.5 months for 40-minute trips to a year for 10-minute ones. Calculated from real record sizes, and it matched the bench logs. Motion records vary most, so real trips will settle it |
+| `capture` | about 2.4 MB | Debug captures | About 80 captures at 25-30 kB each. That is under an hour of driving, because motion can start a new one as soon as the last ends, so download them often |
 
 If the board reads 4 MB of flash, `triplog` becomes 128 kB and `capture` 256 kB, with the rest of the layout unchanged. That is about a month of trips and about 8 captures. A 16 MB board keeps the 8 MB layout.
 
@@ -463,6 +488,7 @@ README.md            wiring, flashing, first setup
 | `yg_core/record`, `ring` | Encodes and decodes log records, and stores them in flash sectors | Nothing |
 | `yg_core/trace`, `trips`, `capture` | Trace samples, trip summaries and debug captures | Nothing |
 | `yg_core/hotspot_policy`, `sensor_health`, `settings` | The hotspot rules, sensor trust and the settings table | Nothing |
+| `yg_core/sound` | The rhythm of each buzzer sound | Nothing |
 | `yg_core/engine` | Ties all of the above together, and reaches hardware only through an ops table | Nothing |
 | `yg_ble` | Passive scan with filter list, or open scan when pairing. Delivers parsed adverts | NimBLE |
 | `yg_imu` | Samples at 50 Hz, delivers samples and failures | `i2c_master` |
@@ -481,7 +507,7 @@ Everything posts to one queue: adverts, motion, button gestures, web commands an
 ### 10.3 BLE scanning
 
 - NimBLE, with the observer role only.
-- In normal use: passive scan, scan window equal to the interval at 100 ms, filter list holding the paired beacon, and duplicate filtering off, so every advert reaches the code with its RSSI.
+- In normal use: passive scan, scan window equal to the interval at 100 ms, or 25 ms while the hotspot is on (section 8.1), filter list holding the paired beacon, and duplicate filtering off, so every advert reaches the code with its RSSI.
 - The filter list means the radio ignores other devices without waking the CPU.
 - A 1 Hz check restarts the scan if it ever stops.
 - Only one scan mode runs at a time. Changing the filter list stops the scan first.
@@ -575,7 +601,7 @@ If motion detection misses these targets, tune it using the captures. If it stil
 
 **Step 5: The case,** in a separate spec, designed around this board. Heat matters: a parked car gets hot, so PLA is out.
 
-**Second unit:** same firmware and same steps, with its own password. It pairs to the same beacon by typing the MAC on the page.
+**Second unit:** same firmware and same steps. It pairs to the same beacon by typing the MAC on the page.
 
 ## Appendix: why this rule
 

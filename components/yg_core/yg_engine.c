@@ -13,6 +13,8 @@
 #define GLITCH_MIN_MS        100u
 #define GLITCH_LOG_GAP_MS    10000u
 #define SET_POINT_WINDOW_MS  3000u
+#define SET_POINT_WINDOW_SHARED_MS 10000u    /* Far fewer adverts are heard while sharing the radio. */
+#define LIVE_PEAK_WINDOW_MS  500u
 #define ENV_DELAY_MS         10000u
 #define ENV_RUN_MS           6000u    /* A Wi-Fi scan with the hotspot up takes a few seconds. */
 #define CAPTURE_RECORDS_PER_TICK 3
@@ -37,6 +39,11 @@ static void led_idle(yg_engine_t *e) {
     led(e, e->health.state == YG_SENSOR_FAILED ? YG_LED_SENSOR_FAILED : YG_LED_OFF);
 }
 
+static void start_scan(yg_engine_t *e, yg_scan_mode_t mode) {
+    e->scan_mode = mode;
+    e->ops->scan(e->ops->ctx, mode, &e->beacon, e->hotspot_on);
+}
+
 static void restore_scan(yg_engine_t *e) {
     yg_scan_mode_t mode = YG_SCAN_OFF;
     if (e->pairing.mode != YG_PAIR_IDLE) {
@@ -44,8 +51,7 @@ static void restore_scan(yg_engine_t *e) {
     } else if (e->beacon.paired) {
         mode = YG_SCAN_FILTERED;
     }
-    e->scan_mode = mode;
-    e->ops->scan(e->ops->ctx, mode, &e->beacon);
+    start_scan(e, mode);
 }
 
 static void end_env_scan_quietly(yg_engine_t *e) {
@@ -65,7 +71,10 @@ static void start_press(yg_engine_t *e, uint32_t now, yg_press_reason_t reason, 
     yg_rec_press(&r, e->trip, now, (uint8_t)reason, rssi, since_motion, yg_trigger_effective_set_point(&e->trigger, e->s));
     log_record(e, &r);
     led(e, YG_LED_PRESS);
-    buzz(e, YG_BUZZ_PRESS);
+    /* It only answers a person. The gate opening by itself on every trip would get old. */
+    if (reason == YG_PRESS_BUTTON || reason == YG_PRESS_WEB) {
+        buzz(e, YG_BUZZ_PRESS);
+    }
     if (e->capture != NULL) {
         yg_capture_trigger(e->capture, now, e->trip, YG_CAP_CAUSE_PRESS);
     }
@@ -106,6 +115,12 @@ static void sync_sensor(yg_engine_t *e, uint32_t now) {
         yg_rec_error(&r, e->trip, now, CODES[e->health.err], e->sensor_id);
         log_record(e, &r);
         led(e, YG_LED_SENSOR_FAILED);
+        /* The LED is hidden in the case, and this can open the gate from the parking spot,
+         * so it is worth one sound. A sensor that keeps dropping out gets no more than that. */
+        if (e->s->motion_enabled && !e->sensor_sounded) {
+            e->sensor_sounded = true;
+            buzz(e, YG_BUZZ_SENSOR);
+        }
     } else if (e->health_seen == YG_SENSOR_FAILED) {
         yg_trigger_set_sensor_ok(&e->trigger, true);
         yg_rec_error(&r, e->trip, now, YG_ERROR_SENSOR_RECOVERED, 0);
@@ -140,6 +155,7 @@ void yg_engine_init(yg_engine_t *e, const yg_engine_ops_t *ops, yg_settings_t *s
     e->boot_time = now;
     e->fw = boot->fw;
     e->sensor_id = boot->sensor_id;
+    e->reset_reason = boot->reset_reason;
     e->second_start = now;
 
     yg_trigger_init(&e->trigger, beacon->paired);
@@ -157,6 +173,7 @@ void yg_engine_init(yg_engine_t *e, const yg_engine_ops_t *ops, yg_settings_t *s
     restore_scan(e);
     if (!beacon->paired) {
         led(e, YG_LED_UNPAIRED);
+        buzz(e, YG_BUZZ_NO_BEACON);
     }
 }
 
@@ -189,6 +206,20 @@ void yg_engine_on_advert(yg_engine_t *e, uint32_t now, const yg_addr_t *a, int8_
     if (reason != YG_PRESS_NONE) {
         start_press(e, now, reason, rssi);
     }
+}
+
+/* The page reads the status twice a second, far slower than the sensor, so it gets the
+ * strongest values of the last half second or more, however many pages are asking. */
+static void note_live_motion(yg_engine_t *e, uint32_t now, const yg_motion_out_t *out) {
+    if (now - e->live_start >= LIVE_PEAK_WINDOW_MS) {
+        e->live_prev_mg = e->live_mg;
+        e->live_prev_yaw = e->live_yaw;
+        e->live_mg = 0;
+        e->live_yaw = 0;
+        e->live_start = now;
+    }
+    e->live_mg = fmaxf(e->live_mg, out->horizontal_mg);
+    e->live_yaw = fmaxf(e->live_yaw, fabsf(out->yaw_sum_deg));
 }
 
 /* An outage too short to count as a failure can still explain false motion in a log. */
@@ -230,6 +261,7 @@ void yg_engine_on_imu(yg_engine_t *e, uint32_t now, const yg_imu_sample_t *s, fl
     }
     yg_motion_out_t *out = &e->motion_out;
     yg_motion_update(&e->motion, e->s, now, s, out);
+    note_live_motion(e, now, out);
     if (out->cause != YG_MOTION_NONE) {
         on_motion(e, now, (uint8_t)out->cause, out->horizontal_mg, out->yaw_sum_deg);
     }
@@ -311,8 +343,7 @@ static void tick_env(yg_engine_t *e, uint32_t now) {
         && now - e->boot_time >= ENV_DELAY_MS) {
         e->env_phase = YG_ENV_RUNNING;
         e->env_started = now;
-        e->scan_mode = YG_SCAN_OPEN;
-        e->ops->scan(e->ops->ctx, YG_SCAN_OPEN, &e->beacon);
+        start_scan(e, YG_SCAN_OPEN);
         e->ops->env_start(e->ops->ctx);
     } else if (e->env_phase == YG_ENV_RUNNING && now - e->env_started >= ENV_RUN_MS) {
         yg_env_t env;
@@ -350,6 +381,8 @@ void yg_engine_tick(yg_engine_t *e, uint32_t now) {
     bool want_hotspot = yg_hotspot_tick(&e->hotspot, e->s, now);
     if (want_hotspot != e->hotspot_on) {
         e->hotspot_on = want_hotspot;
+        /* Wi-Fi and the scan share one radio, and a scan at full time leaves Wi-Fi nothing. */
+        start_scan(e, e->scan_mode);
         e->ops->hotspot(e->ops->ctx, want_hotspot);
         yg_rec_hotspot(&r, e->trip, now, want_hotspot, e->clients);
         log_record(e, &r);
@@ -390,8 +423,9 @@ bool yg_engine_press(yg_engine_t *e, uint32_t now, yg_press_reason_t reason) {
 bool yg_engine_setpoint_here(yg_engine_t *e, uint32_t now) {
     bool found = false;
     int8_t best = 0;
+    uint32_t window = e->hotspot_on ? SET_POINT_WINDOW_SHARED_MS : SET_POINT_WINDOW_MS;
     for (uint8_t i = 0; i < e->recent_count; i++) {
-        if (now - e->recent_time[i] <= SET_POINT_WINDOW_MS && (!found || e->recent_rssi[i] > best)) {
+        if (now - e->recent_time[i] <= window && (!found || e->recent_rssi[i] > best)) {
             best = e->recent_rssi[i];
             found = true;
         }
@@ -429,6 +463,9 @@ void yg_engine_pair_start(yg_engine_t *e, uint32_t now, yg_pair_mode_t mode) {
     yg_trigger_set_suspended(&e->trigger, true);
     restore_scan(e);
     led(e, YG_LED_PAIRING);
+    if (mode == YG_PAIR_AUTO) {
+        buzz(e, YG_BUZZ_PAIRING);
+    }
 }
 
 void yg_engine_pair_cancel(yg_engine_t *e, uint32_t now) {
@@ -484,6 +521,8 @@ void yg_engine_pair_forget(yg_engine_t *e, uint32_t now) {
 
 void yg_engine_hotspot_request(yg_engine_t *e, uint32_t now) {
     yg_hotspot_request(&e->hotspot, now);
+    led(e, YG_LED_HOTSPOT);
+    buzz(e, YG_BUZZ_HOTSPOT);
 }
 
 bool yg_engine_simulate_motion(yg_engine_t *e, uint32_t now) {
@@ -501,11 +540,15 @@ bool yg_engine_capture_now(yg_engine_t *e, uint32_t now) {
     return yg_capture_trigger(e->capture, now, e->trip, YG_CAP_CAUSE_MANUAL);
 }
 
-void yg_engine_setting_changed(yg_engine_t *e, uint32_t now, const char *key, const char *value) {
+static void log_setting(yg_engine_t *e, uint32_t now, const char *key, const char *value) {
     yg_record_t r;
     bool secret = strcmp(key, "hotspot_password") == 0;
     yg_rec_setting(&r, e->trip, now, key, secret ? "changed" : value);
     log_record(e, &r);
+}
+
+void yg_engine_setting_changed(yg_engine_t *e, uint32_t now, const char *key, const char *value) {
+    log_setting(e, now, key, value);
     e->ops->save_settings(e->ops->ctx);
     if (strcmp(key, "debug") == 0) {
         update_capture_allocation(e);
@@ -513,6 +556,43 @@ void yg_engine_setting_changed(yg_engine_t *e, uint32_t now, const char *key, co
         e->ops->led(e->ops->ctx, YG_LED_OFF);
         led_idle(e);
     }
+}
+
+void yg_engine_settings_reset(yg_engine_t *e, uint32_t now, const char *default_ssid) {
+    static yg_settings_t old;
+    old = *e->s;
+    yg_settings_defaults(e->s);
+    snprintf(e->s->hotspot_ssid, sizeof(e->s->hotspot_ssid), "%s", default_ssid);
+
+    /* As ordinary setting records, so that a log replay follows the reset. */
+    size_t count = 0;
+    const yg_setting_desc_t *table = yg_settings_table(&count);
+    for (size_t i = 0; i < count; i++) {
+        char before[YG_PASSWORD_MAX + 1], after[YG_PASSWORD_MAX + 1];
+        yg_settings_format(&old, &table[i], before, sizeof(before));
+        yg_settings_format(e->s, &table[i], after, sizeof(after));
+        if (strcmp(before, after) != 0) {
+            log_setting(e, now, table[i].key, after);
+        }
+    }
+    e->ops->save_settings(e->ops->ctx);
+    update_capture_allocation(e);
+    led(e, YG_LED_SAVED);
+    buzz(e, YG_BUZZ_SAVED);
+}
+
+void yg_engine_trips_restart(yg_engine_t *e) {
+    e->trip = 1;
+    yg_trace_set_trip(&e->trace, e->trip);
+}
+
+void yg_engine_log_restarted(yg_engine_t *e, uint32_t now) {
+    yg_record_t r;
+    e->heard_logged = false;
+    e->motion_logged = false;
+    e->temp_logged = false;
+    yg_rec_boot(&r, e->trip, now, e->fw, e->reset_reason, e->sensor_id, &e->beacon, e->s);
+    log_record(e, &r);
 }
 
 bool yg_engine_rate_trip(yg_engine_t *e, uint32_t now, uint32_t trip, const char *rating) {
@@ -592,6 +672,9 @@ int yg_engine_status_json(const yg_engine_t *e, uint32_t now, char *buf, size_t 
               e->adverts_per_second, yg_trigger_moved_recently(&e->trigger, e->s, now) ? "true" : "false",
               e->motion_out.calibrated ? "true" : "false", e->motion_out.tilting ? "true" : "false", (int)(e->motion_out.horizontal_mg + 0.5f));
     yg_jw_tenths(&w, (int)(e->motion_out.yaw_sum_deg * 10.0f));
+    yg_jw_raw(&w, ",\"motion_mg_peak\":%d,\"motion_yaw_peak\":", (int)(fmaxf(e->live_mg, e->live_prev_mg) + 0.5f));
+    yg_jw_tenths(&w, (int)(fmaxf(e->live_yaw, e->live_prev_yaw) * 10.0f));
+    yg_jw_raw(&w, ",\"motion_accel_mg\":%u,\"motion_yaw_deg\":%u", e->s->motion_accel_mg, e->s->motion_yaw_deg);
     yg_jw_raw(&w, ",\"sensor\":\"%s\",\"sensor_err\":\"%s\",\"sensor_id\":%u,\"temp_c\":",
               SENSOR[e->health.state], SENSOR_ERR[e->health.err], e->sensor_id);
     if (e->has_temp) {

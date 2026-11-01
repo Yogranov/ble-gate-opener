@@ -20,8 +20,12 @@ void yg_nvs_save_beacon(const yg_beacon_t *b);
 
 /* Returns the number of this trip and stores it. */
 uint32_t yg_nvs_next_trip(void);
+void yg_nvs_set_trip(uint32_t trip);
 
 esp_err_t yg_nvs_factory_reset(void);
+
+/* This unit's default hotspot name, from its address. */
+void yg_nvs_default_ssid(char *out, size_t len);
 
 /* For bench tests of rollback: makes the next boot fail its firmware self-check. */
 void yg_nvs_set_test_flag(void);

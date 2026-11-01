@@ -11,7 +11,8 @@
 typedef void (*yg_ble_advert_cb_t)(const yg_addr_t *a, int8_t rssi, const yg_ibeacon_t *ib);
 
 void yg_ble_start(yg_ble_advert_cb_t on_advert);
-void yg_ble_scan(yg_scan_mode_t mode, const yg_beacon_t *beacon);
+/* share_radio listens a quarter of the time, because Wi-Fi gets nothing through a scan at full time. */
+void yg_ble_scan(yg_scan_mode_t mode, const yg_beacon_t *beacon, bool share_radio);
 
 /* Restarts the scan if it ever stopped. Call about once a second. */
 void yg_ble_ensure_scanning(void);

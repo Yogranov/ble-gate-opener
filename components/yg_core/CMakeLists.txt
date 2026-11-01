@@ -12,6 +12,7 @@ idf_component_register(
         "yg_ring.c"
         "yg_sensor_health.c"
         "yg_settings.c"
+        "yg_sound.c"
         "yg_trace.c"
         "yg_trigger.c"
         "yg_trips.c"
