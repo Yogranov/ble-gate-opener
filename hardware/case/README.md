@@ -2,7 +2,7 @@
 
 A two-part printed case for the car unit that snaps together with no screws, black with a white logo, about 75 × 64 × 46 mm. See [design.md](design.md) for why it is shaped this way.
 
-**Status: designed, not printed yet.** See [Not proven yet](#not-proven-yet).
+**Status: the first print fitted but closed loosely and held the button down. This version fixes both, and has not been printed yet.** See [Not proven yet](#not-proven-yet).
 
 | File | What |
 |---|---|
@@ -19,14 +19,13 @@ These sizes are assumed, and a wrong one can stop the case fitting. Measure them
 
 | Parameter | What to measure | Assumed (mm) |
 |---|---|---|
-| `board_t` | Matrix board thickness, because the board is clamped at this size | 1.6 |
 | `hole_inset` | Board's corner holes, in from the edges, where the posts and legs meet | 2 |
 | `header_h` | Female header plus male header plastic, with the C6 plugged in | 11 |
 | `c6_top` | Top of the C6's module and USB ports, above its board | 3.2 |
 | `plug_w`, `plug_h` | Body of the USB plug you will use | 12, 7 |
-| `btn_h` | Tactile button, from the board to the top of its stem. If it is taller than this, the case holds it pressed all the time | 5 |
+| `solder_tail` | The longest leg or joint under the board. Trim anything longer, or it can reach the remote | 2.5 |
 
-The remote's size is measured, but check it fits the clips, including any rounded edges.
+Already measured: the board is 1.5 mm thick (`board_t`), and the board and released button are about 8 mm together, so the stem's top is 6.5 mm above the board (`btn_h`). The whole stack, from the remote to the top of the C6, is about 36.5 mm. The remote's size is measured, but check it fits the clips, including any rounded edges.
 
 ## Printing
 
@@ -35,30 +34,31 @@ Print in **PETG or ASA, not PLA**, which can soften in a parked car. Avoid carbo
 1. Load black as filament 1 and white as filament 2.
 2. Open `body-and-logo.3mf` in Bambu Studio. It opens with the top on the bed, the colours assigned and 4 wall loops set.
 3. Use a Textured PEI plate, because the slicer refuses PETG on the wrong plate. The top takes on the plate's texture.
-4. Use 0.2 mm layers, so that the logo takes 4 layers. Leave supports off.
+4. Use 0.2 mm layers for both parts. The logo takes 4 layers, and the heights that clamp the board fall on whole layers. Leave supports off.
 5. Print the Body, and then `cover.3mf` in black.
 
 | Part | Time | Filament | Colour changes | Supports |
 |---|---|---|---|---|
-| Body and logo | 1 h 40 min | 42 g black, 2 g white | 4, all in the first few layers | None |
+| Body and logo | 1 h 40 min | 41 g black, 2 g white | 4, all in the first few layers | None |
 | Cover | 47 min | 17 g black | None | None |
 
 These come from slicing in Bambu Studio 2.7, for a P1S with a 0.4 mm nozzle and Bambu PETG Basic.
 
 ## What else you need
 
-A 6 × 6 mm through-hole tactile button, 5 mm tall, which goes on the board. A piece of Velcro or Dual Lock holds the case in the glove box. There are no screws, and no foam or tape.
+A 6.5 × 6 mm through-hole tactile button, 6 mm tall, which goes on the board. A piece of Velcro or Dual Lock holds the case in the glove box. There are no screws. Foam tape is optional, to damp vibration.
 
 ## Assembly
 
 1. Solder the board as in [board-layout.html](../board-layout.html), including the tactile button, but leave the remote's wires about 12 cm long, so the Cover can come off with the remote still connected. Keep the hot glue on the headers.
 2. Press the remote into the Cover's clips, with its open button side down and its LED end toward the row X end of the board.
-3. Turn the Body upside down, and lower the board in, parts side first, with the USB ports facing their openings. It rests on the 4 posts, inside the stops, with the button under the tab's post.
-4. Fold the wires into the space along the front wall, clear of the hooks. Press the Cover on until all 6 hooks click. The 4 legs and the ledge now hold the board against the posts.
-5. Check the button: press the tab and feel it click. If the unit acts as if the button is held down when you let go, the tab's post is pressing on it, so make `stem_gap` larger or check `btn_h`.
-6. Stick the Velcro to the Cover.
+3. Turn the Body upside down. If the unit gets a [printed manual](../../manual.html), fold it to 60 × 33 mm and tape it flat to the inside of the top, in the middle, with its long side along the case's long side. That keeps it off the antenna and the button tab. Then lower the board in, parts side first, with the USB ports facing their openings. It rests on the 4 posts, inside the stops, with the button under the tab's post.
+4. Trim anything under the board longer than 2.5 mm. Fold the wires into the space along the front wall, clear of the hooks. If you want foam, add 2 to 3 mm tape on the remote's back in the area under the C6, or on top of the C6's module if there is no printed manual, because they would share the same gap. Press the Cover on firmly until all 6 hooks snap. The 4 legs now press the board against the 4 posts.
+5. Check the board: with the Cover on, shake the case, and it should not rattle. The clamp is small on purpose, so if a corner is loose, stick a layer of tape on that leg's tip. If the Cover won't close fully, sand the leg tips a little.
+6. Check the button: press the tab and feel it click. It has a 1 mm gap before it reaches the button. If the unit acts as if the button is held down when you let go, the tab's post is pressing on it, so check `btn_h`.
+7. Stick the Velcro to the Cover.
 
-**To change the battery**, pull the case off its Velcro and turn it upside down. Lever the Cover off with a fingernail or a coin at the notch at either end. Lift the Cover away with the remote on it, and spread the clips to take the remote out. Keep the Body upside down while the Cover is off, because only the Cover holds the board in.
+**To change the battery**, pull the case off its Velcro and turn it upside down. Lever the Cover off with a coin at the notch at either end. Lift the Cover away with the remote on it, and spread the clips to take the remote out. Keep the Body upside down while the Cover is off, because only the Cover holds the board in.
 
 ## Changing the case
 
@@ -82,10 +82,12 @@ python hardware/case/trace_logo.py
 Remove each of these once it has been tested.
 
 - The case has not been printed, and has not held the real parts. The fit checks use mock-ups built from the sizes above.
-- **Snap hooks:** how firmly they hold, how easily they open, and how many times they can flex are calculated, not measured. If they are too tight or too loose, change `hook_w` or `hook_z`, or `TOOTH` in `build_case.py`.
+- **Snap hooks:** the stronger hooks have not been printed. How firmly they hold, how easily they open, and how many times they can flex are calculated, not measured. If they are too tight or too loose, change `hook_w` or `hook_z`, or `TOOTH`, `CATCH` or `BITE` in `build_case.py`.
 - **Board clamp:** the board has to sit firmly between the posts and legs without rattling, which depends on the real board's thickness and on print accuracy. The motion sensor needs it held firmly.
 - **Slicing:** the files were sliced from Bambu Studio's command line, not its window. Look at the preview before printing, especially the logo's first layers.
-- **Button tab:** how firmly it presses and how it feels are calculated, not tested. The gap to the button depends on the real button's height and on print accuracy. Make `tab_t` thinner or `tab_len` longer to press more easily, or do the opposite to make it firmer.
+- **Board clamp:** the file leaves 1.4 mm for the 1.5 mm board at all 4 corners, but a print's error of about 0.1 mm is the same size as that squeeze. Whether all 4 press firmly can only be checked on the print. With a 1.5 mm board, `clamp` only stays on whole layers at odd tenths, such as 0.1 and 0.3.
+- **Button tab:** the shorter post and thinner tab have not been printed. About 0.85 kg to press is calculated, not tested. Make `tab_t` thinner or `tab_len` longer to press more easily, or do the opposite to make it firmer.
+- **Printed manual:** the fit of the folded sheet under the top is calculated, and has not been tried. Nor has the effect of folded paper that close to the C6 on its signal, though it stays off the antenna.
 - **Signal:** compare the beacon's signal with the case and without it, in the car.
 - **Remote range:** if the remote has to move off the board, as in the [board design](../README.md#not-proven-yet), the Cover needs an opening for its wires, and the case can be about 20 mm shorter.
 - **Heat:** PETG in a glove box through a summer, especially the snap hooks.

@@ -2,7 +2,7 @@
 
 The car unit is hand-built on a matrix board: an ESP32-C6, a motion sensor, and a MOSFET that presses the button of a gate remote.
 
-**Status: designed, not built yet.** See [Not proven yet](#not-proven-yet).
+**Status: built and bench-tested over USB, with the remote not yet connected, and never in a car.** See [Not proven yet](#not-proven-yet).
 
 To build it, open [board-layout.html](board-layout.html) in a browser. It needs no internet.
 
@@ -22,9 +22,9 @@ To build it, open [board-layout.html](board-layout.html) in a browser. It needs 
 | MPU6050 module | 21 × 16 | Have |
 | P30N06LE MOSFET | | Have |
 | BFT remote, 2 buttons, 12 V 23A battery | 64 × 40 × 17 | Have |
-| Active buzzer | About 12 across | Have |
-| Tactile button, through-hole | 6 × 6, 5 tall | Needed |
-| 220 Ω and 10 kΩ resistors, 1 of each | | Needed |
+| Active buzzer | About 12.5 across | Have |
+| Tactile button, through-hole | 6.5 × 6, 6 tall | Have |
+| 220 Ω and 10 kΩ resistors, 1 of each | | Have |
 | 15-pin female headers | | 2 needed |
 | 15-pin male headers, for the C6 | | 2 needed |
 | 8-pin male header, for the MPU6050 | | 1 needed |
@@ -46,8 +46,8 @@ If the part's position changes, update the sizes at the top of the script too. I
 
 Remove each of these once it has been tested.
 
-- The layout has not been built or tested on real hardware, and the external button on GPIO7 has not been pressed.
+- The remote has not been connected, so a real press has not been tested. Nor has holding the external button for 3 s.
 - **Remote range:** being against the board could shorten it. If the gate does not open reliably, the remote goes on longer wires, off the board.
-- **Buzzer:** its current and loudness at 3.3 V are unmeasured, and its size is estimated from a photo. If it fails, it needs a MOSFET and 5 V, and the layout changes.
-- **C6 position:** how far the pins sit from each end of the C6 comes from a photo, so the distances at each edge could be off by about 1 mm.
+- **Remote:** its button circuit and current are unknown, so only a real press from the unit proves the MOSFET works it.
+- **Buzzer:** it is active and beeps clearly on GPIO11 on the bench, but its loudness in the closed glove box and its current are not measured. If it is too quiet, the firmware can raise the pin's drive to 40 mA. If that is not enough, it needs a MOSFET and 5 V, and the layout changes.- **C6 position:** how far the pins sit from each end of the C6 comes from a photo, so the distances at each edge could be off by about 1 mm.
 - **Assumed sizes:** [design.md](design.md#details-of-the-real-parts) lists every size that was assumed rather than measured. Measure those parts before printing the case.

@@ -20,10 +20,10 @@ MM = 2.54  # Hole spacing. Positions below are in holes, from column 1 and row 1
 BOARD = (1 - 3.41 / MM, 1 - 5.79 / MM, 18 + 3.41 / MM, 24 + 5.79 / MM)
 PARTS = {
     "MPU6050": (5 - 1.61 / MM, 5 + 1.1 / MM - 16 / MM, 12 + 1.61 / MM, 5 + 1.1 / MM),
-    "MOSFET": (8 - 19.1 / MM, 21 - 5.1 / MM, 8 - 3.5 / MM, 21 + 5.1 / MM),
-    "220 ohm": (9 - 3.15 / MM, 19 - 1.25 / MM, 9 + 3.15 / MM, 19 + 1.25 / MM),
-    "10 kohm": (9 - 1.25 / MM, 22 - 3.15 / MM, 9 + 1.25 / MM, 22 + 3.15 / MM),
-    "Buzzer": (13.5 - 6 / MM, 22 - 6 / MM, 13.5 + 6 / MM, 22 + 6 / MM),
+    "MOSFET": (9 - 20.9 / MM, 21 - 5.1 / MM, 9 - 5.4 / MM, 21 + 5.1 / MM),
+    "220 ohm": (10 - 3.15 / MM, 19 - 1.25 / MM, 10 + 3.15 / MM, 19 + 1.25 / MM),
+    "10 kohm": (10 - 1.25 / MM, 22 - 3.15 / MM, 10 + 1.25 / MM, 22 + 3.15 / MM),
+    "Buzzer": (16.5 - 6.25 / MM, 3 - 6.25 / MM, 16.5 + 6.25 / MM, 3 + 6.25 / MM),
     "Button": (17 - 3 / MM, 19.5 - 3 / MM, 17 + 3 / MM, 19.5 + 3 / MM),
     "Top header": (0.5, 6.5, 15.5, 7.5),
     "Bottom header": (0.5, 16.5, 15.5, 17.5),
@@ -31,20 +31,21 @@ PARTS = {
 # From the main board's end past GND to the USB ports past 5V, and 1.3 mm past each pin row.
 C6 = (1 - 1.2 / MM, 7 - 1.3 / MM, 15 + 9.4 / MM, 17 + 1.3 / MM)
 
-# Holes that must end up joined. G1 and Q1 are both GND, but only join on the C6 itself.
+# Holes that must end up joined. G1, G14 and Q1 are all GND, but only join on the C6 itself.
 NETS = {
-    "GPIO10 to the 220 ohm": ["Q11", "S11"],
-    "Gate": ["S7", "T8", "T9"],
-    "Source and GND": ["Q1", "V8", "W8", "X8", "X9", "V12", "U18", "remote −"],
-    "Drain": ["U8", "remote +"],
-    "GPIO11": ["Q12", "V15"],
+    "GPIO10 to the 220 ohm": ["Q11", "S12"],
+    "Gate": ["S8", "T9", "T10"],
+    "Source and GND": ["Q1", "V9", "W9", "X9", "X10", "U18", "remote −"],
+    "Drain": ["U9", "remote +"],
+    "GPIO11": ["Q12", "C18"],
+    "Buzzer GND": ["G14", "C15"],
     "GPIO7": ["Q7", "R16"],
     "SDA": ["G2", "E8"],
     "SCL": ["G3", "E7"],
     "MPU6050 GND": ["G1", "E6"],
     "3V3": ["Q2", "E5"],
 }
-PINS = {"Q11": "10", "Q12": "11", "Q7": "7", "Q1": "GND", "Q2": "3V3", "G2": "2", "G3": "3", "G1": "GND"}
+PINS = {"Q11": "10", "Q12": "11", "Q7": "7", "Q1": "GND", "Q2": "3V3", "G2": "2", "G3": "3", "G1": "GND", "G14": "GND"}
 MPU_HOLES = {"VCC": "E5", "GND": "E6", "SCL": "E7", "SDA": "E8"}
 # Power, USB, reset and strapping pins, which no wire may reach.
 FORBIDDEN = {"5V", "12", "13", "RST", "9", "8", "4", "5", "15"}
