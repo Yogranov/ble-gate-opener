@@ -3,6 +3,7 @@
  *
  * Input, one per line, times in ms:
  *   set,<key>,<value>           change a setting before the replay starts
+ *   zero,<x>,<y>,<z>            the gyro zero saved before the trip, in degrees per second
  *   A,<t>,<rssi>                advert from the paired beacon
  *   M,<t>                       motion, for traces that hold no raw samples
  *   I,<t>,ax,ay,az,gx,gy,gz     raw motion sample in g and degrees per second
@@ -20,6 +21,8 @@
 static yg_engine_t engine;
 static yg_settings_t settings;
 static bool started;
+static bool has_zero;
+static float saved_zero[3];
 
 static void op_press(void *ctx, uint32_t ms) { (void)ctx; (void)ms; }
 static void op_led(void *ctx, yg_led_event_t e) { (void)ctx; (void)e; }
@@ -51,17 +54,18 @@ static void op_log(void *ctx, const yg_record_t *r) {
 }
 
 static void op_factory_reset(void *ctx) { (void)ctx; }
+static void op_save_gyro_zero(void *ctx, const float zero[3]) { (void)ctx; (void)zero; }
 
 static const yg_engine_ops_t OPS = {
     op_press, op_led, op_buzz, op_log, op_capture, op_hotspot, op_scan,
-    op_save_beacon, op_save_settings, op_env_start, op_env_finish, op_factory_reset, NULL,
+    op_save_beacon, op_save_settings, op_env_start, op_env_finish, op_factory_reset, op_save_gyro_zero, NULL,
 };
 
 static const yg_addr_t BEACON = { { 0xC0, 0, 0, 0, 0, 1 }, YG_ADDR_TYPE_RANDOM };
 
 static void start(uint32_t t) {
     yg_beacon_t beacon = { true, BEACON };
-    yg_boot_info_t boot = { 1, "replay", 0, 0, false };
+    yg_boot_info_t boot = { 1, "replay", 0, 0, false, has_zero, { saved_zero[0], saved_zero[1], saved_zero[2] } };
     settings.hotspot_s = 0;
     yg_engine_init(&engine, &OPS, &settings, &beacon, &boot, t);
     started = true;
@@ -82,6 +86,10 @@ int main(void) {
                 fprintf(stderr, "bad setting: %s=%s\n", key, value);
                 return 2;
             }
+            continue;
+        }
+        if (strncmp(line, "zero,", 5) == 0) {
+            has_zero = sscanf(line + 5, "%f,%f,%f", &saved_zero[0], &saved_zero[1], &saved_zero[2]) == 3;
             continue;
         }
         unsigned t;

@@ -76,6 +76,24 @@ def restarts(count):
     check("no press in the logs of those trips", not presses, presses)
 
 
+def brownout_wait():
+    """After a brownout the radio waits 1 s to start, so the boot record comes that much later."""
+    command("set debug 1")
+    first, _ = status()
+    s = yg_serial.open_port(port)
+    s.write(b"brownout\n")
+    s.close()
+    time.sleep(4)
+    after, extra = status()
+    check("a simulated brownout restarts the unit", after["trip"] == first["trip"] + 1, (first, after))
+    check("a simulated brownout does not press", not extra["remote_pin_high"] and after["state"] not in ("pressing", "hold"), after)
+    logs = command("logs nocapture", 30)
+    boots = [json.loads(l) for l in logs.split("\n") if l.startswith('{"k":"boot"')]
+    check("the start says it followed a brownout", boots[-1]["reset"] == 9, boots[-1])
+    check("the radio's start waited", boots[-1]["t"] >= 1000, boots[-1])
+    command("set debug 0")
+
+
 def environment_snapshot():
     command("set debug 1")
     s = yg_serial.open_port(port)
@@ -135,6 +153,7 @@ def main():
     command("reboot", 2)
     time.sleep(4)
     restarts(args.restarts)
+    brownout_wait()
     environment_snapshot()
     soak(args.minutes)
     print()

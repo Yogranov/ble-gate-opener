@@ -92,7 +92,9 @@ static void on_motion(yg_engine_t *e, uint32_t now, uint8_t cause, float mg, flo
         log_record(e, &r);
         e->motion_logged = true;
         e->last_motion_log = now;
-        if (e->capture != NULL) {
+        /* Only where the trace is sampling too. An hour's drive would otherwise overwrite
+         * every capture of pulling out and of reaching the gate. */
+        if (e->capture != NULL && yg_trace_is_sampling(&e->trace, now)) {
             yg_capture_trigger(e->capture, now, e->trip, YG_CAP_CAUSE_MOTION);
         }
     }
@@ -160,6 +162,9 @@ void yg_engine_init(yg_engine_t *e, const yg_engine_ops_t *ops, yg_settings_t *s
 
     yg_trigger_init(&e->trigger, beacon->paired);
     yg_motion_init(&e->motion);
+    if (boot->has_gyro_zero) {
+        yg_motion_set_known_zero(&e->motion, boot->gyro_zero);
+    }
     yg_sensor_health_init(&e->health, now);
     e->health_seen = e->health.state;
     yg_pairing_init(&e->pairing);
@@ -222,6 +227,19 @@ static void note_live_motion(yg_engine_t *e, uint32_t now, const yg_motion_out_t
     e->live_yaw = fmaxf(e->live_yaw, fabsf(out->yaw_sum_deg));
 }
 
+static void note_gyro_zero(yg_engine_t *e, uint32_t now) {
+    yg_zero_event_t zero;
+    if (!yg_motion_take_zero_event(&e->motion, &zero)) {
+        return;
+    }
+    if (zero.keep) {
+        e->ops->save_gyro_zero(e->ops->ctx, zero.zero);
+    }
+    yg_record_t r;
+    yg_rec_gyro_zero(&r, e->trip, now, (uint8_t)zero.source, zero.keep, zero.zero);
+    log_record(e, &r);
+}
+
 /* An outage too short to count as a failure can still explain false motion in a log. */
 static void note_sensor_back(yg_engine_t *e, uint32_t now) {
     if (!e->sensor_out) {
@@ -261,6 +279,7 @@ void yg_engine_on_imu(yg_engine_t *e, uint32_t now, const yg_imu_sample_t *s, fl
     }
     yg_motion_out_t *out = &e->motion_out;
     yg_motion_update(&e->motion, e->s, now, s, out);
+    note_gyro_zero(e, now);
     note_live_motion(e, now, out);
     if (out->cause != YG_MOTION_NONE) {
         on_motion(e, now, (uint8_t)out->cause, out->horizontal_mg, out->yaw_sum_deg);
@@ -270,7 +289,7 @@ void yg_engine_on_imu(yg_engine_t *e, uint32_t now, const yg_imu_sample_t *s, fl
     }
     if (out->near_miss) {
         yg_trace_on_flags(&e->trace, YG_TRACE_FLAG_NEAR_MISS);
-        if (e->capture != NULL && out->cause == YG_MOTION_NONE
+        if (e->capture != NULL && out->cause == YG_MOTION_NONE && yg_trace_is_sampling(&e->trace, now)
             && (!e->near_miss_captured || now - e->last_near_miss >= NEAR_MISS_GAP_MS)
             && yg_capture_trigger(e->capture, now, e->trip, YG_CAP_CAUSE_NEAR_MISS)) {
             e->near_miss_captured = true;

@@ -22,7 +22,7 @@ Today's firmware is one Arduino file on PlatformIO with a hard-coded beacon addr
 
 ## 2. Setup and constraints
 
-- The unit and the remote sit in the car's glove box, on power that turns off with the ignition.
+- The unit and the remote sit in the car's glove box, on a phone charger in a socket that turns off with the ignition. A car screen's USB port is not good enough (section 11).
 - The beacon is on a parking lot gate. The owner's parking spot is 13 m from it.
 - With no RSSI limit, the gate opened from the spot right after ignition, before the driver was ready. `-90 dBm` usually prevents that, but leaves almost no margin: on bad days the car must get very close.
 - A second unit may go to someone whose spot is very close to the gate. It must work without per-spot tuning and can share the same beacon.
@@ -142,6 +142,8 @@ The state is not saved. After a power cut the unit starts in `ARMED`, or `UNPAIR
 
 The set point exists to stop presses when only driving past, and to keep presses within the remote's range (section 11). The trigger does not need it to handle the parking spot, which is the job of the motion check.
 
+The first real drive added a third reason: pressing too early. That gate stays open for 15 s. "Any" pressed about 10 s before the car reached it on the way out and about 17 s before on the way in, by which time it would have been closing. Replaying those logs, -85 dBm presses about 4 s and 8 s before, and it also drops a press from the parking spot at -94 dBm, caused by someone handling the unit. So the first unit runs at -85. "Any" stays the default until more drives show what suits a gate in general.
+
 ### 5.5 Sensor failure fallback
 
 A brief fault must not hand control to the fixed threshold, because that can press a parked car. So the sensor counts as failed only in these cases:
@@ -201,6 +203,16 @@ Runs in `yg_core` with no hardware dependency, so recorded data can be replayed 
 
 **Calibration:** at start, the unit takes whole-second averages of both sensors, in which engine shake cancels out. As soon as two in a row agree, normally after 2 s, it stores them as the gravity direction and gyro bias. A passenger getting in only delays this, and a slow lean can hide at most about 0.3 °/s in it. Until then it reports no motion, so the failure mode is a late press, not an early one. A car already rolling may never agree, so after 20 s it takes the latest average anyway.
 
+**The saved gyro zero:** that last average holds the car's own turning. On the first real drive, the unit started just before the car pulled out and took a zero about 6 °/s off, and it then reported motion however still it sat, in 22 of 25 truly still seconds. So the unit saves a zero it can trust, and at the 20 s limit it uses the saved zero with the latest average's gravity. Replaying that drive's raw data this way gives 8 of 25, and the same with a saved zero 0.5 °/s off. This suits the sensor: on the first day the real zero stayed within 0.3 °/s from 26 to 48 °C. Factory reset erases it, and Reset to defaults keeps it, as it belongs to the sensor.
+
+A wrong saved zero can be worse than none. A sensor swapped for another could report motion in a parked car with someone moving about in it, and press, and a big enough error holds the tilt check on and hides a real pull-out. So:
+
+- The first steady start saves its zero. After that, a 30 s rest replaces it if it has moved by 0.5 °/s or more, and a steady start replaces it if it is 2 °/s or more off around the level axes. Two seconds can agree in a steady bend, but that only hides turning around the vertical.
+- At the 20 s limit, the saved zero is used only if the average of the whole start agrees with it within 3 °/s around the level axes, which covers over 99% of real starts' seconds. Otherwise the unit takes the latest average, as it did before.
+- A zero over 40 °/s, or not a number, is neither used nor saved. The datasheet allows 20.
+
+What remains accepted: after a swap, an error of 1.5 to 3 °/s gets past these until the next steady start or rest. A 30 s rest in a long smooth bend can save that bend's turning, around the vertical only, which does no harm below about 5 °/s, and the next real rest replaces it.
+
 **Keeping them right:** a real sensor has offsets, scale errors and a gyro zero that moves as it warms up. The accelerometer threshold is only about 2.3° of tilt, so errors must not be able to reach it.
 
 - **Gravity turns with the gyro,** so that a lean leaves no error behind, however slowly it happens.
@@ -209,6 +221,8 @@ Runs in `yg_core` with no hardware dependency, so recorded data can be replayed 
 - **After 30 s at rest,** gravity and bias are set again from the sensor, which repairs anything else, such as calibrating in a bend. Rest means that the whole-second averages of both sensors stayed put, which also works with the engine shaking. Steady rotation around the vertical looks the same, so a long smooth bend, such as a garage ramp, is taken for bias. That shows as false yaw for up to 30 s after it ends, with the car just having moved anyway.
 
 An earlier version also compared the gyro with the accelerometer once a second, to catch a wrong zero sooner. It took real moves for gyro errors, which caused false motion, so it is gone. A zero that really jumps by more than 1 °/s, which nothing is known to cause, shows as false motion until the next rest.
+
+**A known weakness:** a simulated random shake of 2 to 3 °/s, kept up for 3 minutes, fired the acceleration check in 12% to 33% of 200 runs, as the gyro's noise slowly turns gravity away. A parked car in earshot at the set point would then be pressed. At 1.5 °/s it fired about once in 1500 runs. The other side of it is a missed press: from about 3 °/s the shake holds the tilt check on, so the acceleration check goes deaf, and at 4 °/s and above a 120 mg pull-out was not seen at all, though yaw can still catch the turn. A real car's still seconds, by each second's gyro standard deviation on its worst axis, measured about 0.2 °/s, 0.3 at the 90th percentile, under 1 at the 99th and about 2 at worst, and about 6 minutes of real stops showed no false motion beyond the tail of braking. So nothing changes for it yet, a test holds the rate down, and logs should keep an eye on it.
 
 **Each sample,** with `ĝ` as the unit vector of gravity:
 
@@ -380,6 +394,7 @@ Bench commands, because the owner's PC has no Wi-Fi and so cannot reach the hots
 | `ota-self [corrupt\|fail\|abandon]` | Uploads the running image to the unit's own `/api/ota`. `corrupt` damages it, which must be refused. `fail` makes the new boot fail its self-check, which must roll back. `abandon` goes silent half way, which must be given up on |
 | `log-fill <sectors>` | Fills both logs with dummy records, to test a full log |
 | `log-clear` | Erases the logs, and reports the time taken and the longest the decision task was held up |
+| `brownout` | Restarts with the reset reason a brownout leaves, to test what follows one. It cannot test a real sag. Debug flag only |
 | `wifi-join <ssid> <password>` | Joins a LAN until the next restart. Nothing is stored |
 
 ## 9. Logs and debug
@@ -387,6 +402,8 @@ Bench commands, because the owner's PC has no Wi-Fi and so cannot reach the hots
 ### 9.1 What a trip is
 
 A **trip** is one power-on period, numbered in order from a counter in NVS, which Reset logs and a factory reset start again from 1. There is no clock across power cuts. When the page opens, the browser's time is stored as an anchor, so dates in between can be estimated. Power can vanish at any moment, so all logs are append-only and trip summaries are calculated when read.
+
+A start that dies at the radio's first surge has taken its number and logged nothing. So a gap in the numbers before a `boot` record with reset reason 9 counts the failed starts, and `tools/yg_logs.py summary` reports them.
 
 ### 9.2 Records
 
@@ -402,6 +419,7 @@ Trip log records:
 | `hotspot` | On, off, client count |
 | `pair`, `setting`, `ota`, `error` | What changed or failed |
 | `trace` | Samples, each with strongest RSSI, advert count, peak acceleration, peak yaw rate and flags |
+| `gyro_zero` | The gyro zero this trip started with and how it got it, and any that a long rest replaced |
 | `temp` | MPU6050 temperature, once a minute |
 | `rating` | Owner's rating of a trip |
 | `time_anchor` | Browser time, with trip and uptime |
@@ -422,7 +440,7 @@ Raw flash partitions used as append-only rings, not a file system. Oldest data i
 | Partition | Size on 8 MB | Holds | Estimate |
 |---|---|---|---|
 | `triplog` | 2 MB | Records above | At 4 trips a day, about 6 months of 20-minute trips at 2.8 kB each, and from 2.5 months for 40-minute trips to a year for 10-minute ones. Calculated from real record sizes, and it matched the bench logs. Motion records vary most, so real trips will settle it |
-| `capture` | about 2.4 MB | Debug captures | About 80 captures at 25-30 kB each. That is under an hour of driving, because motion can start a new one as soon as the last ends, so download them often |
+| `capture` | about 2.4 MB | Debug captures | About 90 captures at 25-30 kB each. The first real day held 92, nearly all from driving far from the gate, until section 9.4's rule limited them to where they help |
 
 If the board reads 4 MB of flash, `triplog` becomes 128 kB and `capture` 256 kB, with the rest of the layout unchanged. That is about a month of trips and about 8 captures. A 16 MB board keeps the 8 MB layout.
 
@@ -430,7 +448,7 @@ If the board reads 4 MB of flash, `triplog` becomes 128 kB and `capture` 256 kB,
 
 A web setting that survives restarts. It is off by default and turned on for the first weeks of real use. It adds:
 
-- **Captures** around each motion event and press: raw motion samples at 50 Hz and every advert, from 10 s before to 30 s after.
+- **Captures** around each motion event and press: raw motion samples at 50 Hz and every advert, from 10 s before to 30 s after. Motion and near misses only start one where the trace is sampling, in the first 2 minutes of a trip and while the beacon has been heard in the last 30 s. A press or a manual capture always does. Before this rule, one hour's driving overwrote the first pull-out and press.
 - **Environment snapshot:** once per trip, 10 s after power-on if the car has not moved, count nearby Wi-Fi networks and BLE devices. It is cancelled if the car moves. This tests the theory that interference causes bad days.
 - **Hotspot stays on while moving.**
 - **Live raw view** on the page.
@@ -455,6 +473,17 @@ Questions the first review must answer:
 - Do bad days show weaker signal or fewer adverts?
 - Does temperature or the environment snapshot line up with bad days?
 - Do the owner's ratings agree with the data?
+
+**The first review, after one real day:**
+
+- **Motion while parked:** yes, from three causes. A wrong gyro zero (section 6, now fixed), the tail after braking (section 6, accepted), and someone handling the unit. No press came at ignition, or away from the beacon.
+- **Warning:** with "any", 18.5 s and 23 s from press to signal peak, and more usefully about 10 s and 17 s from press to reaching the gate. That was too early for a gate open for 15 s (section 5.4).
+- **Pull-outs:** detected about 4 s after the car moved, against the 2 s target. The drive from the spot to the gate takes about 15 s, so this leaves enough time, and it stays as it is.
+- **Signal:** -69 to -74 dBm at the gate and -85 to -96 at the spot, with 1 to 3 adverts a second near the gate. Bad days need more days. The hottest reading was 48 °C, after a parked hour.
+- **Turn rates:** 48 minutes of real driving peaked at 53 °/s, while handling reached 358 °/s. A check could tell them apart, but a closed glove box already stops the handling, so it has not been added.
+- **The gate did not open at all:** the remote's battery was low. Each press is counted as an opening for the timing above, but the remote's reach from the glove box is still untested (section 11).
+- **Power:** the biggest finding. See section 11.
+- **Ratings:** none yet.
 
 ## 10. Firmware structure
 
@@ -517,6 +546,7 @@ Everything posts to one queue: adverts, motion, button gestures, web commands an
 - The filter list means the radio ignores other devices without waking the CPU.
 - A 1 Hz check restarts the scan if it ever stops.
 - Only one scan mode runs at a time. Changing the filter list stops the scan first.
+- Starting the radio is thought to draw the most current of anything the unit does. After a brownout restart, the unit waits 1 s before starting it. On that start `CONFIG_ESP_PHY_REDUCE_TX_POWER` also caps transmit power at 13 dBm. The scan does not transmit and the hotspot defaults to 8 dBm, so neither changes, and only the radio's start-up could gain. That is not measured, so it should get no credit for anything a car test shows.
 
 To verify at implementation: Espressif's C6 NimBLE example sets `CONFIG_BT_NIMBLE_EXT_ADV=y`, where reports arrive as `BLE_GAP_EVENT_EXT_DISC` instead of `BLE_GAP_EVENT_DISC`. `yg_ble` handles whichever the build uses.
 
@@ -540,7 +570,7 @@ To verify at implementation: Espressif's C6 NimBLE example sets `CONFIG_BT_NIMBL
 - Updates are not signed. Accepted, because uploading requires the Wi-Fi password.
 - The remote output has one owner, `yg_io`, which enforces the time limit with a one-shot timer.
 - The first line of `app_main` drives the output low.
-- The task watchdog restarts a stuck unit. Reset reasons are logged.
+- The task watchdog restarts a stuck unit. Reset reasons are logged. A USB export gives way every 64 records, because writing to USB never waits, and a full export used to end in this restart after 10 s.
 
 ### 10.6 Removed
 
@@ -556,7 +586,7 @@ To verify at implementation: Espressif's C6 NimBLE example sets `CONFIG_BT_NIMBL
 | **BLE range outgrows the remote's range.** The remote is in the glove box too, and one press per trip means no retry | Before boosting the beacon, test how far the remote reaches from the closed glove box. The set point keeps presses inside that distance |
 | RSSI scale differs between chips, so old numbers may not carry over | `fallback_dbm` is checked on the C6 in step 1 and `pair_min_dbm` in step 2 |
 | Clone MPU6050 behaves differently | No reliance on `WHO_AM_I`. Sanity checked by gravity |
-| Wi-Fi start at each power-on loads a weak car USB port | Low TX power. Brownouts are logged as reset reasons |
+| **Weak power ends a start at the radio's first surge.** This is real: on the first car day, on a USB port of the car's multimedia screen, 4 of 6 power-ups lost 15 to 117 starts first, about half a second each, and none of 54 starts on a PC did. Once up, the unit ran for 30 minutes without a reset. A test in the car on firmware 2.0.1 then compared that port, the screen's other port and a good phone charger, over 14 starts. On the screen's ports, both starts from the ignition switch failed first, 1 and 2 times, 5 replugs of a port that was already on came up clean, and 3 engine starts lost 0, 0 and 7. On the charger, 4 starts lost none, and only one of them was an engine start. The log has no clock, so which start used which source is read from the test's order, the unit's pose and its engine vibration. The screen's ports took seconds to rise and fall, the charger's did not, and the sensor module's LED flickered on the ports. No voltage was measured, so the slow rise is the likely cause, not a proven one | **Power the unit from a phone charger, not a screen's USB port.** The 1 s wait after a brownout (section 10.3) stays. The planned test of it, about a third as many failures, could not prove it: each attempt now takes about 1.5 s instead of 0.5 s, so a port that stays weak for a set time gets a third as many attempts anyway. It stays because a good supply never pays for it, since it only runs after a brownout, and because every failed start writes the trip counter to flash. The summary tool counts failed starts, so drives on the charger keep testing this. A 470 µF capacitor was not tried, and is not needed unless failures continue on the charger, because it could not bridge a rise lasting seconds |
 
 ## 12. Testing
 
@@ -576,8 +606,8 @@ To verify at implementation: Espressif's C6 NimBLE example sets `CONFIG_BT_NIMBL
 
 - `test/bench/api_check.py`: every API endpoint, including the press output and its time limit.
 - `test/bench/ota_check.py`: a damaged image refused, an abandoned upload given up on, an update confirmed, a failed self-check rolled back, and a reset before confirming rolled back.
-- `test/bench/log_check.py`: full logs erased without holding up decisions, and a factory reset on full logs. It erases the settings too.
-- `test/bench/soak_check.py`: repeated restarts with no press, the debug snapshot, and hotspot and scan cycles watching for crashes and memory leaks.
+- `test/bench/log_check.py`: a full export over USB reaching its end with no restart, full logs erased without holding up decisions, and a factory reset on full logs. It erases the settings too.
+- `test/bench/soak_check.py`: repeated restarts with no press, the wait after a simulated brownout, the debug snapshot, and hotspot and scan cycles watching for crashes and memory leaks.
 
 **Needs a person:** a phone on the real hotspot, the LED and button by eye and hand, pairing a real beacon by holding it close, and the MOSFET with its resistor over real power cycles, with the sensor on the same power so that it cold starts too.
 
@@ -601,7 +631,7 @@ If motion detection misses these targets, tune it using the captures. If it stil
 
 **Step 2: Full firmware.** Build everything in this spec and pass the bench tests. This was done before step 1, at the owner's request, so step 1 can use it.
 
-**Step 3: Into the car.** Move the MOSFET and remote to the C6, adding the pull-down resistor. Turn debug on.
+**Step 3: Into the car.** Move the MOSFET and remote to the C6, adding the pull-down resistor. Turn debug on. First done on 2 November 2026: the presses came when they should, but the remote's battery was low, so the gate did not open. Section 9.5 has what that day showed.
 
 **Step 4: A few weeks of driving,** then a log review following 9.5, tuning and an update over Wi-Fi.
 

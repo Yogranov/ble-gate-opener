@@ -32,6 +32,22 @@ typedef struct
     float yaw_sum_deg;
 } yg_motion_out_t;
 
+typedef enum
+{
+    YG_ZERO_NONE,
+    YG_ZERO_STEADY,     /* Two seconds in a row agreed at the start. */
+    YG_ZERO_TIME_UP,    /* Nothing agreed in time and none was known, so it took what there was. */
+    YG_ZERO_KNOWN,      /* Nothing agreed in time, so it took the one from an earlier trip. */
+    YG_ZERO_REST,       /* A long rest showed that it had moved. */
+} yg_zero_source_t;
+
+typedef struct
+{
+    yg_zero_source_t source;
+    bool keep;          /* Worth saving for the next start. */
+    float zero[3];      /* Degrees per second. */
+} yg_zero_event_t;
+
 typedef struct
 {
     bool started;
@@ -62,9 +78,26 @@ typedef struct
 
     float peak_accel_mg;
     float peak_yaw_dps;
+
+    bool has_known_zero;
+    float known_zero[3];
+    yg_zero_source_t zero_source;
+    bool zero_keep;
+    float start_sum[6];
+    uint16_t start_windows;
 } yg_motion_t;
 
 void yg_motion_init(yg_motion_t *m);
+
+/* The gyro zero saved by an earlier trip. Call after init. A car that never holds still
+ * for calibration has no way to measure one, and guessing wrong looks like driving.
+ * An impossible value is ignored. */
+void yg_motion_set_known_zero(yg_motion_t *m, const float zero[3]);
+
+/* True once for each zero worth telling anyone about: the one this trip started with,
+ * and any that a long rest shows has moved. */
+bool yg_motion_take_zero_event(yg_motion_t *m, yg_zero_event_t *out);
+
 void yg_motion_update(yg_motion_t *m, const yg_settings_t *s, uint32_t now, const yg_imu_sample_t *in, yg_motion_out_t *out);
 
 /* Returns the strongest values since the last call, then clears them. */

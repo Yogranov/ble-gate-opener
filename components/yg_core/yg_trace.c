@@ -26,6 +26,10 @@ static uint8_t sample_period(const yg_trace_t *t, uint32_t now) {
     return still_for > STILL_MS ? 30 : 1;
 }
 
+bool yg_trace_is_sampling(const yg_trace_t *t, uint32_t now) {
+    return sample_period(t, now) != 0;
+}
+
 void yg_trace_init(yg_trace_t *t, uint32_t now) {
     memset(t, 0, sizeof(*t));
     t->start = now;

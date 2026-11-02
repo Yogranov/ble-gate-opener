@@ -27,5 +27,10 @@ CONFIG_BT_NIMBLE_SECURITY_ENABLE=n
 # Wi-Fi and BLE share one radio.
 CONFIG_ESP_COEX_SW_COEXIST_ENABLE=y
 
+# Weak power can end a start at the radio's first surge. On a start after a brownout this
+# caps transmit power at 13 dBm. The scan does not transmit and the hotspot defaults to
+# 8 dBm, so only the radio's start-up could gain, which is not measured. See the spec, section 11.
+CONFIG_ESP_PHY_REDUCE_TX_POWER=y
+
 CONFIG_HTTPD_MAX_URI_LEN=256
 CONFIG_LWIP_NETIF_LOOPBACK=y

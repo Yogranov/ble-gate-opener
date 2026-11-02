@@ -45,18 +45,18 @@ SETTINGS = [
 DEFAULTS = copy.deepcopy(SETTINGS)
 
 TRIPS = [
-    {"trip": 42, "fw": "2.0.0", "reset": 1, "duration_ms": 184000, "first_heard": {"t": 800, "rssi": -91},
+    {"trip": 42, "fw": "2.0.1", "reset": 1, "duration_ms": 184000, "first_heard": {"t": 800, "rssi": -91},
      "first_motion": {"t": 96000, "cause": "yaw"}, "presses": 1,
      "first_press": {"t": 96300, "reason": "auto", "rssi": -88}, "parked_best": -89,
      "peak": {"t": 101000, "rssi": -58}, "warning_ms": 4700, "adverts": 412, "temp_c": 41.5, "errors": 0, "rating": "good"},
-    {"trip": 41, "fw": "2.0.0", "reset": 1, "duration_ms": 1320000, "first_heard": {"t": 1296000, "rssi": -92},
+    {"trip": 41, "fw": "2.0.1", "reset": 1, "duration_ms": 1320000, "first_heard": {"t": 1296000, "rssi": -92},
      "first_motion": {"t": 7000, "cause": "accel"}, "presses": 1,
      "first_press": {"t": 1296100, "reason": "auto", "rssi": -92}, "parked_best": None,
      "peak": {"t": 1302000, "rssi": -55}, "warning_ms": 5900, "adverts": 96, "temp_c": 33.0, "errors": 0, "rating": None},
-    {"trip": 40, "fw": "2.0.0", "reset": 1, "duration_ms": 75000, "first_heard": {"t": 600, "rssi": -94},
+    {"trip": 40, "fw": "2.0.1", "reset": 1, "duration_ms": 75000, "first_heard": {"t": 600, "rssi": -94},
      "first_motion": None, "presses": 0, "first_press": None, "parked_best": -92, "peak": {"t": 41000, "rssi": -90},
      "warning_ms": None, "adverts": 120, "temp_c": 52.0, "errors": 1, "rating": None},
-    {"trip": 39, "fw": "2.0.0", "reset": 1, "duration_ms": 142000, "first_heard": {"t": 900, "rssi": -96},
+    {"trip": 39, "fw": "2.0.1", "reset": 1, "duration_ms": 142000, "first_heard": {"t": 900, "rssi": -96},
      "first_motion": {"t": 52000, "cause": "yaw"}, "presses": 1,
      "first_press": {"t": 57000, "reason": "auto", "rssi": -80}, "parked_best": -95,
      "peak": {"t": 58000, "rssi": -61}, "warning_ms": 1000, "adverts": 205, "temp_c": 38.5, "errors": 0, "rating": "too_late"},
@@ -65,7 +65,7 @@ TRIPS = [
 
 def trip_records(number):
     random.seed(number)
-    out = [{"k": "boot", "fw": "2.0.0", "reset": 1, "trip": number, "t": 100}]
+    out = [{"k": "boot", "fw": "2.0.1", "reset": 1, "trip": number, "t": 100}]
     samples = []
     for second in range(0, 125):
         if second < 95:
@@ -97,7 +97,7 @@ def status():
     rssi = -82 + int(8 * math.sin(polls["count"] / 9)) + random.randint(-3, 3)
     pressing = now < state["pressing_until"]
     return {
-        "fw": "2.0.0", "trip": state["trip"], "uptime_ms": uptime, "state": "pressing" if pressing else "armed", "paired": True,
+        "fw": "2.0.1", "trip": state["trip"], "uptime_ms": uptime, "state": "pressing" if pressing else "armed", "paired": True,
         "beacon": "c5:b0:e6:53:59:02", "set_point": SETTINGS[0]["value"], "effective_set_point": SETTINGS[0]["value"],
         "rssi": rssi, "rssi_age_ms": 240, "adverts_per_s": random.randint(2, 4), "moved_recently": False,
         "calibrated": True, "tilting": False, "motion_mg": 3, "motion_yaw": 0.2,
@@ -193,7 +193,7 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/logs/clear":
             # Like the unit: everything is erased, and the running trip becomes number 1.
             state["trip"] = 1
-            TRIPS[:] = [{"trip": 1, "fw": "2.0.0", "reset": 1, "duration_ms": 1000, "first_heard": None, "first_motion": None, "presses": 0,
+            TRIPS[:] = [{"trip": 1, "fw": "2.0.1", "reset": 1, "duration_ms": 1000, "first_heard": None, "first_motion": None, "presses": 0,
                          "first_press": None, "parked_best": None, "peak": None, "warning_ms": None, "adverts": 0, "temp_c": None, "errors": 0, "rating": None}]
         elif path == "/api/settings/reset":
             SETTINGS[:] = copy.deepcopy(DEFAULTS)

@@ -251,6 +251,15 @@ void yg_rec_cap_end(yg_record_t *r, uint32_t trip, uint32_t now, uint32_t id, ui
     put_u32(r->payload + 8, adverts);
 }
 
+void yg_rec_gyro_zero(yg_record_t *r, uint32_t trip, uint32_t now, uint8_t source, bool saved, const float zero[3]) {
+    begin(r, YG_REC_GYRO_ZERO, trip, now, 8);
+    r->payload[0] = source;
+    r->payload[1] = saved;
+    for (int i = 0; i < 3; i++) {
+        put_u16(r->payload + 2 + i * 2, (uint16_t)to_tenths(zero[i]));
+    }
+}
+
 void yg_rec_trace_begin(yg_record_t *r, uint32_t trip, uint32_t now, uint8_t period_s) {
     begin(r, YG_REC_TRACE, trip, now, 2);
     r->payload[0] = period_s;
@@ -347,6 +356,16 @@ static const char *rearm_name(uint8_t reason) {
     case YG_REARM_GONE: return "gone";
     case YG_REARM_STILL: return "still";
     case YG_REARM_MOVED: return "moved";
+    default: return "unknown";
+    }
+}
+
+static const char *zero_source_name(uint8_t source) {
+    switch (source) {
+    case YG_ZERO_STEADY: return "steady";
+    case YG_ZERO_TIME_UP: return "time_up";
+    case YG_ZERO_KNOWN: return "known";
+    case YG_ZERO_REST: return "rest";
     default: return "unknown";
     }
 }
@@ -490,6 +509,14 @@ static void json_body(yg_jw_t *w, const yg_record_t *r) {
         break;
     case YG_REC_CAP_END:
         yg_jw_raw(w, "\"k\":\"cap_end\",\"cap\":%u,\"samples\":%u,\"adverts\":%u", (unsigned)yg_get_u32(p), (unsigned)yg_get_u32(p + 4), (unsigned)yg_get_u32(p + 8));
+        break;
+    case YG_REC_GYRO_ZERO:
+        yg_jw_raw(w, "\"k\":\"gyro_zero\",\"how\":\"%s\",\"saved\":%s,\"x\":", zero_source_name(p[0]), p[1] ? "true" : "false");
+        yg_jw_tenths(w, (int16_t)yg_get_u16(p + 2));
+        yg_jw_raw(w, ",\"y\":");
+        yg_jw_tenths(w, (int16_t)yg_get_u16(p + 4));
+        yg_jw_raw(w, ",\"z\":");
+        yg_jw_tenths(w, (int16_t)yg_get_u16(p + 6));
         break;
     default:
         yg_jw_raw(w, "\"k\":\"unknown\",\"type\":%u", r->type);

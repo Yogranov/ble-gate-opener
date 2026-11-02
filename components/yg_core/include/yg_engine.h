@@ -56,6 +56,7 @@ typedef struct
     void (*env_finish)(void *ctx, yg_env_t *out);
     /* Erases everything and restarts, so on the unit this never returns. */
     void (*factory_reset)(void *ctx);
+    void (*save_gyro_zero)(void *ctx, const float zero[3]);
     void *ctx;
 } yg_engine_ops_t;
 
@@ -66,6 +67,8 @@ typedef struct
     uint8_t reset_reason;
     uint8_t sensor_id;
     bool force_hotspot;
+    bool has_gyro_zero;
+    float gyro_zero[3];
 } yg_boot_info_t;
 
 #define YG_ENGINE_RECENT_ADVERTS 32

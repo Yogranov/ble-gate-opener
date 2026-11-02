@@ -178,6 +178,29 @@ static void trace_record(void) {
     round_trip();
 }
 
+static void gyro_zero_record(void) {
+    const float zero[3] = { 0.66f, 1.13f, -1.5f };
+    yg_rec_gyro_zero(&r, 3, 21300, YG_ZERO_KNOWN, false, zero);
+    round_trip();
+    CHECK_HAS(json, "\"k\":\"gyro_zero\"");
+    CHECK_HAS(json, "\"how\":\"known\"");
+    CHECK_HAS(json, "\"saved\":false");
+    CHECK_HAS(json, "\"x\":0.7");
+    CHECK_HAS(json, "\"y\":1.1");
+    CHECK_HAS(json, "\"z\":-1.5");
+
+    yg_rec_gyro_zero(&r, 3, 21300, YG_ZERO_STEADY, true, zero);
+    round_trip();
+    CHECK_HAS(json, "\"how\":\"steady\"");
+    CHECK_HAS(json, "\"saved\":true");
+    yg_rec_gyro_zero(&r, 3, 21300, YG_ZERO_TIME_UP, false, zero);
+    round_trip();
+    CHECK_HAS(json, "\"how\":\"time_up\"");
+    yg_rec_gyro_zero(&r, 3, 21300, YG_ZERO_REST, true, zero);
+    round_trip();
+    CHECK_HAS(json, "\"how\":\"rest\"");
+}
+
 static void capture_records(void) {
     yg_rec_cap_start(&r, 1, 2, 77, YG_CAP_CAUSE_NEAR_MISS, 431);
     round_trip();
@@ -264,6 +287,7 @@ int main(void) {
     RUN(boot_record);
     RUN(small_records);
     RUN(trace_record);
+    RUN(gyro_zero_record);
     RUN(capture_records);
     RUN(flipped_bit_is_rejected);
     RUN(reader_skips_garbage_to_the_next_record);

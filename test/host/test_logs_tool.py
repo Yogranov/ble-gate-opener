@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Checks tools/yg_logs.py on made-up logs. Needs the replay program, which
 run_tests.py builds before it runs this."""
+import base64
 import json
 import os
+import struct
 import subprocess
 import sys
 import tempfile
@@ -91,6 +93,60 @@ class Tool(unittest.TestCase):
                    {"k": "temp", "c": 30.0, "trip": 5, "t": 1200000}]
         line = [l for l in self.run_tool(records, "summary").splitlines() if l.strip().startswith("5 ")][0]
         self.assertIn(" 3.0 ", line)
+
+    def test_summary_counts_starts_that_a_brownout_ended(self):
+        # Trips 6, 7 and 8 died before they could log anything, and trip 9 says why.
+        out = self.run_tool([BOOT, dict(BOOT, trip=9, reset=9)], "summary")
+        line = [l for l in out.splitlines() if l.strip().startswith("9 ")][0]
+        self.assertIn("brownout after 3 failed starts", line)
+        self.assertIn("3 failed starts before 1 power-up", out)
+
+    def test_a_gap_with_no_brownout_is_not_a_failed_start(self):
+        # Reset logs, or an old sector overwritten, also leaves a gap in the trip numbers.
+        out = self.run_tool([BOOT, dict(BOOT, trip=9, reset=1)], "summary")
+        self.assertNotIn("failed start", out)
+
+    def test_summary_marks_a_trip_that_guessed_its_gyro_zero(self):
+        guessed = {"k": "gyro_zero", "how": "time_up", "saved": False, "x": 2.0, "y": 0.0, "z": 6.0, "trip": 5, "t": 21000}
+        line = [l for l in self.run_tool([BOOT, guessed], "summary").splitlines() if l.strip().startswith("5 ")][0]
+        self.assertIn("gyro zero guessed", line)
+        known = dict(guessed, how="known")
+        line = [l for l in self.run_tool([BOOT, known], "summary").splitlines() if l.strip().startswith("5 ")][0]
+        self.assertNotIn("gyro zero", line)
+
+    def imu_capture(self, seconds_moving, seconds_still):
+        """A raw capture: a car turning with no two seconds alike, so that calibration runs out of
+        time, then still. The small change in x keeps the sensor from looking stuck."""
+        records = [{"k": "cap_start", "cap": 1, "cause": "manual", "pre": 0, "trip": 5, "t": 1000}]
+        total = (seconds_moving + seconds_still) * 50
+        for first in range(0, total, 19):
+            samples = b""
+            for i in range(first, first + 19):
+                yaw = 0 if i >= seconds_moving * 50 else 10 + i // 50 * 7 % 5
+                samples += struct.pack("<6h", i % 3 * 8, 0, 16384, 0, 0, yaw * 131)
+            records.append({"k": "cap_imu", "cap": 1, "first": first, "n": 19, "b64": base64.b64encode(samples).decode(), "trip": 5, "t": 1000})
+        records.append({"k": "cap_end", "cap": 1, "samples": total, "adverts": 0, "trip": 5, "t": 1000 + total * 20})
+        return records
+
+    def motion_while_still(self, records):
+        out = self.replayed(records)
+        return [l for l in out.splitlines() if "MOTION" in l and int(l.split(",")[1]) >= 30000]
+
+    def test_replay_starts_with_the_saved_gyro_zero_when_the_trip_used_one(self):
+        capture = self.imu_capture(25, 15)
+        known = {"k": "gyro_zero", "how": "known", "saved": False, "x": 0.0, "y": 0.0, "z": 0.0, "trip": 5, "t": 21000}
+        self.assertTrue(self.motion_while_still([BOOT] + capture))
+        self.assertFalse(self.motion_while_still([BOOT, known] + capture))
+
+    def test_replay_does_not_invent_a_saved_zero_for_a_trip_that_guessed(self):
+        capture = self.imu_capture(25, 15)
+        guessed = {"k": "gyro_zero", "how": "time_up", "saved": False, "x": 0.0, "y": 0.0, "z": 0.0, "trip": 5, "t": 21000}
+        self.assertTrue(self.motion_while_still([BOOT, guessed] + capture))
+
+    def test_summary_names_a_restart_that_went_wrong(self):
+        out = self.run_tool([BOOT, dict(BOOT, trip=6, reset=6)], "summary")
+        line = [l for l in out.splitlines() if l.strip().startswith("6 ")][0]
+        self.assertIn("watchdog", line)
 
 
 if __name__ == "__main__":

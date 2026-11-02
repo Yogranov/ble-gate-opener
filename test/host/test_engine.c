@@ -1,3 +1,4 @@
+#include <math.h>
 #include <stdlib.h>
 
 #include "yg_engine.h"
@@ -29,6 +30,8 @@ static struct {
     int env_finishes;
     int factory_resets;
     bool sounded_before_erasing;
+    int zero_saves;
+    float saved_zero[3];
 } fake;
 
 static void op_press(void *ctx, uint32_t ms) { (void)ctx; fake.presses++; fake.last_press_ms = ms; }
@@ -58,9 +61,15 @@ static void op_factory_reset(void *ctx) {
     fake.sounded_before_erasing = fake.beeps[YG_BUZZ_ERASE] > 0;
 }
 
+static void op_save_gyro_zero(void *ctx, const float zero[3]) {
+    (void)ctx;
+    fake.zero_saves++;
+    memcpy(fake.saved_zero, zero, sizeof(fake.saved_zero));
+}
+
 static const yg_engine_ops_t OPS = {
     op_press, op_led, op_buzz, op_log, op_capture, op_hotspot, op_scan,
-    op_save_beacon, op_save_settings, op_env_start, op_env_finish, op_factory_reset, NULL,
+    op_save_beacon, op_save_settings, op_env_start, op_env_finish, op_factory_reset, op_save_gyro_zero, NULL,
 };
 
 static yg_engine_t *e;
@@ -70,10 +79,15 @@ static const yg_addr_t GATE = { { 0xC5, 0xB0, 0xE6, 0x53, 0x59, 0x02 }, YG_ADDR_
 static const yg_addr_t OTHER = { { 0xD1, 0x22, 0x33, 0x44, 0x55, 0x66 }, YG_ADDR_TYPE_RANDOM };
 static yg_ibeacon_t ib = { true, { 0 }, 1, 2, -59 };
 static float gyro_zero[3];
+static const float *known_zero;
 
 static void boot(bool paired) {
     yg_beacon_t b = { paired, GATE };
-    yg_boot_info_t info = { 7, "2.0.0", 1, 0x68, false };
+    yg_boot_info_t info = { 7, "2.0.0", 1, 0x68, false, false, { 0, 0, 0 } };
+    if (known_zero != NULL) {
+        info.has_gyro_zero = true;
+        memcpy(info.gyro_zero, known_zero, sizeof(info.gyro_zero));
+    }
     now = 1000;
     fake.presses = 0;
     if (e == NULL) e = calloc(1, sizeof(*e));
@@ -1035,6 +1049,142 @@ static void debug_near_misses_capture_at_a_limited_rate(void) {
     CHECK(fake.capture_count > first);
 }
 
+/* Past the first 2 minutes of a trip, with the beacon silent. A drive of an hour used to
+ * overwrite every capture of pulling out and of reaching the gate. */
+static void start_far_from_the_beacon(void) {
+    s.debug = true;
+    yg_engine_setting_changed(e, now, "debug", "1");
+    still(SEC(125), 0, 0);
+}
+
+static void driving_far_from_the_beacon_is_not_captured(void) {
+    setup(true);
+    start_far_from_the_beacon();
+    int before = fake.capture_count;
+    pull_out(SEC(3), 0, 0);
+    still(SEC(35), 0, 0);
+    CHECK(count_records(YG_REC_MOTION) > 0);
+    CHECK_INT(fake.capture_count, before);
+}
+
+static void a_near_miss_far_from_the_beacon_is_not_captured(void) {
+    setup(true);
+    start_far_from_the_beacon();
+    int before = fake.capture_count;
+    run(300, 0.1f, 0, 0, 0);
+    still(SEC(35), 0, 0);
+    CHECK_INT(fake.capture_count, before);
+}
+
+static void captures_come_back_when_the_beacon_is_heard(void) {
+    setup(true);
+    s.set_point_dbm = -50;      /* Heard, but too far to press, so only the motion can capture. */
+    start_far_from_the_beacon();
+    int before = fake.capture_count;
+    still(SEC(1), 300, -85);
+    pull_out(SEC(2), 300, -85);
+    still(SEC(35), 300, -85);
+    CHECK_INT(fake.presses, 0);
+    CHECK(fake.capture_count > before);
+}
+
+static void a_press_is_captured_anywhere(void) {
+    setup(true);
+    start_far_from_the_beacon();
+    int before = fake.capture_count;
+    CHECK(yg_engine_press(e, now, YG_PRESS_BUTTON));
+    still(SEC(35), 0, 0);
+    CHECK(fake.capture_count > before);
+}
+
+static void setup_with_known_zero(const float zero[3]) {
+    known_zero = zero;
+    setup(true);
+    known_zero = NULL;
+}
+
+static void set_gyro_zero(const float zero[3]) {
+    memcpy(gyro_zero, zero, sizeof(gyro_zero));
+}
+
+/* The car moves from the start, with no two seconds alike. */
+static void moving_start(void) {
+    for (int i = 0; i < 25; i++) {
+        run(SEC(1), 0, i % 2 ? 12.0f : 2.0f, 0, 0);
+    }
+}
+
+static bool near_value(float a, float b) {
+    return fabsf(a - b) < 0.2f;
+}
+
+static void the_first_steady_start_saves_the_gyro_zero(void) {
+    setup(true);
+    const float zero[3] = { 1.5f, -2.0f, 0.5f };
+    set_gyro_zero(zero);
+    still(SEC(5), 0, 0);
+    CHECK_INT(fake.zero_saves, 1);
+    CHECK(near_value(fake.saved_zero[0], 1.5f));
+    CHECK(near_value(fake.saved_zero[1], -2.0f));
+    CHECK(near_value(fake.saved_zero[2], 0.5f));
+    const yg_record_t *r = last_record(YG_REC_GYRO_ZERO);
+    CHECK(r != NULL);
+    if (r != NULL) {
+        CHECK_INT(r->payload[0], YG_ZERO_STEADY);
+        CHECK_INT(r->payload[1], 1);
+    }
+}
+
+static void a_known_gyro_zero_is_used_when_the_start_is_moving(void) {
+    const float zero[3] = { 1.5f, -2.0f, 0.5f };
+    setup_with_known_zero(zero);
+    set_gyro_zero(zero);
+    moving_start();
+    CHECK(e->motion.calibrated);
+    CHECK_INT(fake.zero_saves, 0);
+    CHECK(near_value(e->motion.bias[2], 0.5f));
+    const yg_record_t *r = last_record(YG_REC_GYRO_ZERO);
+    CHECK(r != NULL);
+    if (r != NULL) {
+        CHECK_INT(r->payload[0], YG_ZERO_KNOWN);
+        CHECK_INT(r->payload[1], 0);
+    }
+}
+
+static void a_saved_gyro_zero_carries_over_to_the_next_start(void) {
+    setup(true);
+    const float zero[3] = { 1.5f, -2.0f, 0.5f };
+    set_gyro_zero(zero);
+    still(SEC(5), 0, 0);
+    CHECK_INT(fake.zero_saves, 1);
+    float saved[3];
+    memcpy(saved, fake.saved_zero, sizeof(saved));
+    setup_with_known_zero(saved);
+    set_gyro_zero(zero);
+    moving_start();
+    const yg_record_t *r = last_record(YG_REC_GYRO_ZERO);
+    CHECK(r != NULL);
+    if (r != NULL) CHECK_INT(r->payload[0], YG_ZERO_KNOWN);
+    CHECK(near_value(e->motion.bias[0], 1.5f));
+    CHECK(near_value(e->motion.bias[1], -2.0f));
+    CHECK(near_value(e->motion.bias[2], 0.5f));
+}
+
+static void a_moved_gyro_zero_is_saved_after_a_long_rest(void) {
+    const float zero[3] = { 1.5f, -2.0f, 0.5f };
+    setup_with_known_zero(zero);
+    set_gyro_zero(zero);
+    still(SEC(5), 0, 0);
+    CHECK_INT(fake.zero_saves, 0);
+    gyro_zero[0] = 3.5f;
+    still(SEC(35), 0, 0);
+    CHECK_INT(fake.zero_saves, 1);
+    CHECK(near_value(fake.saved_zero[0], 3.5f));
+    const yg_record_t *r = last_record(YG_REC_GYRO_ZERO);
+    CHECK(r != NULL);
+    if (r != NULL) CHECK_INT(r->payload[0], YG_ZERO_REST);
+}
+
 static void capture_now_and_simulated_motion_work_in_debug(void) {
     setup(true);
     s.debug = true;
@@ -1216,6 +1366,14 @@ int main(void) {
     RUN(debug_captures_around_motion_and_press);
     RUN(no_captures_without_debug);
     RUN(debug_near_misses_capture_at_a_limited_rate);
+    RUN(driving_far_from_the_beacon_is_not_captured);
+    RUN(a_near_miss_far_from_the_beacon_is_not_captured);
+    RUN(captures_come_back_when_the_beacon_is_heard);
+    RUN(a_press_is_captured_anywhere);
+    RUN(the_first_steady_start_saves_the_gyro_zero);
+    RUN(a_known_gyro_zero_is_used_when_the_start_is_moving);
+    RUN(a_saved_gyro_zero_carries_over_to_the_next_start);
+    RUN(a_moved_gyro_zero_is_saved_after_a_long_rest);
     RUN(capture_now_and_simulated_motion_work_in_debug);
     RUN(debug_snapshot_runs_once_when_parked);
     RUN(debug_snapshot_cancels_when_the_car_moves);

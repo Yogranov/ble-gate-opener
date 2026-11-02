@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "esp_console.h"
+#include "esp_private/system_internal.h"
 #include "esp_system.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
@@ -14,6 +15,8 @@
 #include "yg_io.h"
 #include "yg_log.h"
 #include "yg_nvs.h"
+
+#define LINES_PER_REST 64u
 
 static void read_status(yg_engine_t *e, uint32_t now, void *arg) {
     yg_engine_status_json(e, now, arg, 1024);
@@ -126,6 +129,26 @@ static int cmd_motion(int argc, char **argv) {
     return ok ? 0 : 1;
 }
 
+static void do_read_debug(yg_engine_t *e, uint32_t now, void *arg) {
+    (void)now;
+    *(bool *)arg = e->s->debug;
+}
+
+/* Restarts with the reset reason a brownout leaves, to test what follows one on the bench. */
+static int cmd_brownout(int argc, char **argv) {
+    (void)argc;
+    (void)argv;
+    bool debug = false;
+    yg_app_call(do_read_debug, &debug);
+    if (!debug) {
+        printf("Needs debug on\n");
+        return 1;
+    }
+    fflush(stdout);
+    esp_reset_reason_set_hint(ESP_RST_BROWNOUT);
+    esp_restart_noos();
+}
+
 typedef struct
 {
     yg_pair_mode_t mode;
@@ -186,10 +209,16 @@ static int cmd_devices(int argc, char **argv) {
     return 0;
 }
 
+/* Writing to USB never waits, so without a rest now and then a long export starves the
+ * idle task until the watchdog restarts the unit, 10 s in. */
 static bool print_line(const char *line, size_t len, void *ctx) {
     (void)ctx;
+    static uint32_t lines;
     fwrite(line, 1, len, stdout);
     fputc('\n', stdout);
+    if (++lines % LINES_PER_REST == 0) {
+        vTaskDelay(1);
+    }
     return true;
 }
 
@@ -295,6 +324,7 @@ void yg_console_start(void (*register_more)(void)) {
         { .command = "press", .help = "Press the remote", .func = cmd_press },
         { .command = "set", .help = "Change a setting: set <key> <value>", .func = cmd_set },
         { .command = "motion", .help = "Simulate motion, debug only", .func = cmd_motion },
+        { .command = "brownout", .help = "Restart with a brownout's reset reason, debug only", .func = cmd_brownout },
         { .command = "scan", .help = "List nearby iBeacons: scan start|list|stop", .func = cmd_scan },
         { .command = "devices", .help = "List every BLE device heard: devices [seconds]", .func = cmd_devices },
         { .command = "logs", .help = "Stream the logs as NDJSON: logs [nocapture]", .func = cmd_logs },

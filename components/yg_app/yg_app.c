@@ -21,6 +21,7 @@
 #define QUEUE_LENGTH 64
 #define TICK_MS 100u
 #define OTA_DEADLINE_MS 30000u
+#define BROWNOUT_WAIT_MS 1000u
 #define RARE_EVENT_WAIT pdMS_TO_TICKS(200)
 
 static const char *TAG = "yg_app";
@@ -183,6 +184,7 @@ static void op_capture(void *ctx, const yg_record_t *r) { (void)ctx; yg_log_capt
 static void op_scan(void *ctx, yg_scan_mode_t mode, const yg_beacon_t *b, bool share_radio) { (void)ctx; yg_ble_scan(mode, b, share_radio); }
 static void op_save_beacon(void *ctx, const yg_beacon_t *b) { (void)ctx; yg_nvs_save_beacon(b); }
 static void op_save_settings(void *ctx) { (void)ctx; yg_nvs_save_settings(&s_settings); }
+static void op_save_gyro_zero(void *ctx, const float zero[3]) { (void)ctx; yg_nvs_save_gyro_zero(zero); }
 
 static void op_hotspot(void *ctx, bool on) {
     (void)ctx;
@@ -237,6 +239,7 @@ static const yg_engine_ops_t OPS = {
     .env_start = op_env_start,
     .env_finish = op_env_finish,
     .factory_reset = op_factory_reset,
+    .save_gyro_zero = op_save_gyro_zero,
 };
 
 static void check_new_firmware(uint32_t now) {
@@ -315,6 +318,11 @@ void yg_app_start(const yg_app_hooks_t *hooks) {
 
     s_settings_ok = yg_nvs_load(&s_settings, &s_beacon);
     set_debug_logging(s_settings.debug);
+    /* The radio's start draws the most, so on weak power it is what ends a start. Trying
+     * again at once only keeps the power down, and every try uses up a trip number. */
+    if (esp_reset_reason() == ESP_RST_BROWNOUT) {
+        vTaskDelay(pdMS_TO_TICKS(BROWNOUT_WAIT_MS));
+    }
     s_trip = yg_nvs_next_trip();
 
     esp_ota_img_states_t state;
@@ -328,13 +336,14 @@ void yg_app_start(const yg_app_hooks_t *hooks) {
 
     yg_ble_start(on_advert);
 
-    const yg_boot_info_t boot = {
+    yg_boot_info_t boot = {
         .trip = s_trip,
         .fw = esp_app_get_description()->version,
         .reset_reason = (uint8_t)esp_reset_reason(),
         .sensor_id = yg_imu_id(),
         .force_hotspot = s_ota_pending,
     };
+    boot.has_gyro_zero = yg_nvs_load_gyro_zero(boot.gyro_zero);
     yg_engine_init(&s_engine, &OPS, &s_settings, &s_beacon, &boot, now_ms());
 
     yg_io_start(on_gesture);

@@ -287,6 +287,8 @@ static void print_response(int sock) {
         fflush(stdout);
         struct timeval timeout = { .tv_usec = 700 * 1000 };
         setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+        /* Writing to USB never waits, so a long answer would starve the idle task. */
+        vTaskDelay(1);
     }
     printf("\n");
     close(sock);

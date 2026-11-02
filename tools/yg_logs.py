@@ -32,6 +32,9 @@ BOOT_SETTINGS = {
     "motion_accel_mg": "motion_accel_mg", "motion_accel_ms": "motion_accel_ms", "motion_yaw_deg": "motion_yaw_deg",
     "motion_yaw_window_ms": "motion_yaw_window_ms",
 }
+# The esp_reset_reason_t values worth mentioning. See docs/log-format.md.
+BAD_RESETS = {4: "panic", 5: "watchdog", 6: "watchdog", 7: "watchdog", 9: "brownout"}
+BROWNOUT = 9
 
 
 def default_output():
@@ -117,6 +120,7 @@ def summarise(records):
         return trips.setdefault(number, {
             "trip": number, "fw": "", "duration": 0, "heard": None, "motion": None, "press": None, "presses": 0,
             "parked": None, "peak": None, "heard_adverts": 0, "heard_seconds": 0, "temp": None, "errors": [], "env": None, "near_miss": 0,
+            "reset": None, "zero": None,
         })
 
     for r in records:
@@ -127,6 +131,9 @@ def summarise(records):
         t["duration"] = max(t["duration"], r["t"])
         if kind == "boot":
             t["fw"] = r["fw"]
+            t["reset"] = r.get("reset")
+        elif kind == "gyro_zero" and t["zero"] is None:
+            t["zero"] = r
         elif kind == "first_heard" and t["heard"] is None:
             t["heard"] = r
         elif kind == "motion" and t["motion"] is None:
@@ -168,14 +175,29 @@ def summarise(records):
     return trips
 
 
+def restart_note(t, failed):
+    """Why this trip's start was not a clean one. A start that dies before the radio is up
+    uses a trip number and logs nothing, so only the gap and the next start's reset show it."""
+    name = BAD_RESETS.get(t["reset"])
+    if name is None:
+        return ""
+    return f"{name} after {failed} failed start{'' if failed == 1 else 's'}" if failed else name
+
+
 def cmd_summary(args):
     records = list(read_records(args.file))
     trips = summarise(records)
     print(f"{'trip':>5} {'fw':>7} {'length':>7} {'parked':>7} {'moved':>7} {'press':>7} {'n':>2} {'reason':>8} "
           f"{'warn':>6} {'peak':>5} {'adv/s':>6} {'temp':>5} {'near':>4}  rating / errors")
     warnings, parked, peaks = [], [], []
+    failed_total = failed_chains = 0
+    previous = None
     for number in sorted(trips):
         t = trips[number]
+        failed = number - previous - 1 if previous is not None and t["reset"] == BROWNOUT else 0
+        previous = number
+        failed_total += failed
+        failed_chains += 1 if failed else 0
         seconds = t["duration"] / 1000
         press_at = f"{t['press']['t'] / 1000:.1f}" if t["press"] else "-"
         moved_at = f"{t['motion']['t'] / 1000:.1f}" if t["motion"] else "-"
@@ -188,7 +210,8 @@ def cmd_summary(args):
             parked.append(t["parked"])
         if t["peak"]:
             peaks.append(t["peak"][1])
-        note = " ".join(filter(None, [t.get("rating"), ",".join(t["errors"])]))
+        guessed = t["zero"] is not None and t["zero"]["how"] == "time_up"
+        note = " ".join(filter(None, [restart_note(t, failed), "gyro zero guessed" if guessed else "", t.get("rating"), ",".join(t["errors"])]))
         adverts = f"{t['heard_adverts'] / t['heard_seconds']:.1f}" if t["heard_seconds"] else "-"
         print(f"{number:>5} {t['fw']:>7} {seconds:>6.0f}s {t['parked'] if t['parked'] is not None else '-':>7} "
               f"{moved_at:>7} {press_at:>7} {t['presses']:>2} {t['press']['reason'] if t['press'] else '-':>8} "
@@ -199,6 +222,9 @@ def cmd_summary(args):
     print(f"{len(trips)} trips, {sum(t['presses'] for t in trips.values())} presses, "
           f"{sum(1 for t in trips.values() if t['errors'])} with errors, "
           f"{pressed_parked} automatic presses with no motion logged.")
+    if failed_total:
+        print(f"{failed_total} failed start{'' if failed_total == 1 else 's'} before "
+              f"{failed_chains} power-up{'' if failed_chains == 1 else 's'}. Time is lost to each, and the gate cannot open meanwhile.")
     if warnings:
         print(f"Warning time: median {statistics.median(warnings):.1f} s, range {min(warnings):.1f} to {max(warnings):.1f} s.")
     if parked:
@@ -267,6 +293,16 @@ def boot_settings(records, trip):
     return []
 
 
+def saved_zero(records, trip):
+    """The gyro zero the unit had saved when the trip started, as far as its record shows. A
+    first steady start saved its own, and a trip that guessed had none it could use."""
+    for r in records:
+        if r.get("trip") == trip and r.get("k") == "gyro_zero":
+            used_saved = r["how"] == "known" or (r["how"] == "steady" and not r["saved"])
+            return (r["x"], r["y"], r["z"]) if used_saved else None
+    return None
+
+
 def setting_events(records, trip, overridden):
     """Settings changed during the trip, unless this replay is overriding them."""
     known = set(BOOT_SETTINGS.values()) - overridden
@@ -299,6 +335,9 @@ def cmd_replay(args):
     source = f"{len(windows)} raw captures and the trace" if windows else "the trace, with motion as logged"
     start_settings = boot_settings(records, args.trip)
     lines = [f"set,{key},{value}" for key, value in start_settings + overrides]
+    zero = saved_zero(records, args.trip)
+    if zero is not None:
+        lines.append("zero," + ",".join(str(v) for v in zero))
     next_tick = events[0][0]
     for at, line in events:
         while next_tick <= at:

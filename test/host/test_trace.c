@@ -98,6 +98,15 @@ static void beacon_heard_late_in_a_trip_restarts_sampling(void) {
     CHECK(samples - before >= 14);
 }
 
+static void sampling_is_the_start_of_a_trip_and_near_the_beacon(void) {
+    setup();
+    CHECK(yg_trace_is_sampling(&t, SEC(119)));
+    CHECK(!yg_trace_is_sampling(&t, SEC(121)));
+    yg_trace_on_advert(&t, SEC(200), -85);
+    CHECK(yg_trace_is_sampling(&t, SEC(229)));
+    CHECK(!yg_trace_is_sampling(&t, SEC(231)));
+}
+
 static void records_flush_within_five_seconds(void) {
     setup();
     run(0, SEC(5) + 200);
@@ -223,6 +232,7 @@ static void summary_of_an_empty_trip_uses_nulls(void) {
 
 int main(void) {
     RUN(one_per_second_for_the_first_two_minutes_with_no_beacon);
+    RUN(sampling_is_the_start_of_a_trip_and_near_the_beacon);
     RUN(no_samples_afterwards_with_no_beacon);
     RUN(one_per_30s_once_still_for_two_minutes_with_beacon);
     RUN(back_to_one_per_second_when_the_car_moves);

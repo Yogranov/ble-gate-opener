@@ -91,4 +91,4 @@ idf.py build
 idf.py -p COM3 flash
 ```
 
-A flash keeps the settings stored on the unit, so a changed default only reaches a unit after Reset to defaults on the page, which keeps the beacon and logs. Factory reset erases those too. When you report back, say what ran and what did not, especially anything not yet tried on a real unit or in a car.
+A flash keeps the settings stored on the unit, so a changed default only reaches a unit after Reset to defaults on the page, which keeps the beacon, logs and saved gyro zero. Factory reset erases those too. When you report back, say what ran and what did not, especially anything not yet tried on a real unit or in a car.

@@ -21,6 +21,10 @@
 #define GRAVITY_TAU_TILT_S   1.0f      /* Soon after a move, though a door's shove must not count for much. */
 #define BIAS_TAU_S           10.0f
 #define DRIFT_RATE           1.0f      /* degrees per second: a whole second slower than this is drift. */
+#define ZERO_KEEP_CHANGE     0.5f      /* degrees per second: a rest comes often, and a save wears the flash. */
+#define ZERO_LIMIT           40.0f     /* degrees per second: twice the datasheet's limit, so a sensor gone wrong. */
+#define ZERO_LEVEL_REPLACE   2.0f      /* degrees per second: more than a steady start has shown from noise. */
+#define ZERO_LEVEL_REJECT    3.0f      /* degrees per second: more than 99% of a real start's average. */
 #define NEAR_MISS_FRACTION   0.5f
 #define BUCKET_MS            100u
 #define DEG_TO_RAD           0.017453293f
@@ -84,18 +88,83 @@ static bool window_add(yg_motion_t *m, const float v[6], float mean[6]) {
     return true;
 }
 
+/* False for a NaN too, as any comparison with one is false. */
+static bool zero_believable(const float zero[3]) {
+    for (int i = 0; i < 3; i++) {
+        if (!(fabsf(zero[i]) <= ZERO_LIMIT)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/* How far apart a gyro reading and a zero are around the level axes, with `accel` giving
+ * the vertical. A car turns around the vertical, even in a steady bend, so a difference
+ * here belongs to the sensor. */
+static float level_difference(const float gyro[3], const float zero[3], const float accel[3]) {
+    float glen = length(accel);
+    float diff[3];
+    for (int i = 0; i < 3; i++) {
+        diff[i] = gyro[i] - zero[i];
+    }
+    float along = dot(diff, accel) / glen;
+    for (int i = 0; i < 3; i++) {
+        diff[i] -= along * accel[i] / glen;
+    }
+    return length(diff);
+}
+
+static void note_zero(yg_motion_t *m, yg_zero_source_t source, bool keep) {
+    m->zero_source = source;
+    m->zero_keep = keep && zero_believable(m->bias);
+    if (m->zero_keep) {
+        memcpy(m->known_zero, m->bias, sizeof(m->known_zero));
+        m->has_known_zero = true;
+    }
+}
+
+/* Whether a known zero can stand in at the time limit. Over the whole start the car's
+ * level rotation averages out, so a big difference means that the zero is wrong, as it is
+ * after the sensor was swapped. Then a car parked with someone moving about would report
+ * motion, and a big enough error would hold the tilt check on and hide a real pull-out. */
+static bool known_zero_fits_start(const yg_motion_t *m) {
+    if (!m->has_known_zero) {
+        return false;
+    }
+    float average[6];
+    for (int i = 0; i < 6; i++) {
+        average[i] = m->start_sum[i] / (float)m->start_windows;
+    }
+    return level_difference(average + 3, m->known_zero, average) < ZERO_LEVEL_REJECT;
+}
+
 /* Finds gravity and gyro bias, once two seconds in a row agree. That leaves little room
  * for a slow lean to pass as bias, and a passenger getting in only delays it. A car
- * already rolling may never agree, so after a while it takes what there is. */
+ * already rolling may never agree, so after a while it takes what there is, though its
+ * gyro's average then holds the car's own turning, so a known zero is better. */
 static void calibrate(yg_motion_t *m, uint32_t now, const float v[6]) {
     float mean[6];
     if (!window_add(m, v, mean)) {
         return;
     }
+    for (int i = 0; i < 6; i++) {
+        m->start_sum[i] += mean[i];
+    }
+    m->start_windows++;
     bool steady = m->has_prev_mean && accel_agrees(mean, m->prev_mean) && gyro_agrees(mean, m->prev_mean);
     bool time_up = now - m->first_ms >= CALIBRATE_LAST;
     if ((steady || time_up) && gravity_plausible(mean)) {
+        bool fits = known_zero_fits_start(m);
         set_calibration(m, mean);
+        if (steady) {
+            /* Two seconds can agree in a steady bend, so only a level difference counts. */
+            note_zero(m, YG_ZERO_STEADY, !m->has_known_zero || level_difference(mean + 3, m->known_zero, mean) >= ZERO_LEVEL_REPLACE);
+        } else if (fits) {
+            memcpy(m->bias, m->known_zero, sizeof(m->bias));
+            note_zero(m, YG_ZERO_KNOWN, false);
+        } else {
+            note_zero(m, YG_ZERO_TIME_UP, false);
+        }
     }
     memcpy(m->prev_mean, mean, sizeof(m->prev_mean));
     m->has_prev_mean = true;
@@ -115,12 +184,24 @@ static void follow_drift(yg_motion_t *m, const float mean[6]) {
     }
 }
 
+static bool zero_has_moved(const yg_motion_t *m) {
+    if (!m->has_known_zero) {
+        return true;
+    }
+    for (int i = 0; i < 3; i++) {
+        if (fabsf(m->bias[i] - m->known_zero[i]) >= ZERO_KEEP_CHANGE) {
+            return true;
+        }
+    }
+    return false;
+}
+
 /* A unit at rest for a long time tells the truth about gravity and gyro bias, whatever
  * went wrong before, such as calibrating in a bend. Whole-second means are steady with
  * the engine shaking too. Gravity must stay where the rest began, as a slow turn moves it
  * a little at a time, while the gyro's zero may drift, so it is only compared with the
  * second before. A steady rate around the vertical, as in a long bend, looks like rest,
- * and is taken for bias until the next one. */
+ * and is taken for bias, and saved, until the next one. */
 static void watch_for_rest(yg_motion_t *m, const float mean[6]) {
     if (m->rest_windows == 0 || !accel_agrees(mean, m->rest_mean) || !gyro_agrees(mean, m->prev_mean)) {
         memcpy(m->rest_mean, mean, sizeof(m->rest_mean));
@@ -130,6 +211,9 @@ static void watch_for_rest(yg_motion_t *m, const float mean[6]) {
     if (m->rest_windows >= REST_WINDOWS && gravity_plausible(mean)) {
         set_calibration(m, mean);
         m->rest_windows = 0;
+        if (zero_has_moved(m) && zero_believable(m->bias)) {
+            note_zero(m, YG_ZERO_REST, true);
+        }
     }
 }
 
@@ -163,6 +247,24 @@ static float yaw_window_sum(yg_motion_t *m, const yg_settings_t *s, uint32_t now
 
 void yg_motion_init(yg_motion_t *m) {
     memset(m, 0, sizeof(*m));
+}
+
+void yg_motion_set_known_zero(yg_motion_t *m, const float zero[3]) {
+    if (zero_believable(zero)) {
+        memcpy(m->known_zero, zero, sizeof(m->known_zero));
+        m->has_known_zero = true;
+    }
+}
+
+bool yg_motion_take_zero_event(yg_motion_t *m, yg_zero_event_t *out) {
+    if (m->zero_source == YG_ZERO_NONE) {
+        return false;
+    }
+    out->source = m->zero_source;
+    out->keep = m->zero_keep;
+    memcpy(out->zero, m->bias, sizeof(out->zero));
+    m->zero_source = YG_ZERO_NONE;
+    return true;
 }
 
 void yg_motion_update(yg_motion_t *m, const yg_settings_t *s, uint32_t now, const yg_imu_sample_t *in, yg_motion_out_t *out) {

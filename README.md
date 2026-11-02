@@ -38,6 +38,8 @@ Do not use GPIO18-23 for the MOSFET: on the C6 they are pulled up during reset, 
 
 Keep the remote on its own battery. It then takes no power from the unit, and its only link to the unit is the two wires across the MOSFET. The firmware cannot see a dead remote battery, so replace it every year.
 
+Power the unit from a phone charger in a socket that turns off with the ignition, not from a car screen's USB port. In the first car tests a screen's port took seconds to rise and fall, and the unit often failed several times before it started. Section 11 of the design spec has the numbers.
+
 Fix the unit so it cannot slide or tumble. Any orientation works.
 
 ## Build and flash

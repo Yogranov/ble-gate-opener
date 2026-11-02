@@ -11,6 +11,7 @@
 #define NAMESPACE "yogigate"
 #define KEY_BEACON "beacon"
 #define KEY_TRIP   "trip"
+#define KEY_GYRO_ZERO "gyro_zero"
 #define KEY_TEST_FLAG "test_fail"
 
 static const char *TAG = "yg_nvs";
@@ -135,6 +136,26 @@ void yg_nvs_save_beacon(const yg_beacon_t *b) {
     nvs_handle_t h;
     if (nvs_open(NAMESPACE, NVS_READWRITE, &h) == ESP_OK) {
         nvs_set_blob(h, KEY_BEACON, b, sizeof(*b));
+        nvs_commit(h);
+        nvs_close(h);
+    }
+}
+
+bool yg_nvs_load_gyro_zero(float zero[3]) {
+    bool found = false;
+    nvs_handle_t h;
+    if (nvs_open(NAMESPACE, NVS_READONLY, &h) == ESP_OK) {
+        size_t len = sizeof(float) * 3;
+        found = nvs_get_blob(h, KEY_GYRO_ZERO, zero, &len) == ESP_OK && len == sizeof(float) * 3;
+        nvs_close(h);
+    }
+    return found;
+}
+
+void yg_nvs_save_gyro_zero(const float zero[3]) {
+    nvs_handle_t h;
+    if (nvs_open(NAMESPACE, NVS_READWRITE, &h) == ESP_OK) {
+        nvs_set_blob(h, KEY_GYRO_ZERO, zero, sizeof(float) * 3);
         nvs_commit(h);
         nvs_close(h);
     }

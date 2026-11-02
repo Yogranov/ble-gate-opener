@@ -39,6 +39,7 @@ typedef enum
     YG_REC_CAP_IMU,
     YG_REC_CAP_ADV,
     YG_REC_CAP_END,
+    YG_REC_GYRO_ZERO,
 } yg_record_type_t;
 
 typedef enum
@@ -139,6 +140,7 @@ void yg_rec_cap_imu(yg_record_t *r, uint32_t trip, uint32_t now, uint32_t id, ui
 void yg_rec_cap_adv(yg_record_t *r, uint32_t trip, uint32_t now, uint32_t id, uint8_t count,
                     const uint8_t *entries);
 void yg_rec_cap_end(yg_record_t *r, uint32_t trip, uint32_t now, uint32_t id, uint32_t samples, uint32_t adverts);
+void yg_rec_gyro_zero(yg_record_t *r, uint32_t trip, uint32_t now, uint8_t source, bool saved, const float zero[3]);
 
 /* A trace record holds up to YG_TRACE_MAX_SAMPLES five-byte samples. */
 void yg_rec_trace_begin(yg_record_t *r, uint32_t trip, uint32_t now, uint8_t period_s);

@@ -41,6 +41,26 @@ def fill(s):
     check("the capture log is full", usage["capture_sectors"] == usage["capture_total"], usage)
 
 
+def export_finishes(s):
+    """A full export takes far longer than the watchdog's 10 s, so it has to give way as it goes."""
+    first, _ = status(s)
+    s.reset_input_buffer()
+    s.write(b"logs\n")
+    tail = bytearray()
+    size = 0
+    started = last = time.time()
+    while time.time() - last < 15 and b"#END" not in tail:
+        chunk = s.read(65536)
+        if chunk:
+            last = time.time()
+            size += len(chunk)
+            tail = (tail + chunk)[-64:]
+    print(f"     {size / 1024 / 1024:.1f} MB in {last - started:.0f} s", flush=True)
+    check("a full export over USB reaches its end", b"#END" in tail, bytes(tail))
+    after, _ = status(s)
+    check("no restart during the export", after["uptime_ms"] > first["uptime_ms"] and after["trip"] == first["trip"], (first, after))
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", default="COM3")
@@ -50,6 +70,7 @@ def main():
     yg_serial.run_command(s, "set hotspot_s 0", 5)
 
     fill(s)
+    export_finishes(s)
     first, _ = status(s)
     r = yg_serial.run_command(s, "log-clear", 240)
     result = json.loads(r[r.index("{"):].split("\n")[0])

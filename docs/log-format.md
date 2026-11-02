@@ -2,7 +2,7 @@
 
 Logs are exported as NDJSON: one JSON object per line. `GET /api/logs/export`, the page's Download button and `tools/yg_logs.py fetch` all produce this format.
 
-A **trip** is one power-on period. Trip numbers start again from 1 after Reset logs or a factory reset, so they are only unique within one log file. Every record has:
+A **trip** is one power-on period. Trip numbers start again from 1 after Reset logs or a factory reset, so they are only unique within one log file. A start that a brownout ends at the radio's first surge has taken a number and written nothing, so a gap in the numbers before a `boot` with `reset` 9 counts failed starts. `tools/yg_logs.py summary` shows them. Every record has:
 
 | Field | Meaning |
 |---|---|
@@ -31,6 +31,7 @@ There is no clock across power cuts. To place trips in calendar time, use `time_
 | `ota` | `event` (`uploaded`, `failed`, `confirmed`) | Firmware update |
 | `error` | `code`, `detail` | See below |
 | `trace` | `period`, `s` | See below |
+| `gyro_zero` | `how` (`steady`, `time_up`, `known`, `rest`), `saved`, `x`, `y`, `z` | The gyro zero in degrees per second, once a trip when the sensor is first calibrated, and again if a long rest shows it has moved. `steady`: two seconds agreed. `known`: the car would not hold still, so it took the saved one. `time_up`: the same with none saved, or one that disagreed with the start, so it took the car's own turning for it, and false motion can follow. `saved` says it was stored for later starts |
 | `temp` | `c` | Sensor temperature, once a minute |
 | `rating` | `rated_trip`, `rating` | The owner rated a trip: `good`, `too_early`, `too_late`, `did_not_open`, `no_reason` |
 | `time_anchor` | `epoch` | Browser time in seconds, when the page opened |
@@ -56,7 +57,7 @@ The period is 1 s during the first 2 minutes of a trip and while the beacon has 
 
 ## Debug captures
 
-These are written only with the debug flag on, to a separate log. They cover about 10 s before and 30 s after a trigger.
+These are written only with the debug flag on, to a separate log. They cover about 10 s before and 30 s after a trigger. Motion and near misses only trigger one in the first 2 minutes of a trip and while the beacon has been heard in the last 30 s, the same rule as the trace. A press or a manual capture always does.
 
 | `k` | Fields |
 |---|---|
@@ -76,5 +77,7 @@ These are written only with the debug flag on, to a separate log. They cover abo
 3. Do bad days show weaker signal or fewer adverts? Leave out any time with the hotspot on, when the scan listens a quarter of the time. Compare parked signal, peak signal and adverts per second across trips. The summary's adverts per second covers only the seconds when the beacon was heard, so a long drive does not lower it. A trip that never reached a 1 s trace period shows `-`.
 4. Does temperature or the `env` snapshot line up with bad days?
 5. Do the owner's ratings agree with the data?
+6. Did starts fail? The summary counts them, and names any trip whose start followed a brownout, panic or watchdog.
+7. Did a trip start with `gyro_zero` `how` of `time_up`? The summary marks it as "gyro zero guessed". Its motion cannot be trusted until the car has rested for 30 s.
 
-`tools/yg_logs.py replay` answers "what would this change have done?". It starts from the settings in the trip's `boot` record, follows `setting` and sensor `error` records, and uses raw captures where there are any and the trace elsewhere. The trace holds motion only as logged, at most once per 10 s, so raw captures give the better answer.
+`tools/yg_logs.py replay` answers "what would this change have done?". It starts from the settings in the trip's `boot` record and the saved gyro zero its `gyro_zero` record shows, follows `setting` and sensor `error` records, and uses raw captures where there are any and the trace elsewhere. The trace holds motion only as logged, at most once per 10 s, so raw captures give the better answer.

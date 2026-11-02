@@ -90,4 +90,4 @@ Remove each of these once it has been tested.
 - **Printed manual:** the fit of the folded sheet under the top is calculated, and has not been tried. Nor has the effect of folded paper that close to the C6 on its signal, though it stays off the antenna.
 - **Signal:** compare the beacon's signal with the case and without it, in the car.
 - **Remote range:** if the remote has to move off the board, as in the [board design](../README.md#not-proven-yet), the Cover needs an opening for its wires, and the case can be about 20 mm shorter.
-- **Heat:** PETG in a glove box through a summer, especially the snap hooks.
+- **Heat:** PETG in a glove box through a summer, especially the snap hooks. The sensor already read 48 °C after one parked hour in November.
