@@ -46,7 +46,7 @@ If the part's position changes, update the sizes at the top of the script too. I
 
 Remove each of these once it has been tested.
 
-- The remote has not been connected, so a real press has not been tested. Nor has holding the external button for 3 s.
+- The remote has not been connected, so a real press has not been tested. Nor has holding the external button for 3 s or 15 s.
 - **Remote range:** being against the board could shorten it. If the gate does not open reliably, the remote goes on longer wires, off the board.
 - **Remote:** its button circuit and current are unknown, so only a real press from the unit proves the MOSFET works it.
 - **Buzzer:** it is active and beeps clearly on GPIO11 on the bench, but its loudness in the closed glove box and its current are not measured. If it is too quiet, the firmware can raise the pin's drive to 40 mA. If that is not enough, it needs a MOSFET and 5 V, and the layout changes.- **C6 position:** how far the pins sit from each end of the C6 comes from a photo, so the distances at each edge could be off by about 1 mm.

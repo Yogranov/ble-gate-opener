@@ -30,6 +30,7 @@ typedef enum
     YG_LED_SENSOR_FAILED,  /* Red double blink every 10 s until the next event. */
     YG_LED_UNPAIRED,       /* Slow amber blink for 30 s. */
     YG_LED_HOTSPOT,        /* Cyan for 2 s. */
+    YG_LED_ERASING,        /* Magenta until a factory reset restarts the unit. */
 } yg_led_event_t;
 
 typedef enum
@@ -53,6 +54,8 @@ typedef struct
     void (*save_settings)(void *ctx);
     void (*env_start)(void *ctx);
     void (*env_finish)(void *ctx, yg_env_t *out);
+    /* Erases everything and restarts, so on the unit this never returns. */
+    void (*factory_reset)(void *ctx);
     void *ctx;
 } yg_engine_ops_t;
 

@@ -48,6 +48,7 @@ These are the owner's decisions. Change them only when the owner asks, and then 
 - **The buzzer is on by default, and answers people.** It sounds when someone does something on the unit, or when something is wrong. It stays quiet when the gate opens by itself, and at a normal start. It must never become annoying.
 - **The hotspot starts only when asked,** by a triple-click or the USB `wifi` command. The one exception is the first start after a firmware update, which needs it for its self-check.
 - **While the hotspot is on, the scan listens a quarter of the time.** At full time a phone on the page gets nothing through at all, and that was measured on a real unit. With the hotspot off, the scan has the whole radio, because the gate depends on it.
+- **Holding the button for 15 s is a factory reset,** with its own sound, so a unit can start from scratch with no phone. A button already down at power-on does not count, so a stuck one cannot wipe the unit at every start.
 - **The default hotspot password is `password`.** Changing it is an option on the page, and the page does not nag about it.
 - **The page is simple by default.** Everything else lives behind Advanced mode, which is remembered per phone. A new setting or action is advanced unless a technician or owner needs it routinely.
 - **Every setting and action has a place on the page,** except starting the hotspot, which needs the button or USB.

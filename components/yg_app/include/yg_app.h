@@ -31,6 +31,9 @@ uint32_t yg_app_current_trip(void);
 /* For use inside yg_app_call, after a setting in e->s has changed. */
 void yg_app_setting_changed(yg_engine_t *e, uint32_t now, const char *key, const char *value);
 
+/* Erases the settings, beacon and logs, which can take a minute. Restart afterwards. */
+void yg_app_erase_everything(void);
+
 /* Puts every setting back to its default, keeping the beacon and logs. Call it from a function given to yg_app_call. */
 void yg_app_settings_reset(yg_engine_t *e, uint32_t now);
 

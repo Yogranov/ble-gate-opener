@@ -27,6 +27,8 @@ static struct {
     int settings_saves;
     int env_starts;
     int env_finishes;
+    int factory_resets;
+    bool sounded_before_erasing;
 } fake;
 
 static void op_press(void *ctx, uint32_t ms) { (void)ctx; fake.presses++; fake.last_press_ms = ms; }
@@ -50,9 +52,15 @@ static void op_env_finish(void *ctx, yg_env_t *out) {
     out->wifi_networks = 4;
 }
 
+static void op_factory_reset(void *ctx) {
+    (void)ctx;
+    fake.factory_resets++;
+    fake.sounded_before_erasing = fake.beeps[YG_BUZZ_ERASE] > 0;
+}
+
 static const yg_engine_ops_t OPS = {
     op_press, op_led, op_buzz, op_log, op_capture, op_hotspot, op_scan,
-    op_save_beacon, op_save_settings, op_env_start, op_env_finish, NULL,
+    op_save_beacon, op_save_settings, op_env_start, op_env_finish, op_factory_reset, NULL,
 };
 
 static yg_engine_t *e;
@@ -787,6 +795,26 @@ static void holding_the_button_answers_that_pairing_started(void) {
     CHECK_INT(fake.beeps[YG_BUZZ_PAIRING], 0);
 }
 
+static void holding_the_button_15_s_sounds_and_then_erases(void) {
+    setup(true);
+    yg_engine_on_gesture(e, now, YG_GESTURE_FACTORY_RESET);
+    CHECK_INT(fake.beeps[YG_BUZZ_ERASE], 1);
+    CHECK_INT(fake.last_led, YG_LED_ERASING);
+    CHECK_INT(fake.factory_resets, 1);
+    CHECK(fake.sounded_before_erasing);
+    CHECK_INT(fake.presses, 0);
+}
+
+static void a_factory_reset_does_not_depend_on_the_buzzer_or_led(void) {
+    setup(true);
+    s.buzzer_enabled = false;
+    s.led_enabled = false;
+    yg_engine_on_gesture(e, now, YG_GESTURE_FACTORY_RESET);
+    CHECK_INT(fake.beeps[YG_BUZZ_ERASE], 0);
+    CHECK_INT(fake.led_events, 0);
+    CHECK_INT(fake.factory_resets, 1);
+}
+
 static void pairing_results_have_their_own_sounds(void) {
     setup(true);
     yg_engine_pair_set(e, now, GATE.addr, GATE.type);
@@ -1168,6 +1196,8 @@ int main(void) {
     RUN(presses_by_hand_beep);
     RUN(asking_for_the_hotspot_answers_with_sound_and_light);
     RUN(holding_the_button_answers_that_pairing_started);
+    RUN(holding_the_button_15_s_sounds_and_then_erases);
+    RUN(a_factory_reset_does_not_depend_on_the_buzzer_or_led);
     RUN(pairing_results_have_their_own_sounds);
     RUN(starting_with_no_beacon_sounds_only_then);
     RUN(a_failed_sensor_sounds_once_per_trip);

@@ -269,6 +269,7 @@ pre { margin: 8px 0 0; font-size: 12.5px; white-space: pre-wrap; overflow-wrap: 
       <div class="help-row" data-sound="error"><span class="r" data-seg="0-40,80-120,160-200,240-280,320-360,400-440,600-640,680-720,760-800,840-880,920-960,1000-1040"></span><span><b>Two rattles:</b> that did not work, so try again</span><button>Play</button></div>
       <div class="help-row" data-sound="no_beacon"><span class="r" data-seg="0-700"></span><span><b>One long at power-on:</b> no beacon is paired yet</span><button>Play</button></div>
       <div class="help-row" data-sound="sensor"><span class="r" data-seg="0-500,700-1200,1400-1900"></span><span><b>Three long:</b> the motion sensor failed</span><button>Play</button></div>
+      <div class="help-row" data-sound="erase"><span class="r" data-seg="0-100,200-300,400-500,600-700,800-900,1000-2000"></span><span><b>Five short, one long:</b> factory reset, erasing</span><button>Play</button></div>
     </div>
     <div class="card">
       <h2>What each colour means</h2>
@@ -280,6 +281,7 @@ pre { margin: 8px 0 0; font-size: 12.5px; white-space: pre-wrap; overflow-wrap: 
       <div class="help-row"><span class="led-dot" style="--c:#f03e3e"></span><span><b>3 red blinks:</b> that did not work</span></div>
       <div class="help-row"><span class="led-dot" style="--c:#f03e3e"></span><span><b>2 red, every 10&nbsp;s:</b> motion sensor failed</span></div>
       <div class="help-row"><span class="led-dot" style="--c:#ff9f1c"></span><span><b>Slow amber:</b> no beacon, first 30&nbsp;s after a start</span></div>
+      <div class="help-row"><span class="led-dot" style="--c:#d946ef"></span><span><b>Magenta:</b> factory reset, erasing</span></div>
       <div class="help-row"><span class="led-dot" style="--c:#6b7075"></span><span><b>Off:</b> normal</span></div>
     </div>
     <div class="card">
@@ -288,6 +290,7 @@ pre { margin: 8px 0 0; font-size: 12.5px; white-space: pre-wrap; overflow-wrap: 
       <div class="help-row"><span><b>Two clicks:</b> set the set point here, from the current signal</span></div>
       <div class="help-row"><span><b>Triple click:</b> start the hotspot</span></div>
       <div class="help-row"><span><b>Hold 3&nbsp;s:</b> pair a beacon held close</span></div>
+      <div class="help-row"><span><b>Hold 15&nbsp;s:</b> factory reset. It erases the settings, beacon and logs, and puts the password back to <code>password</code>. With the unit on, hold the button past the two short beeps, until you hear five short and one long. One long beep means it is done, within a minute</span></div>
     </div>
     <div class="card">
       <h2>If it goes wrong</h2>
@@ -839,7 +842,7 @@ async function loadSystem() {
 }
 $("tLed").addEventListener("click", act(() => post("/api/test/led"), "LED should flash green"));
 $("tBeep").addEventListener("click", act(() => post("/api/test/beep"), "Beeped, if a buzzer is fitted"));
-const SOUNDS = [["press", "Pressed by hand"], ["pairing", "Pairing"], ["hotspot", "Hotspot on"], ["success", "Success"], ["error", "Error"], ["no_beacon", "No beacon"], ["sensor", "Sensor failed"]];
+const SOUNDS = [["press", "Pressed by hand"], ["pairing", "Pairing"], ["hotspot", "Hotspot on"], ["success", "Success"], ["error", "Error"], ["no_beacon", "No beacon"], ["sensor", "Sensor failed"], ["erase", "Erasing"]];
 SOUNDS.forEach(([sound, label]) => {
   const b = el("button", "", label);
   b.addEventListener("click", act(() => post("/api/test/beep", { sound })));

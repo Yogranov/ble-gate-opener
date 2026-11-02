@@ -406,7 +406,7 @@ footer { border-top:1px solid var(--rule); color:var(--ink-2); font-size:15px }
   </div>
   <div class="boom" aria-hidden="true"></div>
 </header>
-<div class="status"><p class="status-in"><b>Firmware 2.0.0. Status on 1 November 2026:</b> tested on the bench over USB. It has not yet pressed a real remote or run in a car, so the motion thresholds are still first guesses. The newest changes (sounds, hotspot on request, live motion) have only had a first run on the bench. <a href="#status">What is not proven yet</a></p></div>
+<div class="status"><p class="status-in"><b>Firmware 2.0.0. Status on 2 November 2026:</b> tested on the bench over USB. It has not yet pressed a real remote or run in a car, so the motion thresholds are still first guesses. The newest changes (sounds, hotspot on request, live motion, the 15&nbsp;s factory reset) have only had a first run on the bench. <a href="#status">What is not proven yet</a></p></div>
 
 <div class="frame">
 <nav class="route" aria-label="Atlas sections">
@@ -906,10 +906,11 @@ idf.py -p COM3 flash</code></pre><button class="copy" type="button">Copy</button
   <p>The BOOT button on the C6 and the optional tactile button do the same things. In the printed case you press a flexible tab in the top, flush with the surface so that things lying in the glove box do not set it off.</p>
   <figure>
     <div class="seq g" id="gest">
-      <div class="seq-r"><b>Hold</b><div class="strip" data-w="4000" data-c="#eef0ec" data-seg="0-3000" data-act="3000"></div><span>Pair a beacon held close<small>Or Beacon tab, Pair by holding close</small></span></div>
+      <div class="seq-r"><b>Hold 3&nbsp;s</b><div class="strip" data-w="4000" data-c="#eef0ec" data-seg="0-3000" data-act="3000"></div><span>Pair a beacon held close<small>Or Beacon tab, Pair by holding close</small></span></div>
       <div class="seq-r"><b>Single click</b><div class="strip" data-w="4000" data-c="#eef0ec" data-seg="0-150" data-act="550"></div><span>Press the remote<small>Or Status tab, Press the remote</small></span></div>
       <div class="seq-r"><b>Double click</b><div class="strip" data-w="4000" data-c="#eef0ec" data-seg="0-150,300-450" data-act="850"></div><span>Set the set point from the current signal<small>Or Settings tab, Set here. Fails if nothing was heard in the last 3 s, or 10 s with the hotspot on</small></span></div>
       <div class="seq-r"><b>Triple click</b><div class="strip" data-w="4000" data-c="#eef0ec" data-seg="0-150,300-450,600-750" data-act="1150"></div><span>Start the hotspot, the normal way in<small>Or the USB <code>wifi</code> command</small></span></div>
+      <div class="seq-r"><b>Hold 15&nbsp;s</b><div class="strip" data-w="4000" data-c="#eef0ec" data-seg="0-4000"></div><span>Factory reset, which runs off the end of this strip<small>Or System tab, Factory reset. It passes through the 3&nbsp;s hold, so letting go early only starts pairing. A button already down at power-on does not count, so a stuck one cannot wipe the unit at every start</small></span></div>
     </div>
     <figcaption>Each strip covers 4&nbsp;s, with white while the button is down and a yellow diamond where the unit acts. A click waits 400&nbsp;ms in case another one follows, so a single click takes about half a second to act.</figcaption>
   </figure>
@@ -927,6 +928,7 @@ idf.py -p COM3 flash</code></pre><button class="copy" type="button">Copy</button
       <div class="seq-r"><b>Two rattles</b><div class="strip" data-w="3000" data-c="#ffc400" data-seg="0-40,80-120,160-200,240-280,320-360,400-440,600-640,680-720,760-800,840-880,920-960,1000-1040"></div><span>That did not work<small>Pairing timed out, or nothing was heard for Set here</small></span></div>
       <div class="seq-r"><b>One long</b><div class="strip" data-w="3000" data-c="#ffc400" data-seg="0-700"></div><span>No beacon is paired yet<small>Once, at power-on. It stops after pairing</small></span></div>
       <div class="seq-r"><b>Three long</b><div class="strip" data-w="3000" data-c="#ffc400" data-seg="0-500,700-1200,1400-1900"></div><span>The motion sensor failed<small>At most once per trip, because the gate can now open from the spot</small></span></div>
+      <div class="seq-r"><b>Five short, one long</b><div class="strip" data-w="3000" data-c="#ffc400" data-seg="0-100,200-300,400-500,600-700,800-900,1000-2000"></div><span>Factory reset<small>After holding the button for 15&nbsp;s. Then it erases, restarts, and gives one long beep because no beacon is paired</small></span></div>
     </div>
     <figcaption>Each strip covers 3&nbsp;s, with yellow while the buzzer sounds. Try them on the System tab in Advanced mode, where they play even with the buzzer turned off. They have been heard on the real buzzer, but not yet from a closed glove box.</figcaption>
   </figure>
@@ -943,6 +945,7 @@ idf.py -p COM3 flash</code></pre><button class="copy" type="button">Copy</button
       <div class="seq-r"><span class="led" style="--c:#ff4d42;--a:ledReject 3s infinite"></span><b>Rejected</b><div class="strip" data-w="3000" data-c="#ff4d42" data-seg="0-200,400-600,800-1000"></div><span>Three red blinks: pairing timed out, or the set point was refused</span></div>
       <div class="seq-r"><span class="led" style="--c:#ff4d42;--a:ledFail 10s infinite"></span><b>Sensor failed</b><div class="strip" data-w="3000" data-c="#ff4d42" data-seg="0-150,300-450"></div><span>Red double blink, every 10&nbsp;s<small>The unit is on the fixed threshold</small></span></div>
       <div class="seq-r"><span class="led" style="--c:#ffa32a;--a:ledFast 1s infinite"></span><b>No beacon</b><div class="strip" data-w="3000" data-c="#ffa32a" data-rep="500,1000"></div><span>Slow amber blink, for the first 30&nbsp;s after a start</span></div>
+      <div class="seq-r"><span class="led" style="--c:#d946ef"></span><b>Erasing</b><div class="strip" data-w="3000" data-c="#d946ef" data-seg="0-3000"></div><span>Magenta, from a 15&nbsp;s hold until the unit restarts</span></div>
     </div>
     <figcaption>Each strip covers 3&nbsp;s. Anything else means the LED is off.</figcaption>
   </figure>
@@ -1066,7 +1069,7 @@ python tools/yg_logs.py replay logs/&lt;file&gt;.ndjson --trip 12 --set motion_a
   <div class="pair">
     <div class="tile"><span class="kick">Every year</span><b>Replace the remote's battery</b><span>The firmware cannot see a dead one, so do it on a schedule. The BFT remote this was built around takes a 12&nbsp;V 23A. Pull the case off its Velcro and turn it upside down, lever the Cover off with a coin at the notch at either end, and lift it away with the remote on it. Keep the Body upside down while it is off, because only the Cover holds the board in.</span></div>
     <div class="tile"><span class="kick">When needed</span><b>Update the firmware</b><span>Build with <code>idf.py build</code>, then on the System tab choose <code>build/yogigate.bin</code> and tap Upload. Keep the power on for 30&nbsp;s while it checks itself. If the check fails, the previous firmware comes back by itself. Uploading needs only the Wi-Fi password.</span></div>
-    <div class="tile"><span class="kick">Rarely</span><b>Reset</b><span><b style="font:inherit;font-weight:600">Reset to defaults,</b> on the Settings tab in Advanced mode, puts every setting back, including the hotspot name and password, and keeps the beacon and logs. A flash keeps saved settings, so use this after an update that changes a default. <b style="font:inherit;font-weight:600">Factory reset,</b> on the System tab or <code>factory-reset</code> over USB, also erases the beacon and all logs, and can take a minute on full logs.</span></div>
+    <div class="tile"><span class="kick">Rarely</span><b>Reset</b><span><b style="font:inherit;font-weight:600">Reset to defaults,</b> on the Settings tab in Advanced mode, puts every setting back, including the hotspot name and password, and keeps the beacon and logs. A flash keeps saved settings, so use this after an update that changes a default. <b style="font:inherit;font-weight:600">Factory reset,</b> by holding the button for 15&nbsp;s, on the System tab, or with <code>factory-reset</code> over USB, also erases the beacon and all logs, and can take a minute on full logs.</span></div>
     <div class="tile"><span class="kick">When it goes quiet</span><b>The beacon</b><span>It runs on its own battery on the gate, and the unit only knows it has stopped hearing it. If the signal drops for good on the Status tab, check the beacon first.</span></div>
   </div>
 </section>
@@ -1082,9 +1085,11 @@ python tools/yg_logs.py replay logs/&lt;file&gt;.ndjson --trip 12 --set motion_a
       <li>The page on a real phone over the real hotspot</li>
       <li>The sounds, on-request hotspot and live motion, on a PC and compiled for the C6</li>
       <li>The new firmware on the real unit: live motion values, all 7 sounds heard on the buzzer, Reset to defaults, Reset logs, the hotspot staying off at a start, and a phone on the page staying connected while the unit scans</li>
+      <li>The 15&nbsp;s factory reset on the real unit, with the hold faked in firmware: a 14&nbsp;s hold erases nothing, and at 15&nbsp;s it sounds, erases the beacon, settings and logs, and comes back clean</li>
     </ul></div>
     <div class="tile"><b>Not tested</b><ul>
       <li>A real press: the remote is not connected yet</li>
+      <li>Holding the real button for 15&nbsp;s, and hearing its sound on the buzzer. On the bench the hold was faked in firmware</li>
       <li>Anything in a car, including the motion thresholds and the signal from a closed glove box</li>
       <li>The remote's range when it sits against the board</li>
       <li>This version of the case, whose hooks, clamp and button tab have not been printed</li>

@@ -137,12 +137,12 @@ h2 { font-size:21px; border-bottom:2px solid var(--ink); padding-bottom:2px }
             <li><div><b>Start the hotspot.</b> Triple-click the button on top of the case. You hear three short beeps. It does not start by itself.</div></li>
             <li><div><b>Join it.</b> In your phone's Wi-Fi settings, choose <code>YogiGate-XXXX</code>. The password is <code>password</code>. If the phone warns about no internet, stay connected.</div></li>
             <li><div><b>Open the page.</b> Go to <code>http://192.168.4.1</code>, and type the <code>http://</code> too.</div></li>
+            <li><div><b>Pair the beacon.</b> On the Beacon tab, either type its MAC, or tap Scan and then Use. At the bench, you can also hold the button for 3&nbsp;s and hold the beacon against the unit. You hear short, short, long.</div></li>
           </ol>
         </section>
       </div>
       <div class="col">
-        <ol class="steps" style="counter-reset:s 5">
-          <li><div><b>Pair the beacon.</b> On the Beacon tab, either type its MAC, or tap Scan and then Use. At the bench, you can also hold the button for 3&nbsp;s and hold the beacon against the unit. You hear short, short, long.</div></li>
+        <ol class="steps" style="counter-reset:s 6">
           <li><div><b>Test it, parked.</b> On the Status tab, Signal shows a number and Live motion moves when you shake the unit. Close the glove box and tap Press the remote. You hear one short beep, and the gate must open from the parking spot.</div></li>
           <li><div><b>Test it, driving.</b> Start the car and wait: the gate must stay shut. Drive off: the gate opens within a few seconds, with no beep.</div></li>
         </ol>
@@ -153,7 +153,9 @@ h2 { font-size:21px; border-bottom:2px solid var(--ink); padding-bottom:2px }
             <div class="row"><b>Two clicks</b><span>Set the set point here</span></div>
             <div class="row"><b>Three clicks</b><span>Start the hotspot</span></div>
             <div class="row"><b>Hold 3&nbsp;s</b><span>Pair a beacon held close</span></div>
+            <div class="row"><b>Hold 15&nbsp;s</b><span>Factory reset</span></div>
           </div>
+          <p><b>Factory reset</b> erases the settings, beacon and logs, and puts the password back to <code>password</code>. With the unit on, hold the button past the two short beeps, until you hear five short and one long. One long beep means it is done, within a minute.</p>
         </section>
         <section>
           <h2>Good to know</h2>
@@ -175,18 +177,19 @@ h2 { font-size:21px; border-bottom:2px solid var(--ink); padding-bottom:2px }
           <h2>What each sound means</h2>
           <p class="rule">No beep when the gate opens by itself. That is correct.</p>
           <div class="rows" id="sounds">
-            <div class="row"><span class="r" data-sound="press" data-seg="0-80" aria-hidden="true"><i style="left:0.00%;width:4.00%"></i></span><span><b>One short:</b> remote pressed by hand</span></div>
+            <div class="row"><span class="r" data-sound="press" data-seg="0-80" aria-hidden="true"><i style="left:0.00%;width:4.00%"></i></span><span><b>One short:</b> pressed by hand</span></div>
             <div class="row"><span class="r" data-sound="pairing" data-seg="0-80,200-280" aria-hidden="true"><i style="left:0.00%;width:4.00%"></i><i style="left:10.00%;width:4.00%"></i></span><span><b>Two short:</b> pairing, so hold the beacon close</span></div>
-            <div class="row"><span class="r" data-sound="hotspot" data-seg="0-80,200-280,400-480" aria-hidden="true"><i style="left:0.00%;width:4.00%"></i><i style="left:10.00%;width:4.00%"></i><i style="left:20.00%;width:4.00%"></i></span><span><b>Three short:</b> the hotspot is starting</span></div>
+            <div class="row"><span class="r" data-sound="hotspot" data-seg="0-80,200-280,400-480" aria-hidden="true"><i style="left:0.00%;width:4.00%"></i><i style="left:10.00%;width:4.00%"></i><i style="left:20.00%;width:4.00%"></i></span><span><b>Three short:</b> hotspot starting</span></div>
             <div class="row"><span class="r" data-sound="success" data-seg="0-80,160-240,320-640" aria-hidden="true"><i style="left:0.00%;width:4.00%"></i><i style="left:8.00%;width:4.00%"></i><i style="left:16.00%;width:16.00%"></i></span><span><b>Short, short, long:</b> saved</span></div>
             <div class="row"><span class="r" data-sound="error" data-seg="0-40,80-120,160-200,240-280,320-360,400-440,600-640,680-720,760-800,840-880,920-960,1000-1040" aria-hidden="true"><i style="left:0.00%;width:2.00%"></i><i style="left:4.00%;width:2.00%"></i><i style="left:8.00%;width:2.00%"></i><i style="left:12.00%;width:2.00%"></i><i style="left:16.00%;width:2.00%"></i><i style="left:20.00%;width:2.00%"></i><i style="left:30.00%;width:2.00%"></i><i style="left:34.00%;width:2.00%"></i><i style="left:38.00%;width:2.00%"></i><i style="left:42.00%;width:2.00%"></i><i style="left:46.00%;width:2.00%"></i><i style="left:50.00%;width:2.00%"></i></span><span><b>Two rattles:</b> that did not work, so try again</span></div>
             <div class="row"><span class="r" data-sound="no_beacon" data-seg="0-700" aria-hidden="true"><i style="left:0.00%;width:35.00%"></i></span><span><b>One long at power-on:</b> no beacon is paired yet</span></div>
-            <div class="row"><span class="r" data-sound="sensor" data-seg="0-500,700-1200,1400-1900" aria-hidden="true"><i style="left:0.00%;width:25.00%"></i><i style="left:35.00%;width:25.00%"></i><i style="left:70.00%;width:25.00%"></i></span><span><b>Three long:</b> the motion sensor failed</span></div>
+            <div class="row"><span class="r" data-sound="sensor" data-seg="0-500,700-1200,1400-1900" aria-hidden="true"><i style="left:0.00%;width:25.00%"></i><i style="left:35.00%;width:25.00%"></i><i style="left:70.00%;width:25.00%"></i></span><span><b>Three long:</b> motion sensor failed</span></div>
+            <div class="row"><span class="r" data-sound="erase" data-seg="0-100,200-300,400-500,600-700,800-900,1000-2000" aria-hidden="true"><i style="left:0.00%;width:5.00%"></i><i style="left:10.00%;width:5.00%"></i><i style="left:20.00%;width:5.00%"></i><i style="left:30.00%;width:5.00%"></i><i style="left:40.00%;width:5.00%"></i><i style="left:50.00%;width:50.00%"></i></span><span><b>Five short, one long:</b> factory reset, erasing</span></div>
           </div>
         </section>
         <section class="led">
           <h2>What each colour means</h2>
-          <p class="note">The LED is on the C6 board inside the case, so you only see it with the case open.</p>
+          <p class="note">The LED is inside the case, on the C6 board.</p>
           <div class="rows" id="leds">
             <div class="row"><span class="dot" style="--c:#f4f4f0"></span><b>White</b><span>Pressing the remote</span></div>
             <div class="row"><span class="dot" style="--c:#3b82e6"></span><b>Fast blue</b><span>Pairing</span></div>
@@ -195,6 +198,7 @@ h2 { font-size:21px; border-bottom:2px solid var(--ink); padding-bottom:2px }
             <div class="row"><span class="dot" style="--c:#f03e3e"></span><b>3 red blinks</b><span>That did not work</span></div>
             <div class="row"><span class="dot" style="--c:#f03e3e"></span><b>2 red, every 10&nbsp;s</b><span>Motion sensor failed</span></div>
             <div class="row"><span class="dot" style="--c:#ff9f1c"></span><b>Slow amber</b><span>No beacon, first 30&nbsp;s</span></div>
+            <div class="row"><span class="dot" style="--c:#d946ef"></span><b>Magenta</b><span>Factory reset, erasing</span></div>
             <div class="row"><span class="dot" style="--c:#6b7075"></span><b>Off</b><span>Normal</span></div>
           </div>
         </section>

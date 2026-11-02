@@ -5,6 +5,8 @@
 **Scope:** Firmware and wiring. The case gets its own spec after this firmware has run in the car.
 **Amended 2026-11-01, by the owner:** the buzzer is on by default and answers people, with its own sounds. The hotspot starts only on request. The default password is `password`. The page is simple by default, with an Advanced mode. It has live motion graphs, Reset to defaults and Reset logs alongside factory reset, shows the logo, and carries the technician manual on a Help tab. These replace the earlier text below, where they differ.
 
+**Amended 2026-11-02, by the owner:** holding the button for 15 s is a factory reset, so a unit can start from scratch in the car, with no phone.
+
 ## 1. Summary
 
 YogiGate opens a gate without anyone touching a remote. A battery beacon is glued to the gate. A unit in the car listens for it and, through a MOSFET, presses the button of a remote that is already paired with the gate.
@@ -327,11 +329,14 @@ The only way to start the hotspot without USB. Every other action below is also 
 | Gesture | Action |
 |---|---|
 | Hold 3 s | Pair by holding close |
+| Hold 15 s | Factory reset: erase the settings, beacon and logs, then restart |
 | Single click | Press the remote |
 | Double click | Set point from current signal |
 | Triple click | Start the hotspot |
 
 A single click waits 400 ms in case it becomes a double click.
+
+A 15 s hold passes through the 3 s one, so two short beeps sound on the way and pairing starts, and letting go early leaves only that. A button down since power-on does not count towards the 15 s, because a stuck button would otherwise wipe the unit at every start. It still starts pairing, as it always has. The erase runs in the decision task once the sound has ended, so nothing can press the remote or save a setting before the restart. The next start has no beacon, so its one long beep says the reset is done.
 
 ### 8.5 LED and buzzer
 
@@ -345,6 +350,7 @@ A single click waits 400 ms in case it becomes a double click.
 | Pair timeout or set point rejected | Three red blinks | Two rattles |
 | Sensor failed | Red double blink every 10 s | Three long, at most once per trip, and not if the sensor is turned off |
 | Unpaired | Slow amber blink, first 30 s after boot | One long, at power-on |
+| Factory reset, from a 15 s hold | Magenta until the restart | Five short, one long |
 | Otherwise | Off | None |
 
 The buzzer answers people and reports faults, and stays silent on a normal trip. An active buzzer has one fixed tone, so each sound is a rhythm, set in `yg_core/sound`. The steps are multiples of the buzzer task's 20 ms, and a rattle is 40 ms on and off.

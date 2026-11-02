@@ -145,7 +145,7 @@ def main():
 
     check("test LED", '"ok":true' in api(s, "POST", "/api/test/led", {"x": 1}))
     check("test beep with no buzzer fitted", '"ok":true' in api(s, "POST", "/api/test/beep", {"x": 1}))
-    for sound in ("press", "pairing", "hotspot", "success", "error", "no_beacon", "sensor"):
+    for sound in ("press", "pairing", "hotspot", "success", "error", "no_beacon", "sensor", "erase"):
         check(f"test sound {sound}", '"ok":true' in api(s, "POST", "/api/test/beep", {"sound": sound}))
     check("unknown sound refused", "400" in api(s, "POST", "/api/test/beep", {"sound": "loud"}))
     r = api(s, "GET", "/api/status")

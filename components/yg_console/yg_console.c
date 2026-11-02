@@ -266,11 +266,7 @@ static int cmd_log_clear(int argc, char **argv) {
 static int cmd_factory_reset(int argc, char **argv) {
     (void)argc;
     (void)argv;
-    /* Settings first, as erasing full logs takes a long time, and again after, as a
-     * setting saved in the meantime writes them all back. */
-    yg_nvs_factory_reset();
-    yg_log_clear();
-    yg_nvs_factory_reset();
+    yg_app_erase_everything();
     printf("Erased settings and logs. Restarting.\n");
     fflush(stdout);
     esp_restart();

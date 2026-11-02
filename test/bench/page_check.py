@@ -146,10 +146,10 @@ f.onload = async () => {
     const help = q("#help");
     out.help_opens_on_its_own = shown(help) && !shown(q("#status"));
     out.help_gives_the_way_in = ["Triple-click", "password", "192.168.4.1"].every(text => help.textContent.includes(text));
-    out.help_lists_every_sound = help.querySelectorAll("[data-sound]").length === 7;
-    out.help_draws_every_rhythm = help.querySelectorAll(".r").length === 7 && [...help.querySelectorAll(".r")].every(r => r.querySelector("i"));
-    out.help_lists_every_colour = help.querySelectorAll(".led-dot").length === 8;
-    out.help_lists_every_gesture = ["Triple", "Hold 3"].every(text => help.textContent.includes(text));
+    out.help_lists_every_sound = help.querySelectorAll("[data-sound]").length === 8;
+    out.help_draws_every_rhythm = help.querySelectorAll(".r").length === 8 && [...help.querySelectorAll(".r")].every(r => r.querySelector("i"));
+    out.help_lists_every_colour = help.querySelectorAll(".led-dot").length === 9;
+    out.help_lists_every_gesture = ["Triple", "Hold 3", "Hold 15"].every(text => help.textContent.includes(text));
     out.help_fits_the_phone = doc.documentElement.scrollWidth <= win.innerWidth;
     out.six_tabs_fit_the_bar = doc.querySelectorAll("nav button").length === 6 && [...doc.querySelectorAll("nav button")].every(b => b.scrollWidth <= b.clientWidth);
     const helpPosts = [], beforeHelp = win.fetch;
@@ -223,7 +223,7 @@ f.onload = async () => {
     };
     js('showTab("system")');
     const sounds = [...doc.querySelectorAll("#soundList button")];
-    out.all_seven_sounds_can_be_tried = sounds.length === 7;
+    out.all_eight_sounds_can_be_tried = sounds.length === 8;
     sounds[4].click();
     await wait(100);
     out.a_sound_button_names_its_sound = posted.some(p => p.path === "/api/test/beep" && JSON.parse(p.body).sound === "error");

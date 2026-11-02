@@ -302,6 +302,11 @@ void yg_engine_on_gesture(yg_engine_t *e, uint32_t now, yg_gesture_t g) {
     case YG_GESTURE_HOLD:
         yg_engine_pair_start(e, now, YG_PAIR_AUTO);
         break;
+    case YG_GESTURE_FACTORY_RESET:
+        led(e, YG_LED_ERASING);
+        buzz(e, YG_BUZZ_ERASE);
+        e->ops->factory_reset(e->ops->ctx);
+        break;
     default:
         break;
     }

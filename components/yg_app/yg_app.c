@@ -149,6 +149,14 @@ void yg_app_setting_changed(yg_engine_t *e, uint32_t now, const char *key, const
     }
 }
 
+void yg_app_erase_everything(void) {
+    /* Settings first, as erasing full logs takes a long time, and again after, as a
+     * setting saved in the meantime writes them all back. */
+    yg_nvs_factory_reset();
+    yg_log_clear();
+    yg_nvs_factory_reset();
+}
+
 void yg_app_settings_reset(yg_engine_t *e, uint32_t now) {
     char ssid[YG_SSID_MAX + 1];
     yg_nvs_default_ssid(ssid, sizeof(ssid));
@@ -200,6 +208,22 @@ static void op_env_finish(void *ctx, yg_env_t *out) {
     out->ble_devices = yg_ble_count_end();
 }
 
+/* Stays in the decision task on purpose, so that until the restart nothing can press the
+ * remote or save a setting. Erasing takes too long for the watchdog, so it stops watching. */
+static void op_factory_reset(void *ctx) {
+    (void)ctx;
+    const yg_sound_t *sound = yg_sound_get(YG_BUZZ_ERASE);
+    uint32_t sound_ms = 0;
+    for (uint8_t i = 0; i < sound->count; i++) {
+        sound_ms += sound->steps[i];
+    }
+    esp_task_wdt_delete(NULL);
+    /* A little over, because flash work holds up the task that turns the buzzer off. */
+    vTaskDelay(pdMS_TO_TICKS(sound_ms + 100));
+    yg_app_erase_everything();
+    esp_restart();
+}
+
 static const yg_engine_ops_t OPS = {
     .press = op_press,
     .led = op_led,
@@ -212,6 +236,7 @@ static const yg_engine_ops_t OPS = {
     .save_settings = op_save_settings,
     .env_start = op_env_start,
     .env_finish = op_env_finish,
+    .factory_reset = op_factory_reset,
 };
 
 static void check_new_firmware(uint32_t now) {

@@ -50,9 +50,11 @@ static void op_log(void *ctx, const yg_record_t *r) {
     }
 }
 
+static void op_factory_reset(void *ctx) { (void)ctx; }
+
 static const yg_engine_ops_t OPS = {
     op_press, op_led, op_buzz, op_log, op_capture, op_hotspot, op_scan,
-    op_save_beacon, op_save_settings, op_env_start, op_env_finish, NULL,
+    op_save_beacon, op_save_settings, op_env_start, op_env_finish, op_factory_reset, NULL,
 };
 
 static const yg_addr_t BEACON = { { 0xC0, 0, 0, 0, 0, 1 }, YG_ADDR_TYPE_RANDOM };

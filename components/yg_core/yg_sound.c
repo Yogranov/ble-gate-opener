@@ -16,6 +16,7 @@ static const uint16_t REJECTED[] = {
 };
 static const uint16_t NO_BEACON[] = { 700 };
 static const uint16_t SENSOR[] = { 500, 200, 500, 200, 500 };
+static const uint16_t ERASE[] = { 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 1000 };
 
 static const yg_sound_t SOUNDS[YG_BUZZ_COUNT] = {
     [YG_BUZZ_PRESS] = { "press", PRESS, COUNT_OF(PRESS) },
@@ -25,6 +26,7 @@ static const yg_sound_t SOUNDS[YG_BUZZ_COUNT] = {
     [YG_BUZZ_REJECTED] = { "error", REJECTED, COUNT_OF(REJECTED) },
     [YG_BUZZ_NO_BEACON] = { "no_beacon", NO_BEACON, COUNT_OF(NO_BEACON) },
     [YG_BUZZ_SENSOR] = { "sensor", SENSOR, COUNT_OF(SENSOR) },
+    [YG_BUZZ_ERASE] = { "erase", ERASE, COUNT_OF(ERASE) },
 };
 
 const yg_sound_t *yg_sound_get(yg_buzz_event_t e) {

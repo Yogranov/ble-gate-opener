@@ -104,6 +104,9 @@ static bool led_draw(yg_led_event_t e, uint32_t ms) {
     case YG_LED_HOTSPOT:
         led_color(0, LED_LEVEL, LED_LEVEL);
         return ms < 2000;
+    case YG_LED_ERASING:
+        led_color(LED_LEVEL, 0, LED_LEVEL);
+        return true;
     default:
         led_off();
         return true;

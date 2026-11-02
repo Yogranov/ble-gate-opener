@@ -13,6 +13,7 @@ typedef enum
     YG_BUZZ_REJECTED,    /* Two rattles: that did not work. */
     YG_BUZZ_NO_BEACON,   /* One long, at power-on: no beacon is paired yet. */
     YG_BUZZ_SENSOR,      /* Three long: the motion sensor failed. */
+    YG_BUZZ_ERASE,       /* Five short, one long: a factory reset is starting. */
     YG_BUZZ_COUNT,
 } yg_buzz_event_t;
 

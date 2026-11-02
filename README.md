@@ -84,11 +84,12 @@ The hotspot only starts when you ask, by triple-clicking the button or with the 
 
 The page starts simple: state, live signal and motion, pairing, the set point, the buzzer and LED switches, trip ratings, Change password, and a Help tab with the technician manual, in case the printed one is gone. Advanced mode, at the bottom of the Settings tab, adds every setting, Reset to defaults, each sound, firmware upload, Reset logs, factory reset and the debug tools. Each phone remembers its own choice.
 
-A flash keeps the settings stored on a unit, so a changed default only reaches it after **Reset to defaults**, on the Settings tab in Advanced mode. That keeps the beacon and logs. **Factory reset**, on the System tab, erases those too.
+A flash keeps the settings stored on a unit, so a changed default only reaches it after **Reset to defaults**, on the Settings tab in Advanced mode. That keeps the beacon and logs. **Factory reset**, on the System tab or by holding the button for 15 s, erases those too.
 
 | Button gesture | Action |
 |---|---|
 | Hold 3 s | Pair a beacon held close |
+| Hold 15 s | Factory reset. A button already down at power-on does not count, so a stuck one cannot wipe the unit at every start |
 | Single click | Press the remote |
 | Double click | Set the set point from the current signal |
 | Triple click | Start the hotspot |
@@ -106,6 +107,7 @@ The buzzer is on by default. It sounds when someone does something on the unit, 
 | Two rattles | That did not work |
 | One long, at power-on | No beacon is paired yet |
 | Three long, at most once per trip | The motion sensor failed |
+| Five short, one long | Factory reset, after holding the button for 15 s |
 
 ## Logs
 

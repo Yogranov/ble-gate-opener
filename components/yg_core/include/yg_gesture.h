@@ -11,6 +11,7 @@ typedef enum
     YG_GESTURE_DOUBLE,
     YG_GESTURE_TRIPLE,
     YG_GESTURE_HOLD,
+    YG_GESTURE_FACTORY_RESET,
 } yg_gesture_t;
 
 typedef struct
@@ -22,6 +23,8 @@ typedef struct
     uint32_t last_release;
     uint8_t clicks;
     bool hold_fired;
+    bool reset_fired;
+    bool seen_released;
 } yg_gesture_detector_t;
 
 void yg_gesture_init(yg_gesture_detector_t *g);
