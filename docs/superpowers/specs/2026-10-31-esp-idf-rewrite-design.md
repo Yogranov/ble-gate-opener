@@ -363,7 +363,7 @@ A 15 s hold passes through the 3 s one, so two short beeps sound on the way and 
 | Pairing, or learning the gate remote (RF variant) | Fast blue blink | Two short, when holding close or learning starts |
 | Hotspot requested | Cyan for 2 s | Three short |
 | Pair saved, set point set here, gate remote learned or forgotten, or settings reset to defaults | Green for 2 s | Short, short, long |
-| Pair or learn timeout, set point rejected, a remote that cannot be learned (once per learn, as a busy band can bring many), a press by hand on an RF unit with no remote learned, or the learn gesture on a unit without the radio | Three red blinks | Two rattles |
+| Pair or learn timeout, set point rejected, a remote that cannot be learned (once per learn, as a busy band can bring many; a burst too short to be a remote earns none), a press by hand on an RF unit with no remote learned, or the learn gesture on a unit without the radio | Three red blinks | Two rattles |
 | Sensor failed | Red double blink every 10 s | Three long, at most once per trip, and not if the sensor is turned off |
 | Unpaired | Slow amber blink, first 30 s after boot | One long, at power-on |
 | Factory reset, from a 15 s hold | Magenta until the restart | Five short, one long |

@@ -94,6 +94,11 @@ New pure-logic module `components/yg_core/yg_rfcode.{c,h}`, host-tested, no ESP-
    tolerance. Matching frames are saved. If too few match, or the matching frames
    disagree, reject. Disagreement means a rolling or noisy code, which replay cannot open,
    so refusing is correct and is the rolling-code guard.
+   **Noise:** a frame shorter than 16 durations (eight bits) is never a candidate,
+   because noise spikes that repeat look like a tiny code, and a burst too short to hold
+   three such frames is ignored without a cue. The receiver listens only to learn, with
+   the remote at the unit, so its gain is capped (AGCCTRL2) to keep async OOK from
+   chattering on noise when no carrier is present.
 5. **Output:** one canonical frame plus its inter-frame gap. That is the stored code.
 
 **Replay:** given the canonical frame, the gap, and a target `ms`, generate the edge
@@ -201,6 +206,9 @@ New considerations for a transmitter that reaches the gate from range:
   frequency, timing and framing with the golden reference.
 - Count the repeats in one replay. The transmit buffer caps a press at about half a second
   of a typical fixed code, shorter than `press_ms`; the gate test shows if that is enough.
+- With no remote near, GDO0 stays quiet at the capped receive gain (logic analyser), and
+  a remote across the room still learns. The HackRF shows the carrier on the pulses, not
+  the gaps, as the PATABLE write intends.
 
 **Later, with the gate:**
 

@@ -79,6 +79,19 @@ static uint16_t build(uint16_t *buf, const uint16_t *frame, uint16_t len, uint16
     return w;
 }
 
+/* One frame of a fixed-code remote: `bits` bits, a one as long-short and a zero as
+ * short-long, then a closing carrier-on. 2 * bits + 1 durations. */
+static uint16_t code_frame(uint16_t *out, uint32_t value, uint16_t bits) {
+    uint16_t w = 0;
+    for (uint16_t b = 0; b < bits; b++) {
+        bool one = (value >> (bits - 1u - b)) & 1u;
+        out[w++] = one ? 900 : 300;
+        out[w++] = one ? 300 : 900;
+    }
+    out[w++] = 300;
+    return w;
+}
+
 static void status_has(const char *needle) {
     char buf[2048];
     yg_engine_status_json(e, 2000, buf, sizeof(buf));
@@ -91,13 +104,14 @@ static void learns_and_saves(void) {
     yg_engine_rf_learn_start(e, now);
     CHECK(fake.listening);
     CHECK_INT(fake.beeps[YG_BUZZ_PAIRING], 1);
-    uint16_t frame[] = {300, 900, 300, 900, 300};
-    uint16_t buf[64];
-    uint16_t n = build(buf, frame, 5, 5, 10000);
+    uint16_t frame[32];
+    uint16_t len = code_frame(frame, 0xA5C, 12);
+    uint16_t buf[256];
+    uint16_t n = build(buf, frame, len, 5, 10000);
     yg_engine_on_rf_capture(e, now, buf, n, true);
     CHECK_INT(fake.rf_saves, 1);
     CHECK(fake.last_saved.learned);
-    CHECK_INT(fake.last_saved.count, 5);
+    CHECK_INT(fake.last_saved.count, 25);
     CHECK(!fake.listening);
     CHECK_INT(fake.beeps[YG_BUZZ_SAVED], 1);
     status_has("\"rf_learned\":true");
@@ -106,18 +120,12 @@ static void learns_and_saves(void) {
 static void rejects_rolling_and_keeps_listening(void) {
     uint32_t now = boot_engine(false);
     yg_engine_rf_learn_start(e, now);
-    uint16_t frames[5][5] = {
-        {300, 300, 300, 300, 300},
-        {300, 1200, 300, 300, 300},
-        {300, 300, 300, 1200, 300},
-        {300, 1200, 300, 1200, 300},
-        {300, 2400, 300, 300, 300},
-    };
-    uint16_t buf[64];
+    /* A rolling remote sends a different code every time. */
+    static const uint32_t ROLLING[] = {0x5A3, 0x1F0, 0xC3C, 0x2D5, 0x9E1};
+    uint16_t buf[256];
     uint16_t w = 0;
     for (uint16_t r = 0; r < 5; r++) {
-        memcpy(&buf[w], frames[r], 5 * sizeof(uint16_t));
-        w += 5;
+        w += code_frame(&buf[w], ROLLING[r], 12);
         buf[w++] = 10000;
     }
     yg_engine_on_rf_capture(e, now, buf, w, true);
@@ -134,6 +142,23 @@ static void rejects_rolling_and_keeps_listening(void) {
     yg_engine_on_rf_capture(e, now + 1500, buf, w, true);
     CHECK_INT(fake.beeps[YG_BUZZ_REJECTED], 2);
     status_has("\"rf_learned\":false");
+}
+
+/* Noise is not a try. A glitch earns no cue, and spikes that repeat are never saved as
+ * a code, which would leave the unit sending something that opens nothing. */
+static void ignores_noise(void) {
+    uint32_t now = boot_engine(false);
+    yg_engine_rf_learn_start(e, now);
+    uint16_t glitch[] = {40, 5000, 60, 5000, 50};
+    yg_engine_on_rf_capture(e, now, glitch, 5, true);
+    CHECK_INT(fake.beeps[YG_BUZZ_REJECTED], 0);
+    uint16_t spike[] = {50};
+    uint16_t buf[128];
+    uint16_t n = build(buf, spike, 1, 30, 5000);
+    yg_engine_on_rf_capture(e, now, buf, n, true);
+    CHECK_INT(fake.rf_saves, 0);
+    CHECK_INT(fake.beeps[YG_BUZZ_SAVED], 0);
+    CHECK(fake.listening);
 }
 
 /* Nothing learned means nothing to send, so a person pressing hears it refused. */
@@ -196,6 +221,7 @@ static void forgets(void) {
 int main(void) {
     learns_and_saves();
     rejects_rolling_and_keeps_listening();
+    ignores_noise();
     refuses_a_press_with_nothing_learned();
     learn_gesture();
     times_out();

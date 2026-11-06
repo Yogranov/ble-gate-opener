@@ -20,12 +20,13 @@ typedef struct
 /* True if every duration in a and b is within tolerance (25% or an 80 us floor). */
 bool yg_rfcode_frames_match(const uint16_t *a, const uint16_t *b, uint16_t n);
 
-/* Split a raw capture into frames at long carrier-off gaps, and return a frame that
- * repeats at least `min_repeats` times within tolerance. first_high is true if
- * durations[0] is carrier-on. Returns false if too few frames agree, which is what a
- * rolling or noisy code looks like. */
+/* Split a raw capture into frames at long carrier-off gaps, and return a frame of at
+ * least `min_len` durations that repeats at least `min_repeats` times within tolerance.
+ * Shorter frames are skipped, because noise spikes that repeat look like a tiny code.
+ * first_high is true if durations[0] is carrier-on. Returns false if too few frames
+ * agree, which is what a rolling or noisy code looks like. */
 bool yg_rfcode_learn(const uint16_t *durations, uint16_t n, bool first_high,
-                     uint8_t min_repeats, yg_rfcode_t *out);
+                     uint8_t min_repeats, uint16_t min_len, yg_rfcode_t *out);
 
 /* Write the on/off durations to transmit for `ms`, repeating frame+gap. Returns the
  * count written (<= max). out[0] is carrier-on. Zero if nothing is learned. */

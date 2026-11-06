@@ -21,7 +21,7 @@ bool yg_rfcode_frames_match(const uint16_t *a, const uint16_t *b, uint16_t n) {
 }
 
 bool yg_rfcode_learn(const uint16_t *durations, uint16_t n, bool first_high,
-                     uint8_t min_repeats, yg_rfcode_t *out) {
+                     uint8_t min_repeats, uint16_t min_len, yg_rfcode_t *out) {
     uint16_t start[YG_RF_MAX_FRAMES], len[YG_RF_MAX_FRAMES], gap[YG_RF_MAX_FRAMES];
     uint16_t frames = 0, span = 0;
     bool high = first_high;
@@ -39,7 +39,7 @@ bool yg_rfcode_learn(const uint16_t *durations, uint16_t n, bool first_high,
     }
     if (frames < min_repeats) return false;
     for (uint16_t f = 0; f + min_repeats <= frames; f++) {
-        if (len[f] == 0 || len[f] > YG_RF_MAX_EDGES) continue;
+        if (len[f] == 0 || len[f] < min_len || len[f] > YG_RF_MAX_EDGES) continue;
         uint16_t agree = 1;
         for (uint16_t g = f + 1; g < frames; g++) {
             if (len[g] == len[f] &&

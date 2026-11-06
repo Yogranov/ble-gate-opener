@@ -776,6 +776,9 @@ int yg_engine_debug_json(const yg_engine_t *e, uint32_t now, char *buf, size_t l
 }
 
 #define RF_LEARN_REPEATS 3u
+/* The shortest frame taken for a remote: eight bits at two durations each. Fixed codes
+ * run longer, and anything shorter that repeats is noise that would open nothing. */
+#define RF_MIN_FRAME 16u
 
 void yg_engine_rf_learn_start(yg_engine_t *e, uint32_t now) {
     e->learning = true;
@@ -790,11 +793,12 @@ void yg_engine_rf_learn_start(yg_engine_t *e, uint32_t now) {
 
 void yg_engine_on_rf_capture(yg_engine_t *e, uint32_t now, const uint16_t *durations, uint16_t n, bool first_high) {
     (void)now;
-    if (!e->learning) {
+    /* Too short to hold the repeats of any remote: a glitch, not a try, so no cue. */
+    if (!e->learning || n < RF_LEARN_REPEATS * RF_MIN_FRAME) {
         return;
     }
     yg_rfcode_t code = {0};
-    if (yg_rfcode_learn(durations, n, first_high, RF_LEARN_REPEATS, &code)) {
+    if (yg_rfcode_learn(durations, n, first_high, RF_LEARN_REPEATS, RF_MIN_FRAME, &code)) {
         e->learning = false;
         e->rf_learned = true;
         if (e->ops->rf_listen != NULL) {
