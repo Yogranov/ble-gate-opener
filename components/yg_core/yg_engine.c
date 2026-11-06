@@ -158,6 +158,7 @@ void yg_engine_init(yg_engine_t *e, const yg_engine_ops_t *ops, yg_settings_t *s
     e->fw = boot->fw;
     e->sensor_id = boot->sensor_id;
     e->reset_reason = boot->reset_reason;
+    e->rf_learned = boot->rf_learned;
     e->second_start = now;
 
     yg_trigger_init(&e->trigger, beacon->paired);
@@ -394,6 +395,15 @@ void yg_engine_tick(yg_engine_t *e, uint32_t now) {
     }
 
     tick_pairing(e, now);
+
+    if (e->learning && now - e->learn_started >= (uint32_t)e->s->pair_timeout_s * 1000u) {
+        e->learning = false;
+        if (e->ops->rf_listen != NULL) {
+            e->ops->rf_listen(e->ops->ctx, false);
+        }
+        led_idle(e);
+        buzz(e, YG_BUZZ_REJECTED);
+    }
 
     uint16_t accel_mg, yaw_dps;
     yg_motion_take_peaks(&e->motion, &accel_mg, &yaw_dps);
@@ -706,11 +716,12 @@ int yg_engine_status_json(const yg_engine_t *e, uint32_t now, char *buf, size_t 
     } else {
         yg_jw_raw(&w, "null");
     }
-    yg_jw_raw(&w, ",\"hotspot_on\":%s,\"hotspot_left_s\":%u,\"clients\":%u,\"pair_mode\":\"%s\",\"pair_saves\":%u,\"debug\":%s,\"fallback\":%s,\"capturing\":%s}",
+    yg_jw_raw(&w, ",\"hotspot_on\":%s,\"hotspot_left_s\":%u,\"clients\":%u,\"pair_mode\":\"%s\",\"pair_saves\":%u,\"debug\":%s,\"fallback\":%s,\"capturing\":%s,\"rf_learned\":%s,\"learning\":%s}",
               e->hotspot_on ? "true" : "false", (unsigned)yg_hotspot_left_s(&e->hotspot, e->s, now), e->clients,
               PAIR[e->pairing.mode], e->pair_saves, e->s->debug ? "true" : "false",
               yg_trigger_fallback_active(&e->trigger, e->s) ? "true" : "false",
-              e->capture != NULL && yg_capture_active(e->capture) ? "true" : "false");
+              e->capture != NULL && yg_capture_active(e->capture) ? "true" : "false",
+              e->rf_learned ? "true" : "false", e->learning ? "true" : "false");
     return yg_jw_finish(&w);
 }
 
@@ -741,4 +752,62 @@ int yg_engine_debug_json(const yg_engine_t *e, uint32_t now, char *buf, size_t l
     yg_jw_raw(&w, ",\"near_miss\":%s,\"scan\":%d}",
               e->motion_out.near_miss ? "true" : "false", (int)e->scan_mode);
     return yg_jw_finish(&w);
+}
+
+#define RF_LEARN_REPEATS 3u
+
+void yg_engine_rf_learn_start(yg_engine_t *e, uint32_t now) {
+    e->learning = true;
+    e->learn_started = now;
+    if (e->ops->rf_listen != NULL) {
+        e->ops->rf_listen(e->ops->ctx, true);
+    }
+    led(e, YG_LED_PAIRING);
+    buzz(e, YG_BUZZ_PAIRING);
+}
+
+void yg_engine_rf_learn_cancel(yg_engine_t *e, uint32_t now) {
+    (void)now;
+    if (!e->learning) {
+        return;
+    }
+    e->learning = false;
+    if (e->ops->rf_listen != NULL) {
+        e->ops->rf_listen(e->ops->ctx, false);
+    }
+    led_idle(e);
+}
+
+void yg_engine_on_rf_capture(yg_engine_t *e, uint32_t now, const uint16_t *durations, uint16_t n, bool first_high) {
+    (void)now;
+    if (!e->learning) {
+        return;
+    }
+    yg_rfcode_t code = {0};
+    if (yg_rfcode_learn(durations, n, first_high, RF_LEARN_REPEATS, &code)) {
+        e->learning = false;
+        e->rf_learned = true;
+        if (e->ops->rf_listen != NULL) {
+            e->ops->rf_listen(e->ops->ctx, false);
+        }
+        if (e->ops->save_rf_code != NULL) {
+            e->ops->save_rf_code(e->ops->ctx, &code);
+        }
+        led(e, YG_LED_SAVED);
+        buzz(e, YG_BUZZ_SAVED);
+    } else {
+        led(e, YG_LED_REJECTED);
+        buzz(e, YG_BUZZ_REJECTED);
+    }
+}
+
+void yg_engine_rf_forget(yg_engine_t *e, uint32_t now) {
+    (void)now;
+    e->rf_learned = false;
+    yg_rfcode_t none = {0};
+    if (e->ops->save_rf_code != NULL) {
+        e->ops->save_rf_code(e->ops->ctx, &none);
+    }
+    led(e, YG_LED_SAVED);
+    buzz(e, YG_BUZZ_SAVED);
 }

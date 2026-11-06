@@ -69,7 +69,7 @@ static void op_save_gyro_zero(void *ctx, const float zero[3]) {
 
 static const yg_engine_ops_t OPS = {
     op_press, op_led, op_buzz, op_log, op_capture, op_hotspot, op_scan,
-    op_save_beacon, op_save_settings, op_env_start, op_env_finish, op_factory_reset, op_save_gyro_zero, NULL,
+    op_save_beacon, op_save_settings, op_env_start, op_env_finish, op_factory_reset, op_save_gyro_zero, NULL, NULL, NULL,
 };
 
 static yg_engine_t *e;
@@ -83,7 +83,7 @@ static const float *known_zero;
 
 static void boot(bool paired) {
     yg_beacon_t b = { paired, GATE };
-    yg_boot_info_t info = { 7, "2.0.0", 1, 0x68, false, false, { 0, 0, 0 } };
+    yg_boot_info_t info = { 7, "2.0.0", 1, 0x68, false, false, { 0, 0, 0 }, false };
     if (known_zero != NULL) {
         info.has_gyro_zero = true;
         memcpy(info.gyro_zero, known_zero, sizeof(info.gyro_zero));

@@ -58,14 +58,14 @@ static void op_save_gyro_zero(void *ctx, const float zero[3]) { (void)ctx; (void
 
 static const yg_engine_ops_t OPS = {
     op_press, op_led, op_buzz, op_log, op_capture, op_hotspot, op_scan,
-    op_save_beacon, op_save_settings, op_env_start, op_env_finish, op_factory_reset, op_save_gyro_zero, NULL,
+    op_save_beacon, op_save_settings, op_env_start, op_env_finish, op_factory_reset, op_save_gyro_zero, NULL, NULL, NULL,
 };
 
 static const yg_addr_t BEACON = { { 0xC0, 0, 0, 0, 0, 1 }, YG_ADDR_TYPE_RANDOM };
 
 static void start(uint32_t t) {
     yg_beacon_t beacon = { true, BEACON };
-    yg_boot_info_t boot = { 1, "replay", 0, 0, false, has_zero, { saved_zero[0], saved_zero[1], saved_zero[2] } };
+    yg_boot_info_t boot = { 1, "replay", 0, 0, false, has_zero, { saved_zero[0], saved_zero[1], saved_zero[2] }, false };
     settings.hotspot_s = 0;
     yg_engine_init(&engine, &OPS, &settings, &beacon, &boot, t);
     started = true;
