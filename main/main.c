@@ -6,10 +6,18 @@
 #include "yg_log.h"
 #include "yg_net.h"
 #include "yg_nvs.h"
+#include "sdkconfig.h"
+#if CONFIG_YG_GATE_DRIVER_RF433
+#include "yg_rf.h"
+#endif
 
 void app_main(void) {
-    /* First, before anything else can go wrong: the remote stays released. */
+    /* First, before anything else can go wrong: the actuator stays idle. */
+#if CONFIG_YG_GATE_DRIVER_RF433
+    yg_rf_init();
+#else
     yg_io_remote_init();
+#endif
 
     esp_log_level_set("NimBLE", ESP_LOG_ERROR);
     ESP_ERROR_CHECK(yg_nvs_init());

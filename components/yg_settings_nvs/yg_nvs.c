@@ -13,6 +13,7 @@
 #define KEY_TRIP   "trip"
 #define KEY_GYRO_ZERO "gyro_zero"
 #define KEY_TEST_FLAG "test_fail"
+#define KEY_RF_CODE   "rf_code"
 
 static const char *TAG = "yg_nvs";
 
@@ -217,4 +218,27 @@ bool yg_nvs_take_test_flag(void) {
         nvs_close(h);
     }
     return value != 0;
+}
+
+bool yg_nvs_load_rf_code(yg_rfcode_t *c) {
+    bool found = false;
+    nvs_handle_t h;
+    if (nvs_open(NAMESPACE, NVS_READONLY, &h) == ESP_OK) {
+        size_t len = sizeof(*c);
+        found = nvs_get_blob(h, KEY_RF_CODE, c, &len) == ESP_OK && len == sizeof(*c) && c->learned;
+        nvs_close(h);
+    }
+    if (!found) {
+        memset(c, 0, sizeof(*c));
+    }
+    return found;
+}
+
+void yg_nvs_save_rf_code(const yg_rfcode_t *c) {
+    nvs_handle_t h;
+    if (nvs_open(NAMESPACE, NVS_READWRITE, &h) == ESP_OK) {
+        nvs_set_blob(h, KEY_RF_CODE, c, sizeof(*c));
+        nvs_commit(h);
+        nvs_close(h);
+    }
 }

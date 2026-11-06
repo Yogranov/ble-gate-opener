@@ -38,4 +38,39 @@ menu "YogiGate pins"
         int "Addressable RGB LED"
         default 8
 
+    choice YG_GATE_DRIVER
+        prompt "Gate driver"
+        default YG_GATE_DRIVER_MOSFET
+        help
+            How the unit opens the gate. MOSFET presses a wired remote's button.
+            RF433 transmits a learned fixed code over a CC1101 and has no MOSFET.
+
+        config YG_GATE_DRIVER_MOSFET
+            bool "MOSFET on a wired remote"
+
+        config YG_GATE_DRIVER_RF433
+            bool "433 MHz CC1101 transceiver"
+    endchoice
+
+    config YG_PIN_RF_SCLK
+        int "CC1101 SCLK"
+        depends on YG_GATE_DRIVER_RF433
+        default 6
+    config YG_PIN_RF_MISO
+        int "CC1101 MISO"
+        depends on YG_GATE_DRIVER_RF433
+        default 5
+    config YG_PIN_RF_MOSI
+        int "CC1101 MOSI"
+        depends on YG_GATE_DRIVER_RF433
+        default 4
+    config YG_PIN_RF_CS
+        int "CC1101 CSn, driven high at reset so it idles deselected"
+        depends on YG_GATE_DRIVER_RF433
+        default 10
+    config YG_PIN_RF_GDO0
+        int "CC1101 GDO0, the async OOK data pin for RMT"
+        depends on YG_GATE_DRIVER_RF433
+        default 1
+
 endmenu

@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #include "esp_err.h"
+#include "yg_rfcode.h"
 #include "yg_settings.h"
 #include "yg_types.h"
 
@@ -17,6 +18,10 @@ bool yg_nvs_load(yg_settings_t *s, yg_beacon_t *b);
 /* Writes only what changed, to spare the flash. */
 void yg_nvs_save_settings(const yg_settings_t *s);
 void yg_nvs_save_beacon(const yg_beacon_t *b);
+
+/* The learned RF gate code, kept on reset-to-defaults and wiped on factory reset. */
+bool yg_nvs_load_rf_code(yg_rfcode_t *c);
+void yg_nvs_save_rf_code(const yg_rfcode_t *c);
 
 /* The gyro zero learned at rest, for a start on a car that will not hold still. */
 bool yg_nvs_load_gyro_zero(float zero[3]);
