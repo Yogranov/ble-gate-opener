@@ -243,21 +243,25 @@ transceiver, with no MOSFET and no wired remote. It is the same firmware built w
 [2026-11-06-rf433-board-variant-design.md](../docs/superpowers/specs/2026-11-06-rf433-board-variant-design.md).
 
 **Parts delta from the MOSFET board.** Remove the P30N06LE MOSFET, the 220 Ohm and 10 kOhm
-resistors, and the BFT remote. Add a CC1101 433 MHz module (3.3 V, 8-pin) and a quarter-wave
-antenna, about 17.3 cm of wire at 433.92 MHz. The C6, MPU6050, buzzer, button and LED are
-unchanged.
+resistors, and the BFT remote. Add a CC1101 433 MHz module. The one ordered is an
+E07-M1101D-style board, listed at 15 x 28 mm, 3.3 V and 10 dBm, with a 2 x 4 header at
+2.54 mm and a soldered spring antenna. If the spring falls short on range, a quarter-wave
+whip, about 17.3 cm of wire at 433.92 MHz, replaces it. The C6, MPU6050, buzzer, button
+and LED are unchanged.
 
 **Circuit.**
 
 ```
-C6 GPIO6  ───────────── CC1101 SCLK
-C6 GPIO4  ───────────── CC1101 MOSI
-C6 GPIO5  ───────────── CC1101 MISO
-C6 GPIO10 ───────────── CC1101 CSn   (driven high at reset, idles deselected)
-C6 GPIO1  ───────────── CC1101 GDO0  (async OOK data, sampled and played by RMT)
-3V3       ───────────── CC1101 VCC
-GND       ───────────── CC1101 GND
-                        CC1101 ANT ── 17.3 cm wire whip
+                        CC1101 header pin
+C6 GPIO6  ───────────── 5 SCK
+C6 GPIO4  ───────────── 6 MOSI
+C6 GPIO5  ───────────── 7 MISO (shared with GDO1)
+C6 GPIO10 ───────────── 4 CSN  (driven high at reset, idles deselected)
+C6 GPIO1  ───────────── 3 GDO0 (async OOK data, sampled and played by RMT)
+3V3       ───────────── 2 VCC  (1.8 to 3.6 V, never 5 V)
+GND       ───────────── 1 GND
+                        8 GDO2 not connected
+                        ANT ── the soldered spring, or a 17.3 cm wire whip
 
 GPIO11 ── buzzer +          (unchanged)
 GPIO7  ── button ── GND     (unchanged)
@@ -266,7 +270,8 @@ GPIO2/3 ─ MPU6050 SDA/SCL   (unchanged)
 
 The pins are provisional, set in `main/Kconfig.projbuild`. Confirm them against the real
 module, keeping CSn and GDO0 off the strapping pins and off GPIO18-23, and GPIO10 free now
-that the MOSFET is gone. A floating SPI bus cannot cause a transmit, because a transmit
+that the MOSFET is gone. Also check that the module's crystal reads 26.000: the register
+values assume 26 MHz, and a 27 MHz crystal would put the gate frequency near 450 MHz. A floating SPI bus cannot cause a transmit, because a transmit
 needs an explicit SPI command sequence, which is safer than the MOSFET's pulled-up gate.
 
 **Pending the real module.** The hole-by-hole matrix layout, `board-layout.html`, the atlas
