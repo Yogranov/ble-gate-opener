@@ -62,7 +62,7 @@ Inside, from the bottom up: Cover, rails, remote, a 3 mm gap, matrix board, head
 
 **Heat-proof adhesive.** The Velcro or Dual Lock under the case, and any foam tape, need an acrylic adhesive, like that on 3M's VHB tapes. The rubber adhesive on ordinary Velcro can let go in a hot car, and a unit sliding about can look like driving.
 
-**The status LED does not show yet.** Its position on the C6 was not recorded. Once it is measured, a small hole behind a white part of the logo could let it glow through.
+**The status LED does not show, by choice.** It is for developers, who open the case to watch it, and a technician goes by the sounds. If it ever needs to show, its position on the C6 has to be measured first, because it was not recorded, and then a small hole behind a white part of the logo could let it glow through.
 
 ## 3. How it prints without supports
 

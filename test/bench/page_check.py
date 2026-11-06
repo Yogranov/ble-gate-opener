@@ -148,7 +148,6 @@ f.onload = async () => {
     out.help_gives_the_way_in = ["Triple-click", "password", "192.168.4.1"].every(text => help.textContent.includes(text));
     out.help_lists_every_sound = help.querySelectorAll("[data-sound]").length === 8;
     out.help_draws_every_rhythm = help.querySelectorAll(".r").length === 8 && [...help.querySelectorAll(".r")].every(r => r.querySelector("i"));
-    out.help_lists_every_colour = help.querySelectorAll(".led-dot").length === 9;
     out.help_lists_every_gesture = ["Triple", "Hold 3", "Hold 15"].every(text => help.textContent.includes(text));
     out.help_fits_the_phone = doc.documentElement.scrollWidth <= win.innerWidth;
     out.six_tabs_fit_the_bar = doc.querySelectorAll("nav button").length === 6 && [...doc.querySelectorAll("nav button")].every(b => b.scrollWidth <= b.clientWidth);
@@ -167,22 +166,26 @@ f.onload = async () => {
     out.simple_status_shows_live_motion = shown(q("#liveAccel")) && shown(q("#liveYaw"));
     js('showTab("system")');
     out.simple_system_hides_firmware_and_reset = !shown(q("#otaGo")) && !shown(q("#sReset")) && !shown(q("#soundList"));
-    out.simple_system_keeps_the_tests = shown(q("#tLed")) && shown(q("#tBeep")) && shown(q("#sReboot"));
+    out.simple_system_keeps_the_beep_and_restart = shown(q("#tBeep")) && shown(q("#sReboot"));
+    out.simple_system_hides_the_led_test = !shown(q("#tLed"));
     js('showTab("logs")');
     out.simple_logs_hide_erase = !shown(q("#logClear"));
     out.simple_logs_keep_the_trips_and_download = shown(q("#tripList")) && shown(q("a.button"));
     await js('showTab("settings"); loadSettings()');
     const simple = fields();
-    out.simple_settings_are_short = simple.length === 3;
-    out.simple_settings_are_the_useful_ones = ["Set point", "Buzzer", "LED"].every(name => simple.some(text => text.startsWith(name)));
+    out.simple_settings_are_short = simple.length === 2;
+    out.simple_settings_are_the_useful_ones = ["Set point", "Buzzer"].every(name => simple.some(text => text.startsWith(name)));
+    out.simple_settings_leave_out_the_led = !simple.some(text => text.startsWith("LED"));
     out.simple_settings_offer_the_password_page = shown(q("#sPassword"));
     out.simple_settings_hide_reset_to_defaults = !shown(q("#sDefaults"));
 
     q("#advMode").click();
     out.advanced_shows_every_setting_but_the_password = fields().length === 22;
+    out.advanced_shows_the_led_setting = fields().some(text => text.startsWith("LED"));
     out.advanced_is_remembered = win.localStorage.getItem("yg_advanced") === "1";
     js('showTab("system")');
     out.advanced_system_shows_firmware_reset_and_sounds = shown(q("#otaGo")) && shown(q("#sReset")) && shown(q("#soundList"));
+    out.advanced_system_shows_the_led_test = shown(q("#tLed"));
     js('showTab("logs")');
     out.advanced_logs_show_erase = shown(q("#logClear"));
     js('showTab("status")');

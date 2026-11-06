@@ -135,17 +135,14 @@ def check_sounds(root):
 
 
 def check_leds(root):
+    """Only the atlas lists the LED's patterns. The LED is inside the case, where a technician
+    never sees it, so the manual and the page's Help tab leave it out."""
     header = read(root, "components/yg_core/include/yg_engine.h")
     block = header[header.index("YG_LED_OFF,"):header.index("} yg_led_event_t")]
     colours = len(re.findall(r"YG_LED_\w+,", block)) - 1   # Off is not a pattern.
     atlas = read(root, "atlas.html")
     rows = atlas[atlas.index('id="ledRows"'):atlas.index("</figure>", atlas.index('id="ledRows"'))]
     check(rows.count('class="led"') == colours, f"atlas LED table has {rows.count('class=' + chr(34) + 'led' + chr(34))} rows, firmware has {colours} patterns")
-    manual = read(root, "manual.html")
-    rows = manual[manual.index('id="leds"'):manual.index("</section>", manual.index('id="leds"'))]
-    check(rows.count('class="dot"') == colours + 1, f"manual.html LED table has {rows.count('class=' + chr(34) + 'dot' + chr(34))} rows, firmware has {colours} patterns plus off")
-    page = read(root, "web/index.html")
-    check(page.count('class="led-dot"') == colours + 1, f"the page's Help tab has {page.count('class=' + chr(34) + 'led-dot' + chr(34))} LED rows, firmware has {colours} patterns plus off")
 
 
 def check_rule_constants(root, settings):

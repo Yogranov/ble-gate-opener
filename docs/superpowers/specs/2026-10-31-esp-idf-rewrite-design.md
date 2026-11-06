@@ -293,10 +293,10 @@ One HTML file with inline CSS and JavaScript, embedded gzipped, with no external
 |---|---|
 | Status | State, live signal, live motion graphs, firmware version, press the remote. Advanced adds adverts per second, temperature and hotspot time left |
 | Beacon | Current beacon, pair by holding close, pick from list, type a MAC, forget |
-| Settings | The set point with a "set here" button, buzzer, LED, Change password, and the Advanced mode switch. Advanced adds everything else in 5.7, and Reset to defaults |
+| Settings | The set point with a "set here" button, buzzer, Change password, and the Advanced mode switch. Advanced adds everything else in 5.7, and Reset to defaults |
 | Logs | Trip list, a chart for each trip with motion and press markers, rate a trip, download all. Advanced adds Reset logs |
-| System | Flash the LED, beep, restart. Advanced adds each sound, firmware upload, factory reset and the debug tools |
-| Help | The technician manual, in case the printed one is gone: setup, each sound with a Play button, each colour, the button, and what to do when something goes wrong |
+| System | Beep, restart. Advanced adds Flash the LED, each sound, firmware upload, factory reset and the debug tools |
+| Help | The technician manual, in case the printed one is gone: setup, each sound with a Play button, the button, and what to do when something goes wrong |
 
 Advanced mode only changes what the page shows, so it is stored in the browser and not on the unit. Each phone starts simple.
 
@@ -366,6 +366,8 @@ A 15 s hold passes through the 3 s one, so two short beeps sound on the way and 
 | Unpaired | Slow amber blink, first 30 s after boot | One long, at power-on |
 | Factory reset, from a 15 s hold | Magenta until the restart | Five short, one long |
 | Otherwise | Off | None |
+
+**The LED is for developers.** It is on the C6 inside the case, so nobody fitting or driving with the unit sees it. The manual and the page's Help tab leave it out, its switch and test are in Advanced mode, and a technician goes by the sounds. It keeps working, for debugging with the case open, and the atlas explains each pattern.
 
 The buzzer answers people and reports faults, and stays silent on a normal trip. An active buzzer has one fixed tone, so each sound is a rhythm, set in `yg_core/sound`. The steps are multiples of the buzzer task's 20 ms, and a rattle is 40 ms on and off.
 

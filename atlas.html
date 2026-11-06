@@ -794,7 +794,7 @@ idf.py -p COM3 flash</code></pre><button class="copy" type="button">Copy</button
 
 <section id="page">
   <h2>The web page</h2>
-  <p>The page starts simple: the state, live signal and motion, pairing, the set point, and the buzzer and LED switches. Turn on <b style="font-weight:600">Advanced mode</b> at the bottom of the Settings tab for everything else: all the settings, Reset to defaults, each sound, firmware upload, Reset logs, factory reset and the debug tools. Your phone remembers the choice.</p>
+  <p>The page starts simple: the state, live signal and motion, pairing, the set point, and the buzzer switch. Turn on <b style="font-weight:600">Advanced mode</b> at the bottom of the Settings tab for everything else: all the settings, Reset to defaults, the LED test, each sound, firmware upload, Reset logs, factory reset and the debug tools. Your phone remembers the choice.</p>
   <ol class="steps">
     <li><div><b class="h">Triple-click the button</b><p>The hotspot only starts when you ask, and you hear three short beeps. It does not start with the car.</p></div></li>
     <li><div><b class="h">Join the hotspot from your phone's Wi-Fi settings</b><p>Its name is <code>YogiGate-XXXX</code>, ending in four characters from the unit's address. The password is <code>password</code>. Your phone may warn that the network has no internet, so choose to stay connected.</p></div></li>
@@ -844,9 +844,8 @@ idf.py -p COM3 flash</code></pre><button class="copy" type="button">Copy</button
             <div class="ph-c"><h4>When to press</h4>
               <div><b style="font-weight:500">Set point</b><div class="ph-r" style="align-items:center;margin-top:5px"><span>&#9745; Any</span><span class="ph-in" style="flex:1">&nbsp;</span><span class="ph-btn" style="flex:none">Set here</span></div><small class="ph-m" style="display:block;font-size:11px;margin-top:3px">How strong the signal must be before a moving car presses. Any means as soon as it is heard.</small></div>
             </div>
-            <div class="ph-c"><h4>Lights and sound</h4>
-              <div class="ph-f" style="border:0"><span>LED</span><span>&#9745;</span></div>
-              <div class="ph-f"><span>Buzzer<small>Answers what you do on the unit. It stays quiet when the gate opens by itself.</small></span><span>&#9745;</span></div>
+            <div class="ph-c"><h4>Sound</h4>
+              <div class="ph-f" style="border:0"><span>Buzzer<small>Answers what you do on the unit. It stays quiet when the gate opens by itself.</small></span><span>&#9745;</span></div>
             </div>
             <div class="ph-c"><h4>Hotspot password</h4><div class="ph-m">The default is <code>password</code>. You can change it if you want to.</div><div class="ph-btn">Change password</div></div>
             <div class="ph-c"><div class="ph-f" style="border:0;padding:0"><b style="font-weight:500">Advanced mode</b><span>&#9744;</span></div><div class="ph-m">Shows every setting, sounds, firmware upload, factory reset, log reset and debug tools.</div></div>
@@ -870,10 +869,10 @@ idf.py -p COM3 flash</code></pre><button class="copy" type="button">Copy</button
               <div class="ph-f"><span>Three short<small>The hotspot is starting</small></span><span class="ph-btn">Play</span></div>
               <div class="ph-f"><span>Short, short, long<small>Success, saved</small></span><span class="ph-btn">Play</span></div>
             </div>
-            <div class="ph-c"><h4>What each colour means</h4><div class="ph-m">And below that, the button, and what to do if it goes wrong.</div></div>
+            <div class="ph-c"><h4>The button</h4><div class="ph-m">What each click and hold does, and below that, what to do if it goes wrong.</div></div>
           </div>
           <div data-ph="system" hidden>
-            <div class="ph-c"><h4>Test the hardware</h4><div class="ph-r"><span class="ph-btn">Flash the LED</span><span class="ph-btn">Beep</span></div></div>
+            <div class="ph-c"><h4>Test the hardware</h4><div class="ph-r"><span class="ph-btn">Beep</span></div></div>
             <div class="ph-c"><h4>Unit</h4><div class="ph-r"><span class="ph-btn">Restart</span></div></div>
           </div>
         </div>
@@ -891,10 +890,10 @@ idf.py -p COM3 flash</code></pre><button class="copy" type="button">Copy</button
       <div class="tabs-note" id="phNotes">
         <button type="button" data-t="status" aria-pressed="true"><b>Status</b><span>What the unit thinks right now: its state, the live signal, live motion, and whether the car moved. Press the remote by hand from here. Advanced mode adds adverts per second, temperature and hotspot time.</span></button>
         <button type="button" data-t="beacon" aria-pressed="false"><b>Beacon</b><span>See the paired beacon, pair a different one three ways, or forget it. Forgetting stops the gate opening until you pair again.</span></button>
-        <button type="button" data-t="settings" aria-pressed="false"><b>Settings</b><span>The set point, the buzzer and LED switches, and Change password. Advanced mode is the switch at the bottom, and shows <a href="#settings">all 23 settings</a> and Reset to defaults.</span></button>
+        <button type="button" data-t="settings" aria-pressed="false"><b>Settings</b><span>The set point, the buzzer switch, and Change password. Advanced mode is the switch at the bottom, and shows <a href="#settings">all 23 settings</a> and Reset to defaults.</span></button>
         <button type="button" data-t="logs" aria-pressed="false"><b>Logs</b><span>One row per trip. Tap a row for a chart of signal, motion and press, then rate it. Download everything from here for a review. Advanced mode adds Reset logs.</span></button>
         <button type="button" data-t="help" aria-pressed="false"><b>Help</b><span>The technician manual, in case the printed one is gone. Each sound has a Play button, so you can compare it with what you just heard.</span></button>
-        <button type="button" data-t="system" aria-pressed="false"><b>System</b><span>Flash the LED, beep or restart. Advanced mode adds each sound, firmware upload and factory reset, and the debug tools when Debug mode is on.</span></button>
+        <button type="button" data-t="system" aria-pressed="false"><b>System</b><span>Beep or restart. Advanced mode adds Flash the LED, each sound, firmware upload and factory reset, and the debug tools when Debug mode is on.</span></button>
       </div>
       <p style="font-size:15px;color:var(--ink-2);margin-top:12px">A picture of the real page in simple mode, with example values. Tap a tab to look at it. Its buttons do nothing here.</p>
     </div>
@@ -935,12 +934,12 @@ idf.py -p COM3 flash</code></pre><button class="copy" type="button">Copy</button
   <p>To silence it, turn off Buzzer on the Settings tab. Buzzer type is active by default, which suits the buzzer in this build. If you try passive with an active buzzer fitted and switch back, restart the unit or it stays silent.</p>
 
   <h3>The LED</h3>
-  <p>The LED is dim on purpose and stays off in normal use. <b style="font-weight:600">In the printed case it cannot be seen yet</b>, because no window has been added for it, so listen for the sounds there. The dots below blink at the real speed.</p>
+  <p>The LED is dim on purpose and stays off in normal use. <b style="font-weight:600">It is for developers.</b> It sits on the C6 inside the case, where nobody fitting or driving with the unit sees it, so the technician manual and the page's Help tab leave it out, and a technician goes by the sounds. Open the case to watch it while debugging. The dots below blink at the real speed.</p>
   <figure>
     <div class="seq l" id="ledRows">
       <div class="seq-r"><span class="led" style="--c:#f4f4f0"></span><b>Pressing</b><div class="strip" data-w="3000" data-c="#f4f4f0" data-seg="0-2000"></div><span>White during the press</span></div>
       <div class="seq-r"><span class="led" style="--c:#4f96ee;--a:ledFast .2s infinite"></span><b>Pairing</b><div class="strip" data-w="3000" data-c="#4f96ee" data-rep="100,200"></div><span>Fast blue blink, until it ends</span></div>
-      <div class="seq-r"><span class="led" style="--c:#35c26f;--a:ledSaved 3s infinite"></span><b>Saved</b><div class="strip" data-w="3000" data-c="#35c26f" data-seg="0-2000"></div><span>Green for 2&nbsp;s. Also the LED test on the System tab</span></div>
+      <div class="seq-r"><span class="led" style="--c:#35c26f;--a:ledSaved 3s infinite"></span><b>Saved</b><div class="strip" data-w="3000" data-c="#35c26f" data-seg="0-2000"></div><span>Green for 2&nbsp;s. Also the LED test on the System tab, in Advanced mode</span></div>
       <div class="seq-r"><span class="led" style="--c:#3bd6d6;--a:ledSaved 3s infinite"></span><b>Hotspot</b><div class="strip" data-w="3000" data-c="#3bd6d6" data-seg="0-2000"></div><span>Cyan for 2&nbsp;s when it starts</span></div>
       <div class="seq-r"><span class="led" style="--c:#ff4d42;--a:ledReject 3s infinite"></span><b>Rejected</b><div class="strip" data-w="3000" data-c="#ff4d42" data-seg="0-200,400-600,800-1000"></div><span>Three red blinks: pairing timed out, or the set point was refused</span></div>
       <div class="seq-r"><span class="led" style="--c:#ff4d42;--a:ledFail 10s infinite"></span><b>Sensor failed</b><div class="strip" data-w="3000" data-c="#ff4d42" data-seg="0-150,300-450"></div><span>Red double blink, every 10&nbsp;s<small>The unit is on the fixed threshold</small></span></div>
@@ -997,8 +996,7 @@ idf.py -p COM3 flash</code></pre><button class="copy" type="button">Copy</button
       <tr><td>Hotspot name<small>hotspot_ssid</small></td><td class="n" data-k="Default:">YogiGate-XXXX</td><td class="n" data-k="Range:">1 to 32 characters</td><td>Applies the next time the hotspot starts.</td></tr>
       <tr><td>New hotspot password<small>hotspot_password</small></td><td class="n" data-k="Default:">password</td><td class="n" data-k="Range:">8 to 63 characters</td><td>Has its own page under Change password. Applies the next time the hotspot starts.</td></tr>
       <tr><td>Wi-Fi power<small>wifi_tx_dbm</small></td><td class="n" data-k="Default:">8&nbsp;dBm</td><td class="n" data-k="Range:">2 to 20</td><td>Low keeps the hotspot close to the car, and goes easy on a weak USB port.</td></tr>
-      <tr class="gh"><td colspan="4">Lights and sound</td></tr>
-      <tr><td>LED<small>led_enabled</small></td><td class="n" data-k="Default:">On</td><td class="n" data-k="Range:">On or off</td><td></td></tr>
+      <tr class="gh"><td colspan="4">Sound</td></tr>
       <tr><td>Buzzer<small>buzzer_enabled</small></td><td class="n" data-k="Default:">On</td><td class="n" data-k="Range:">On or off</td><td>Answers what you do on the unit, and stays quiet when the gate opens by itself.</td></tr>
       <tr><td>Buzzer type<small>buzzer_type</small></td><td class="n" data-k="Default:">active</td><td class="n" data-k="Range:">passive or active</td><td>Active, unless a passive one is fitted.</td></tr>
       <tr class="gh"><td colspan="4">Pairing by holding close</td></tr>
@@ -1006,6 +1004,8 @@ idf.py -p COM3 flash</code></pre><button class="copy" type="button">Copy</button
       <tr><td>Stronger than others by<small>pair_margin_db</small></td><td class="n" data-k="Default:">15&nbsp;dB</td><td class="n" data-k="Range:">3 to 40</td><td>And this much stronger than any other beacon.</td></tr>
       <tr><td>Hold for<small>pair_hold_s</small></td><td class="n" data-k="Default:">2&nbsp;s</td><td class="n" data-k="Range:">1 to 10</td><td>And both for this long.</td></tr>
       <tr><td>Give up after<small>pair_timeout_s</small></td><td class="n" data-k="Default:">60&nbsp;s</td><td class="n" data-k="Range:">10 to 300</td><td>Timing out keeps the old beacon.</td></tr>
+      <tr class="gh"><td colspan="4">LED</td></tr>
+      <tr><td>LED<small>led_enabled</small></td><td class="n" data-k="Default:">On</td><td class="n" data-k="Range:">On or off</td><td>On the C6 board, inside the case, so it only shows with the case open.</td></tr>
       <tr class="gh"><td colspan="4">Debug</td></tr>
       <tr><td>Debug mode<small>debug</small></td><td class="n" data-k="Default:">Off</td><td class="n" data-k="Range:">On or off</td><td>Records raw captures and adds tools on the System tab. Keeps the hotspot on while moving.</td></tr>
     </tbody>

@@ -11,7 +11,7 @@ The same facts live in several places, and nothing generates one from another. *
 | A setting: add, remove, rename, default or range | `components/yg_core/yg_settings.c`, `web/index.html` (`LABELS`, `GROUPS`, and `SIMPLE` if it belongs in simple mode), `tools/mock_api.py`, `test/host/test_settings.c`, spec section 5.7, `atlas.html` settings table |
 | A sound | `components/yg_core/yg_sound.c`, `web/index.html` (`SOUNDS`, and the Help tab), `test/bench/api_check.py`, spec section 8.5, `atlas.html` sound strips, `manual.html` sound table |
 | When a sound plays | `components/yg_core/yg_engine.c` and its test, spec section 8.5, `atlas.html`, `manual.html`, the page's Help tab |
-| An LED pattern | `components/yg_io/yg_io.c`, `components/yg_core/include/yg_engine.h`, spec section 8.5, `atlas.html` LED table, `manual.html` colour table, the page's Help tab |
+| An LED pattern | `components/yg_io/yg_io.c`, `components/yg_core/include/yg_engine.h`, spec section 8.5, `atlas.html` LED table |
 | The press rule, or anything in `yg_trigger.c` | Its tests, spec section 5, and the port of it in `atlas.html`, between `SIM-START` and `SIM-END` |
 | Button gestures | `components/yg_core/yg_engine.c`, spec section 8.4, README, `atlas.html`, `manual.html`, the page's Help tab |
 | Hotspot behaviour or the default password | `yg_hotspot_policy.c` or `yg_settings.h`, spec section 8.1, README, `atlas.html` (including its hotspot chart), `manual.html`, the page's Help tab |
@@ -31,7 +31,7 @@ If you decide something new about how the product behaves, add it to the design 
 
 | File | Reader | Keep it |
 |---|---|---|
-| `manual.html` | A technician fitting a unit | **Both sides of one A4 sheet, cut to 120 × 132 mm and folded to 60 × 33 mm to go inside the case.** How to set up, and what each sound and colour means. No theory, and nothing a technician does not need on the job |
+| `manual.html` | A technician fitting a unit | **Both sides of one A4 sheet, cut to 120 × 132 mm and folded to 60 × 33 mm to go inside the case.** How to set up, and what each sound means. No theory, and nothing a technician does not need on the job |
 | The Help tab in `web/index.html` | The same technician, once the printed page is gone | The same words as `manual.html`, because the page ships inside the firmware. It can only help someone who already reached the hotspot |
 | `atlas.html` | Anyone who wants the whole picture | Everything about how it works and how it is built, with its drawings and trip panel |
 | `README.md` | A developer | Wiring, building, tests and code layout |
@@ -46,6 +46,7 @@ These are the owner's decisions. Change them only when the owner asks, and then 
 
 - **Never open the gate because the car started.** A press needs motion in the last minute and the beacon heard.
 - **The buzzer is on by default, and answers people.** It sounds when someone does something on the unit, or when something is wrong. It stays quiet when the gate opens by itself, and at a normal start. It must never become annoying.
+- **The LED is for developers.** It is inside the case, where nobody fitting or driving with the unit sees it. The manual and the page's Help tab leave it out, its switch and test are in Advanced mode, and a technician goes by the sounds. It keeps working, for debugging with the case open, and the atlas explains it.
 - **The hotspot starts only when asked,** by a triple-click or the USB `wifi` command. The one exception is the first start after a firmware update, which needs it for its self-check.
 - **While the hotspot is on, the scan listens a quarter of the time.** At full time a phone on the page gets nothing through at all, and that was measured on a real unit. With the hotspot off, the scan has the whole radio, because the gate depends on it.
 - **Holding the button for 15 s is a factory reset,** with its own sound, so a unit can start from scratch with no phone. A button already down at power-on does not count, so a stuck one cannot wipe the unit at every start.

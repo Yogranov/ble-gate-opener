@@ -8,7 +8,7 @@ It presses **once, when the car has moved in the last minute and can hear the be
 
 | Read | For |
 |---|---|
-| [manual.html](manual.html) | Fitting a unit, with what each sound and colour means. It prints on both sides of one A4 sheet, which is cut out, folded and kept inside the case |
+| [manual.html](manual.html) | Fitting a unit, with what each sound means. It prints on both sides of one A4 sheet, which is cut out, folded and kept inside the case |
 | [atlas.html](atlas.html) | The whole picture: how it decides, a trip you can play, the board, and the case in 3D |
 | [AGENTS.md](AGENTS.md) | Rules for changing this repo, including what to update when something changes |
 
@@ -84,7 +84,7 @@ A second unit needs the same steps. It can use the same beacon.
 
 The hotspot only starts when you ask, by triple-clicking the button or with the USB `wifi` command. The one exception is the first start after a firmware update, which needs it for its self-check. It goes off after 5 minutes, or 30 s after the last phone leaves if that is later. Wi-Fi and Bluetooth share one radio, so while it is on the unit listens for the beacon a quarter of the time, and a press can come about a second later. To use it, triple-click, join the hotspot and open `http://192.168.4.1`.
 
-The page starts simple: state, live signal and motion, pairing, the set point, the buzzer and LED switches, trip ratings, Change password, and a Help tab with the technician manual, in case the printed one is gone. Advanced mode, at the bottom of the Settings tab, adds every setting, Reset to defaults, each sound, firmware upload, Reset logs, factory reset and the debug tools. Each phone remembers its own choice.
+The page starts simple: state, live signal and motion, pairing, the set point, the buzzer switch, trip ratings, Change password, and a Help tab with the technician manual, in case the printed one is gone. Advanced mode, at the bottom of the Settings tab, adds every setting, Reset to defaults, the LED test, each sound, firmware upload, Reset logs, factory reset and the debug tools. Each phone remembers its own choice.
 
 A flash keeps the settings stored on a unit, so a changed default only reaches it after **Reset to defaults**, on the Settings tab in Advanced mode. That keeps the beacon and logs. **Factory reset**, on the System tab or by holding the button for 15 s, erases those too.
 

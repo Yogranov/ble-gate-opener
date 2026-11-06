@@ -50,13 +50,11 @@ h2 { font-size:21px; border-bottom:2px solid var(--ink); padding-bottom:2px }
 .row { display:grid; gap:0 8px; padding:3.4px 0; border-bottom:1px solid var(--rule); align-items:center; min-width:0 }
 .row:last-child { border-bottom:0 }
 .sound .row { grid-template-columns:74px minmax(0,1fr) }
-.led .row { grid-template-columns:14px 96px minmax(0,1fr) }
 .btn .row { grid-template-columns:78px minmax(0,1fr) }
 .fix .row { grid-template-columns:minmax(0,1fr); gap:0 }
 /* A sound's rhythm, to scale: the track is 2 s across. */
 .r { position:relative; display:block; height:11px; width:72px; background:var(--track); border-radius:2px; overflow:hidden; -webkit-print-color-adjust:exact; print-color-adjust:exact }
 .r i { position:absolute; top:2px; bottom:2px; background:var(--tick) }
-.dot { width:13px; height:13px; border-radius:50%; background:var(--c); border:1px solid #0003; -webkit-print-color-adjust:exact; print-color-adjust:exact }
 .rule { background:var(--sign); color:var(--on-sign); border-radius:4px; padding:4px 8px; font-weight:600; -webkit-print-color-adjust:exact; print-color-adjust:exact }
 .note { color:var(--ink-2); font-size:.9em; line-height:1.28 }
 .cutinfo, .mark { display:none }
@@ -84,11 +82,9 @@ h2 { font-size:21px; border-bottom:2px solid var(--ink); padding-bottom:2px }
   .steps li::before { font-size:7.2pt; line-height:3.3mm; width:3.3mm; height:3.3mm }
   .row { padding:.55mm 0; gap:0 1.3mm; border-bottom-width:.1mm }
   .sound .row { grid-template-columns:13mm minmax(0,1fr) }
-  .led .row { grid-template-columns:2.4mm 20.5mm minmax(0,1fr) }
   .btn .row { grid-template-columns:15mm minmax(0,1fr) }
   .r { width:13mm; height:1.9mm; border-radius:.3mm }
   .r i { top:.3mm; bottom:.3mm }
-  .dot { width:2.4mm; height:2.4mm }
   .rule { padding:.7mm 1.3mm; border-radius:.7mm }
   .note { font-size:7pt; line-height:1.2 }
   code { font-size:7pt; padding:0 .15em }
@@ -185,21 +181,6 @@ h2 { font-size:21px; border-bottom:2px solid var(--ink); padding-bottom:2px }
             <div class="row"><span class="r" data-sound="no_beacon" data-seg="0-700" aria-hidden="true"><i style="left:0.00%;width:35.00%"></i></span><span><b>One long at power-on:</b> no beacon is paired yet</span></div>
             <div class="row"><span class="r" data-sound="sensor" data-seg="0-500,700-1200,1400-1900" aria-hidden="true"><i style="left:0.00%;width:25.00%"></i><i style="left:35.00%;width:25.00%"></i><i style="left:70.00%;width:25.00%"></i></span><span><b>Three long:</b> motion sensor failed</span></div>
             <div class="row"><span class="r" data-sound="erase" data-seg="0-100,200-300,400-500,600-700,800-900,1000-2000" aria-hidden="true"><i style="left:0.00%;width:5.00%"></i><i style="left:10.00%;width:5.00%"></i><i style="left:20.00%;width:5.00%"></i><i style="left:30.00%;width:5.00%"></i><i style="left:40.00%;width:5.00%"></i><i style="left:50.00%;width:50.00%"></i></span><span><b>Five short, one long:</b> factory reset, erasing</span></div>
-          </div>
-        </section>
-        <section class="led">
-          <h2>What each colour means</h2>
-          <p class="note">The LED is inside the case, on the C6 board.</p>
-          <div class="rows" id="leds">
-            <div class="row"><span class="dot" style="--c:#f4f4f0"></span><b>White</b><span>Pressing the remote</span></div>
-            <div class="row"><span class="dot" style="--c:#3b82e6"></span><b>Fast blue</b><span>Pairing</span></div>
-            <div class="row"><span class="dot" style="--c:#2fbf6b"></span><b>Green, 2&nbsp;s</b><span>Saved</span></div>
-            <div class="row"><span class="dot" style="--c:#2ccfcf"></span><b>Cyan, 2&nbsp;s</b><span>Hotspot starting</span></div>
-            <div class="row"><span class="dot" style="--c:#f03e3e"></span><b>3 red blinks</b><span>That did not work</span></div>
-            <div class="row"><span class="dot" style="--c:#f03e3e"></span><b>2 red, every 10&nbsp;s</b><span>Motion sensor failed</span></div>
-            <div class="row"><span class="dot" style="--c:#ff9f1c"></span><b>Slow amber</b><span>No beacon, first 30&nbsp;s</span></div>
-            <div class="row"><span class="dot" style="--c:#d946ef"></span><b>Magenta</b><span>Factory reset, erasing</span></div>
-            <div class="row"><span class="dot" style="--c:#6b7075"></span><b>Off</b><span>Normal</span></div>
           </div>
         </section>
       </div>
