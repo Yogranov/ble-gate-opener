@@ -68,13 +68,13 @@ PARAMS = [
     ("post_d", 5, "Posts from the top, pressing on the board's parts side"),
     ("leg_d", 4.2, "Legs from the Cover, which the board rests on. The walls limit this"),
     ("hook_w", 10, "Snap hooks, wide. Wider holds harder"),
-    ("hook_z", 15, "Where a snap hook's tooth starts. Higher makes a longer, gentler arm"),
+    ("hook_z", 16.5, "Where a snap hook's tooth starts. Higher makes a longer, gentler arm"),
     ("inlay", 0.8, "Logo depth, which is 4 layers at 0.2 mm"),
     ("tab_w", 9, "Flexible tab in the top that presses the button, wide"),
     ("tab_len", 16, "Flexible tab, from its fixed end to its tip. Longer presses more easily"),
     ("tab_t", 1.2, "Flexible tab, thick. Thinner presses more easily"),
     ("tab_slit", 1, "Slit around the flexible tab"),
-    ("stem_gap", 1, "Gap between the tab's post and the button's stem. A bigger gap means a longer press"),
+    ("stem_gap", 0.5, "Gap between the tab's post and the button's stem. A bigger gap means a longer press"),
     # Worked out from the above.
     ("L", "2*wall + 2*clr + board_l", "Outside length"),
     ("W", "2*wall + ant_out + ant_air + board_w + clr", "Outside width"),
@@ -125,9 +125,14 @@ C6_X0, C6_X1 = 21.03 - 1.3, 46.43 + 1.3  # From the row A edge: 1.3 past each pi
 C6_Y0, C6_Y1 = 3.41 - 1.2, 38.97 + 8.3  # From the column 01 edge: the board without the antenna.
 PORT_X = (26.03, 41.43)  # Port centres: each starts 1 mm in from its pin row and is 8 wide.
 PORT_Y0, PORT_Y1 = 39.0, 38.97 + 9.4
+# Only the native port, marked ESP32C6, gets an opening: it powers the unit and carries the console.
+# The CH343 port stays inside, unused.
+OPEN_PORTS = (26.03,)
+# Slots in the back wall beside the buzzer. 0 leaves its sound to the USB opening and the tab's slit;
+# 4 puts back the slots of the second print.
+BUZZER_SLOTS = 0
 MODULE_X0, MODULE_X1 = 24.73, 42.73  # 18 wide, centred between the pin rows.
 MODULE_Y0, MODULE_Y1 = -4.6, 20.9
-ANTENNA_X = 33.73
 
 # Where the board is held, at its corners. A post above and a leg below meet at each one, so
 # the board is clamped without being bent. They stay clear of the remote, which carries no load.
@@ -137,18 +142,35 @@ CORNERS = [
     for dy in ("", " + board_w - 2*hole_inset")
 ]
 
-# Snap hooks on the Cover: the side of the case, and the centre along that side.
-HOOKS = [("front", "-14 mm"), ("front", "14 mm"), ("back", "-14 mm"), ("back", "14 mm"), ("left", "0 mm"), ("right", "0 mm")]
+# Snap hooks on the Cover: the side of the case, the centre along that side, and the arm's thickness.
+# The end hooks are thinner, because bending in they must stay clear of the remote's ends.
+# The back left hook sits off the middle, clear of the USB ledge and a remote clip.
+HOOKS = [
+    ("front", "-14 mm", 2.0),
+    ("front", "14 mm", 2.0),
+    ("back", "-23 mm", 2.0),
+    ("back", "14 mm", 2.0),
+    ("left", "0 mm", 1.6),
+    ("right", "0 mm", 1.6),
+]
 # Across a hook, measured outward from the inside face of the wall.
-HOOK_GAP, HOOK_T, TOOTH = 0.2, 1.8, 1.0
+HOOK_GAP, TOOTH = 0.2, 1.2
+# A 45 degree fillet where an arm meets the plate, which spreads the bending there.
+ROOT = 0.8
 # The catch rises this much per mm outward, which is 30 degrees from flat. A flatter catch holds harder and
-# snaps more crisply, and at 1 mm wide it still prints without support, but flat would need a tool to open.
+# snaps more crisply, and at about 1 mm wide it still prints without support, but flat would need a tool to open.
 CATCH = 0.577
-# How far the groove's catch sits above the tooth's once the case is closed. The arm stays slightly bent,
-# which keeps pulling the two halves together and takes up any play.
-BITE = 0.15
+# How far the groove's catch sits above the tooth's once the case is closed. The arm stays bent, which
+# keeps pulling the two halves together and takes up any play. The legs pressing the board push the Cover
+# back by up to the clamp, so this has to be well over it: at 0.15 the second print felt loose with
+# the parts inside.
+BITE = 0.35
 # The volume the teeth overlap the grooves in the model, because the model cannot show the arms bent.
-HOOK_OVERLAP_MM3 = 35
+HOOK_OVERLAP_MM3 = 45
+# Across a remote clip, measured outward from the remote's edge. Each clip's tooth reaches 0.2 mm into
+# the remote's top edge, so it stays bent and holds the remote down without play.
+CLIP_FIT, CLIP_T, CLIP_BITE = 0.15, 1.8, 0.2
+CLIP_OVERLAP_MM3 = 3
 
 
 class Script:
@@ -283,7 +305,7 @@ def build_cuts(s):
     def catch(d):
         return f"hook_z + clamp + {BITE + (d + HOOK_GAP) * CATCH:.3f}"
 
-    for side, centre in HOOKS:
+    for side, centre, _ in HOOKS:
         points = [
             (-0.5, catch(-0.5)),
             (TOOTH + 0.2, catch(TOOTH + 0.2)),
@@ -292,9 +314,9 @@ def build_cuts(s):
         ]
         s.wall_profile(f"Groove {side} {centre}", side, centre, "(hook_w + 1)", points, "cut", "Body")
 
-    # USB openings are the size of the plug, because the ports sit inside the board's edge.
+    # The USB opening is the size of the plug, because the port sits inside the board's edge.
     s.sketch("USB openings", "XZ", "y_in - 0.5")
-    for port in PORT_X:
+    for port in OPEN_PORTS:
         s.wall_opening(
             f"x0 + {port} - (plug_w + 1)/2",
             f"x0 + {port} + (plug_w + 1)/2",
@@ -305,7 +327,7 @@ def build_cuts(s):
     s.add("solid.extrude", name="USB cut", sketch="USB openings", distance="wall + 1", operation="cut", targets=["Body"])
     edges = []
     y = V["W"] / 2 - V["wall"] / 2
-    for port in PORT_X:
+    for port in OPEN_PORTS:
         for sx in (-1, 1):
             for sz in (-1, 1):
                 edges.append(
@@ -317,23 +339,13 @@ def build_cuts(s):
                 )
     s.add("solid.fillet", name="USB corners", edges=edges, radius=1.5)
 
-    # Slots beside the antenna, away from anything that could detune it, and by the buzzer.
-    s.sketch("Antenna slots sketch", "XZ", "-W/2 - 0.5")
-    for i in range(8):
-        x = ANTENNA_X + (i - 3.5) * 3.2
-        s.wall_opening(f"x0 + {x - 0.8:.2f}", f"x0 + {x + 0.8:.2f}", "z_ceil - 19", "z_ceil - 2")
-    s.add("sketch.finish")
-    s.add(
-        "solid.extrude",
-        name="Antenna slots",
-        sketch="Antenna slots sketch",
-        distance="wall + 1",
-        operation="cut",
-        targets=["Body"],
-    )
+    # The front wall has no slots: plastic this thin barely affects the antenna, and the unit makes too
+    # little heat to need vents.
+    if not BUZZER_SLOTS:
+        return
     s.sketch("Buzzer slots sketch", "XZ", "y_in - 0.5")
-    for i in range(4):
-        x = 6.07 + i * 3.2
+    for i in range(BUZZER_SLOTS):
+        x = 10.87 + (i - (BUZZER_SLOTS - 1) / 2) * 3.2
         s.wall_opening(f"x0 + {x - 0.8:.2f}", f"x0 + {x + 0.8:.2f}", "z_ceil - 15", "z_ceil - 2")
     s.add("sketch.finish")
     s.add(
@@ -375,34 +387,37 @@ def build_cover(s):
     z = ("cover_t - 1", "cover_t + 3")
     for name, a, b in (("1", "-30 mm", "-20 mm"), ("2", "-8 mm", "8 mm"), ("3", "20 mm", "30 mm")):
         s.box(f"Rim front {name}", (a, b), (f"-y_in + {gap}", f"-y_in + {gap + thick}"), z, "join", "Cover")
+    for name, a, b in (("1", "-17 mm", "8 mm"), ("2", "20 mm", "30 mm")):
         s.box(f"Rim back {name}", (a, b), (f"y_in - {gap + thick}", f"y_in - {gap}"), z, "join", "Cover")
     for name, a, b in (("1", "-25 mm", "-6 mm"), ("2", "6 mm", "25 mm")):
         s.box(f"Rim left {name}", (f"-x_in + {gap}", f"-x_in + {gap + thick}"), (a, b), z, "join", "Cover")
         s.box(f"Rim right {name}", (f"x_in - {gap + thick}", f"x_in - {gap}"), (a, b), z, "join", "Cover")
 
     # Snap hooks. The arm flexes inward as the Cover goes on, then the tooth clicks into its groove.
-    outer, inner = -HOOK_GAP, -HOOK_GAP - HOOK_T
     tip = (TOOTH + HOOK_GAP) * CATCH
-    for side, centre in HOOKS:
+    for side, centre, thick in HOOKS:
+        outer, inner = -HOOK_GAP, -HOOK_GAP - thick
         points = [
-            (inner, "cover_t - 1"),
+            (inner - ROOT, "cover_t - 1"),
             (outer, "cover_t - 1"),
             (outer, "hook_z"),
             (TOOTH, f"hook_z + {tip:.3f}"),
             (TOOTH, f"hook_z + {tip + 0.6:.3f}"),
             (outer, f"hook_z + {tip + 3.6:.3f}"),
             (inner, f"hook_z + {tip + 3.6:.3f}"),
+            (inner, f"cover_t - clamp + {ROOT}"),
+            (inner - ROOT, "cover_t - clamp"),
         ]
         s.wall_profile(f"Hook {side} {centre}", side, centre, "hook_w", points, "join", "Cover")
 
     # Legs that the board rests on, standing beside the remote, not on it.
     for i, (x, y) in enumerate(CORNERS, 1):
         s.cylinder(f"Leg {i}", x, y, "cover_t - 1", "z_board - cover_t + 1", "leg_d", "join", "Cover")
-    # A short ledge along the board's edge under the USB ports, where a plug pushes down. It stops just
+    # A short ledge along the board's edge under the USB port, where a plug pushes down. It stops just
     # below the board, because touching it would take the pressure off the corners.
     s.box(
         "USB ledge",
-        (f"x0 + {ANTENNA_X - 5.5:.2f}", f"x0 + {ANTENNA_X + 5.5:.2f}"),
+        (f"x0 + {OPEN_PORTS[0] - 1.5:.2f}", f"x0 + {OPEN_PORTS[0] + 3.5:.2f}"),
         ("y0 + board_w - 2.2", f"y_in - {gap}"),
         ("cover_t - 1", "z_board - clamp - 0.1"),
         "join",
@@ -415,7 +430,7 @@ def build_cover(s):
     s.box("Rail back", ("rx0", "rx0 + remote_l"), ("ry0 + remote_w - 3", "ry0 + remote_w"), z, "join", "Cover")
 
     # Stops at the remote's ends, leaving the middle open for its wires.
-    fit = 0.4
+    fit = 0.2
     z = ("cover_t - 1", "cover_t + rail_h + 6")
     middle = "ry0 + remote_w/2"
     for name, x in (("key ring", ("rx0 - 2", f"rx0 - {fit}")), ("LED", (f"rx0 + remote_l + {fit}", "rx0 + remote_l + 2"))):
@@ -427,20 +442,22 @@ def build_cover(s):
     clips = (
         ("front 1", lambda d: f"ry0 - ({d})", "rx0 + 2", 8),
         ("front 2", lambda d: f"ry0 - ({d})", "rx0 + 53", 8),
-        ("back 1", lambda d: f"ry0 + remote_w + ({d})", "x0 + 17", 8),
+        ("back 1", lambda d: f"ry0 + remote_w + ({d})", "x0 + 17", 7),
         ("back 2", lambda d: f"ry0 + remote_w + ({d})", "x0 + 59", 6),
     )
+    # The catch is at 45 degrees and passes CLIP_BITE below the remote's top edge.
+    catch = f"z_remote - {CLIP_BITE + CLIP_FIT:.2f}"
     for name, y, start, clip_w in clips:
         sketch = f"Remote clip {name} profile"
         s.sketch(sketch, "YZ", start)
         points = [
-            (0.3, "cover_t - 1"),
-            (1.7, "cover_t - 1"),
-            (1.7, "z_remote + 2.2"),
-            (0.3, "z_remote + 2.2"),
-            (-0.7, "z_remote + 1"),
-            (-0.7, "z_remote + 0.8"),
-            (0.3, "z_remote - 0.2"),
+            (CLIP_FIT, "cover_t - 1"),
+            (CLIP_FIT + CLIP_T, "cover_t - 1"),
+            (CLIP_FIT + CLIP_T, f"{catch} + 2.4"),
+            (CLIP_FIT, f"{catch} + 2.4"),
+            (CLIP_FIT - 1, f"{catch} + 1.2"),
+            (CLIP_FIT - 1, f"{catch} + 1"),
+            (CLIP_FIT, catch),
         ]
         s.add("sketch.line", closed=True, points=[[y(d), z_] for d, z_ in points])
         s.add("sketch.finish")
@@ -470,24 +487,29 @@ def build_reference_parts(s):
     s.box("Ref module", (x(MODULE_X0), x(MODULE_X1)), (y(MODULE_Y0), y(MODULE_Y1)), ("z_c6_top - 0.5", "z_c6_top + c6_top"))
     for i, port in enumerate(PORT_X, 1):
         s.box(f"Ref port {i}", (x(port - 4), x(port + 4)), (y(PORT_Y0), y(PORT_Y1)), ("z_c6_top", "z_c6_top + c6_top"))
+    for port in OPEN_PORTS:
         s.box(
-            f"Ref plug {i}",
+            "Ref plug",
             (f"x0 + {port} - plug_w/2", f"x0 + {port} + plug_w/2"),
             (y(PORT_Y1), f"y0 + {PORT_Y1} + 30"),
             ("z_usb - plug_h/2", "z_usb + plug_h/2"),
         )
-    s.box("Ref MPU6050", (x(1.05), x(17.05)), (y(11.96), y(32.96)), ("z_parts", "z_parts + 5.5"))
+    s.box("Ref MPU6050", (x(1.05), x(17.05)), (y(9.42), y(30.42)), ("z_parts", "z_parts + 5.5"))
     s.box("Ref MOSFET", (x(51.49), x(61.69)), (y(2.83), y(18.32)), ("z_parts", "z_parts + 5"))
-    s.cylinder("Ref buzzer", x(10.87), y(42.78), "z_parts", "9.5 mm", "12.5 mm")
+    s.cylinder("Ref buzzer", x(10.87), y(40.24), "z_parts", "9.5 mm", "12.5 mm")
 
     s.box("Ref button", ("btn_x - 3.25", "btn_x + 3.25"), ("btn_y - 3", "btn_y + 3"), ("z_parts", "z_parts + 3.5"))
     s.cylinder("Ref button stem", "btn_x", "btn_y", "z_parts + 3.5", "btn_h - 3.5", "3.5 mm")
 
     # What sticks out under the board, so nothing on the Cover may come up into it.
     # The holes used, from ../design.md: headers and MPU6050 as bars, and each other leg on its own.
+    # The first unit keeps the earlier layout, so these cover both it and the later units' holes.
     z = ("z_board - solder_tail", "z_board")
-    bars = ((7, 1, 15), (17, 1, 15), (5, 5, 12))
-    legs = ((3, 15), (3, 18), (18, 16), (18, 18), (19, 8), (19, 12), (20, 9), (20, 10), (21, 9), (21, 16), (21, 18), (22, 9), (23, 9), (24, 9), (24, 10))
+    bars = ((7, 1, 15), (17, 1, 15), (5, 4, 12), (24, 9, 13))
+    legs = (
+        (3, 14), (3, 15), (3, 17), (3, 18), (18, 11), (18, 16), (18, 18), (19, 8), (19, 12), (20, 9),
+        (20, 10), (21, 9), (21, 16), (21, 18), (22, 9), (22, 11), (23, 9), (23, 13),
+    )
     first = True
     for row, col0, col1 in bars + tuple((r, c, c) for r, c in legs):
         area = (
@@ -507,8 +529,7 @@ REFS = {
     "Ref module": "#b8b8b8",
     "Ref port 1": "#c9c9c9",
     "Ref port 2": "#c9c9c9",
-    "Ref plug 1": "#555555",
-    "Ref plug 2": "#555555",
+    "Ref plug": "#555555",
     "Ref MPU6050": "#7a3f9e",
     "Ref MOSFET": "#333333",
     "Ref buzzer": "#111111",
@@ -523,8 +544,8 @@ def build_appearance(s):
     s.add("appearance.assign", bodies=["Logo"], color=WHITE)
     for name, color in REFS.items():
         s.add("appearance.assign", bodies=[name], color=color)
-    # They stick out of the back and are not printed, so they stay out of the way unless asked for.
-    s.add("browser.visibility", visible=False, items=["Ref plug 1", "Ref plug 2"])
+    # It sticks out of the back and is not printed, so it stays out of the way unless asked for.
+    s.add("browser.visibility", visible=False, items=["Ref plug"])
     # Its marker shows through the top face, and looks like part of the case.
     s.add("browser.visibility", visible=False, folder="origin")
 
@@ -575,8 +596,10 @@ def report_fit(results):
     for found in (r for r in results if "interferences" in r):
         for hit in found["interferences"]:
             printed = {"Body", "Cover"} & {hit["a"], hit["b"]}
-            hooks = {hit["a"], hit["b"]} == {"Body", "Cover"} and hit["volume_mm3"] <= HOOK_OVERLAP_MM3
-            bad = bool(printed) and not hooks
+            pair = {hit["a"], hit["b"]}
+            hooks = pair == {"Body", "Cover"} and hit["volume_mm3"] <= HOOK_OVERLAP_MM3
+            clips = pair == {"Cover", "Ref remote"} and hit["volume_mm3"] <= CLIP_OVERLAP_MM3
+            bad = bool(printed) and not (hooks or clips)
             failed += bad
             print(f"  {'FAIL' if bad else 'note'}: {hit['a']} overlaps {hit['b']} by {hit['volume_mm3']:.3f} mm3")
         for item in found.get("unchecked", []):

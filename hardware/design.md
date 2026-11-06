@@ -72,7 +72,7 @@ The stack was planned at about 38 mm high: 17 for the remote, 3 for the gap, 1.5
 
 ## 2. Decisions
 
-**The C6 lies across the board, with its USB ports at an edge.** USB is the unit's power source and its flash and debug port, so both ports must stay easy to reach. The C6 is 53 mm long and the board is 50 mm wide, so with its pins in columns 01-15 the USB ports end about 1.6 mm inside the column 18 edge, and the antenna reaches about 4.6 mm past the column 01 edge. Only about 2.2 mm of the antenna lies over the board, above the bare margin, so nothing needs cutting.
+**The C6 lies across the board, with its USB ports at an edge.** USB is the unit's power source and its flash and console port. That is the native port, marked ESP32C6, so the case opens only that one, and the port marked CH343 stays inside, unused. The C6 is 53 mm long and the board is 50 mm wide, so with its pins in columns 01-15 the USB ports end about 1.6 mm inside the column 18 edge, and the antenna reaches about 4.6 mm past the column 01 edge. Only about 2.2 mm of the antenna lies over the board, above the bare margin, so nothing needs cutting.
 
 **The layout follows the owner's board, not the official one.** The owner's board is marked MUSE LAB, and is not an ESP32-C6-DevKitC-1. It has 15 pins per row instead of 16, 25.4 mm between rows instead of 22.86 mm, and a different pin order. SDA and SCL are on the opposite row from GPIO10 and GPIO11. The GPIO numbers do not change, so the firmware does not either.
 
