@@ -154,7 +154,16 @@ static esp_err_t get_page(httpd_req_t *req) {
 }
 
 static void fn_status(yg_engine_t *e, uint32_t now, void *arg) {
-    yg_engine_status_json(e, now, arg, JSON_BUF_SIZE);
+    char *buf = arg;
+    int len = yg_engine_status_json(e, now, buf, JSON_BUF_SIZE);
+    /* The driver is a build-time choice the engine does not know, so append it here. */
+    if (len > 1 && buf[len - 1] == '}' && (size_t)len + 20 < JSON_BUF_SIZE) {
+#if CONFIG_YG_GATE_DRIVER_RF433
+        snprintf(buf + len - 1, (size_t)(JSON_BUF_SIZE - (len - 1)), ",\"driver\":\"rf433\"}");
+#else
+        snprintf(buf + len - 1, (size_t)(JSON_BUF_SIZE - (len - 1)), ",\"driver\":\"mosfet\"}");
+#endif
+    }
 }
 
 static esp_err_t get_status(httpd_req_t *req) {

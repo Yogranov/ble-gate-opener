@@ -135,6 +135,15 @@ pre { margin: 8px 0 0; font-size: 12.5px; white-space: pre-wrap; overflow-wrap: 
       <div class="legend"><span><i style="background:var(--accent)"></i>Sensor, last 2 minutes</span><span><i style="background:var(--warn)"></i>Counts as moving</span><span><i style="background:var(--good)"></i>Car moved</span></div>
     </div>
     <button id="press" class="primary wide">Press the remote</button>
+    <div class="card adv-only" id="rfCard" hidden>
+      <h2>Gate remote</h2>
+      <p class="muted" id="rfState">No remote learned yet.</p>
+      <div class="row">
+        <button id="rfLearn">Learn remote</button>
+        <button id="rfForget" class="danger" hidden>Forget</button>
+      </div>
+      <p class="muted" style="margin:8px 0 0">Hold your gate remote near the unit and press its button a few times. Learning works only for a fixed-code remote.</p>
+    </div>
   </section>
 
   <section id="beacon" hidden>
@@ -428,6 +437,16 @@ function render(s) {
   $("mRssi").textContent = fresh ? s.rssi + " dBm" : "Not heard";
   $("mAdv").textContent = s.adverts_per_s;
   $("mSet").textContent = dbm(s.set_point);
+  if (s.driver === "rf433") {
+    $("press").textContent = s.rf_learned ? "Open the gate" : "Learn a remote first";
+    $("press").disabled = !s.rf_learned;
+    $("rfCard").hidden = false;
+    $("rfState").textContent = s.learning ? "Listening. Hold your remote and press its button a few times."
+      : s.rf_learned ? "A gate remote is learned." : "No remote learned yet.";
+    $("rfForget").hidden = !s.rf_learned;
+  } else {
+    $("rfCard").hidden = true;
+  }
   $("mMoved").textContent = s.moved_recently ? "Yes" : "No";
   $("mTemp").textContent = s.temp_c === null ? "-" : s.temp_c.toFixed(1) + " °C";
   $("mHot").textContent = s.hotspot_on ? clock(s.hotspot_left_s) : "Off";
@@ -507,6 +526,8 @@ async function poll() {
   pollBusy = false;
 }
 $("press").addEventListener("click", act(() => post("/api/press"), "Pressing the remote"));
+$("rfLearn").addEventListener("click", act(() => post("/api/rf/learn"), "Listening for your remote"));
+$("rfForget").addEventListener("click", act(() => post("/api/rf/forget"), "Forgetting the remote"));
 
 /* Beacon */
 let lastPairMode = "idle", pairStartSaves = 0;

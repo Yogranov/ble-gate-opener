@@ -289,6 +289,22 @@ f.onload = async () => {
     js("render")({ ...motionBase, uptime_ms: 9001000, calibrated: false, motion_mg_peak: 500, motion_yaw_peak: 90 });
     out.an_uncalibrated_sensor_leaves_a_gap = js("accelPoints[accelPoints.length - 1].v") === null;
     out.motion_scale_covers_the_threshold = js("niceTop([{ v: 3 }], 40)") >= 40 && js("niceTop([{ v: 260 }], 40)") >= 260 && js("niceTop([{ v: null }], 15)") >= 15;
+
+    // The RF variant's Gate-remote card, driven by the status driver field.
+    if (!q("#advMode").checked) q("#advMode").click();
+    js("render")({ ...js("st"), driver: "rf433", rf_learned: false, learning: false });
+    out.rf_card_appears_on_the_rf_variant = shown(q("#rfCard"));
+    out.rf_press_waits_until_a_remote_is_learned = q("#press").disabled;
+    js("render")({ ...js("st"), driver: "rf433", rf_learned: true, learning: false });
+    out.rf_learned_enables_open_the_gate = !q("#press").disabled && shown(q("#rfForget"));
+    const rfPosts = [], beforeRf = win.fetch;
+    win.fetch = (path, options) => { if (options && options.method === "POST") rfPosts.push(path); return realFetch(path, options); };
+    q("#rfLearn").click(); await wait(50);
+    q("#rfForget").click(); await wait(50);
+    out.rf_buttons_post_learn_and_forget = rfPosts.includes("/api/rf/learn") && rfPosts.includes("/api/rf/forget");
+    win.fetch = beforeRf;
+    js("render")({ ...js("st"), driver: "mosfet" });
+    out.mosfet_variant_hides_the_rf_card = !shown(q("#rfCard"));
   } catch (e) {
     out.script_error = String(e);
   }

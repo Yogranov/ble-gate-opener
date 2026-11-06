@@ -83,7 +83,7 @@ def trip_records(number):
     return out
 
 
-state = {"trip": 43, "pair_mode": "idle", "pressing_until": 0}
+state = {"trip": 43, "pair_mode": "idle", "pressing_until": 0, "driver": "mosfet", "rf_learned": False, "learning": False}
 
 
 polls = {"count": 200}
@@ -106,6 +106,7 @@ def status():
         "sensor": "ok", "sensor_err": "none",
         "sensor_id": 104, "temp_c": 36.5, "hotspot_on": True, "hotspot_left_s": max(0, 300 - int(now - START)),
         "clients": 1, "pair_mode": state["pair_mode"], "pair_saves": 0, "debug": True, "fallback": False, "capturing": False,
+        "driver": state["driver"], "rf_learned": state["rf_learned"], "learning": state["learning"],
     }
 
 
@@ -179,6 +180,13 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/api/press":
             state["pressing_until"] = time.time() + 2
+        elif path == "/api/rf/learn":
+            state["rf_learned"] = True
+            state["learning"] = False
+        elif path == "/api/rf/forget":
+            state["rf_learned"] = False
+        elif path == "/api/_mock_rf433":
+            state["driver"] = "rf433"
         elif path == "/api/pair/scan":
             state["pair_mode"] = "list"
         elif path == "/api/pair/auto":
