@@ -29,6 +29,7 @@ static const char *TAG = "yg_rf";
 #define CC1101_READ 0x80
 #define CC1101_BURST 0x40
 #define CC1101_REG_VERSION 0x31 /* read as a status register: READ | BURST | addr */
+#define CC1101_REG_PATABLE 0x3E
 
 /* 1 microsecond per RMT tick keeps OOK timing exact. The 15-bit tick field caps a
  * single level at 32767 us, which is wider than any inter-frame gap we expect. */
@@ -66,6 +67,13 @@ static const uint8_t CC1101_CONFIG[][2] = {
     {0x12, 0x30}, /* MDMCFG2: ASK/OOK, no sync word */
     {0x15, 0x15}, /* DEVIATN */
     {0x18, 0x18}, /* MCSM0: auto-calibrate on idle->rx/tx */
+    /* AGCCTRL2: the radio listens only to learn, with the remote held at the unit, so it
+     * trades sensitivity for quiet. At full gain with no carrier, the AGC lifts noise to
+     * the OOK decision level and GDO0 chatters: a capture never sees the idle that ends
+     * it, and noise fills the gaps between frames. Capping the LNA 17 dB down and the top
+     * three DVGA steps keeps noise well under it; a remote across the room is still far
+     * above. MAGN_TARGET stays 33 dB. A first guess, to tune on the bench. */
+    {0x1B, 0xFB},
     {0x21, 0xB6}, /* FREND1 */
     {0x22, 0x11}, /* FREND0 */
     {0x23, 0xE9}, /* FSCAL3 */
@@ -85,6 +93,14 @@ static void cc1101_write(uint8_t addr, uint8_t value) {
     spi_device_polling_transmit(s_spi, &t);
 }
 
+/* OOK sends PATABLE[0] for a 0 and PATABLE[1] for a 1 (FREND0.PA_POWER = 1). Reset leaves
+ * 0xC6 then 0x00, which would key the carrier on in the gaps and off in the pulses. */
+static void cc1101_write_patable(void) {
+    const uint8_t tx[3] = {CC1101_REG_PATABLE | CC1101_BURST, 0x00, 0xC0}; /* off, +10 dBm at 433 MHz */
+    spi_transaction_t t = {.length = 24, .tx_buffer = tx};
+    spi_device_polling_transmit(s_spi, &t);
+}
+
 static uint8_t cc1101_read_status(uint8_t addr) {
     uint8_t tx[2] = {(uint8_t)(addr | CC1101_READ | CC1101_BURST), 0};
     uint8_t rx[2] = {0};
@@ -99,6 +115,7 @@ static void cc1101_configure(void) {
     for (size_t i = 0; i < sizeof(CC1101_CONFIG) / sizeof(CC1101_CONFIG[0]); i++) {
         cc1101_write(CC1101_CONFIG[i][0], CC1101_CONFIG[i][1]);
     }
+    cc1101_write_patable();
     cc1101_strobe(CC1101_SIDLE);
 }
 
