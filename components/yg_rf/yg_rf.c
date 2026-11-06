@@ -1,14 +1,18 @@
 #include "yg_rf.h"
 
+#include "sdkconfig.h"
+
+#if CONFIG_YG_GATE_DRIVER_RF433
+
 #include "driver/gpio.h"
 #include "driver/rmt_encoder.h"
 #include "driver/rmt_rx.h"
 #include "driver/rmt_tx.h"
 #include "driver/spi_master.h"
+#include "esp_attr.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "sdkconfig.h"
 
 static const char *TAG = "yg_rf";
 
@@ -189,7 +193,7 @@ void yg_rf_init(void) {
         .trans_queue_depth = 2,
     };
     ESP_ERROR_CHECK(rmt_new_tx_channel(&txc, &s_tx_chan));
-    const rmt_copy_encoder_config_t enc = {0};
+    const rmt_copy_encoder_config_t enc = {};
     ESP_ERROR_CHECK(rmt_new_copy_encoder(&enc, &s_copy_encoder));
 
     const rmt_rx_channel_config_t rxc = {
@@ -264,3 +268,8 @@ void yg_rf_listen(bool on, yg_rf_capture_cb_t cb) {
         rmt_disable(s_rx_chan);
     }
 }
+
+#endif /* CONFIG_YG_GATE_DRIVER_RF433 */
+
+/* Keeps the translation unit non-empty on the MOSFET build, where the body is excluded. */
+typedef int yg_rf_placeholder_t;

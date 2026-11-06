@@ -9,6 +9,7 @@ idf_component_register(
         "yg_motion.c"
         "yg_pairing.c"
         "yg_record.c"
+        "yg_rfcode.c"
         "yg_ring.c"
         "yg_sensor_health.c"
         "yg_settings.c"
