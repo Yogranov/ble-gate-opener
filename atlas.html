@@ -638,7 +638,7 @@ footer { border-top:1px solid var(--rule); color:var(--ink-2); font-size:15px }
   <h2>Build the unit</h2>
   <p>The car unit is hand-built on a 50 &times; 70&nbsp;mm matrix board. This section gives the overview. The hole-by-hole drawings, build order and tests are in <a href="hardware/board-layout.html">hardware/board-layout.html</a>, and the reasons behind each part are in <a href="hardware/design.md">hardware/design.md</a>.</p>
   <div class="pair">
-    <div class="tile"><b>You need</b><span>MuseLab ESP32-C6 board with two USB-C ports. The ESP32-C6-DevKitC-1 has the same GPIOs, but its size and pin order would not fit this layout. MPU6050 module. P30N06LE MOSFET, or an IRLB8743, because an IRF520 or IRF540N may not turn on at 3.3&nbsp;V. A 220 &Omega; and a 10 k&Omega; resistor. A gate remote already paired with your gate. A BLE beacon, normally an iBeacon. Matrix board, headers, thin wire and hot glue.</span></div>
+    <div class="tile"><b>You need</b><span>MuseLab ESP32-C6 board with two USB-C ports. The ESP32-C6-DevKitC-1 has the same GPIOs, but its size and pin order would not fit this layout. MPU6050 module. P30N06LE MOSFET, or an IRLB8743, because an IRF520 or IRF540N may not turn on at 3.3&nbsp;V. A 220 &Omega; and a 10 k&Omega; resistor. A gate remote already paired with your gate. A BLE beacon, normally an iBeacon. Matrix board, headers, thin wire, a strip of Kapton or electrical tape, and hot glue.</span></div>
     <div class="tile"><b>Optional</b><span>An active buzzer, under about 20&nbsp;mA at 3.3&nbsp;V. Leaving it off breaks nothing. A 6 &times; 6&nbsp;mm tactile button, which is how you start the hotspot from outside the case. The BOOT button on the C6 does the same, but it is out of reach inside the case, and so a unit with no tactile button needs USB or an open case.</span></div>
   </div>
 
@@ -693,7 +693,7 @@ footer { border-top:1px solid var(--rule); color:var(--ink-2); font-size:15px }
   <div class="notes">
     <p class="note"><svg viewBox="0 0 22 22" aria-hidden="true"><path class="tri" d="M11 2 21 20H1z"/><path d="M11 8v6M11 16v2" stroke="#17191b" stroke-width="2"/></svg><span><b>Do not swap the two resistors.</b> They form a divider on the gate. Swapped, it reaches under 0.1&nbsp;V and the remote will not press. Check them with a meter, because the colour bands can mislead.</span></p>
     <p class="note"><svg viewBox="0 0 22 22" aria-hidden="true"><path class="tri" d="M11 2 21 20H1z"/><path d="M11 8v6M11 16v2" stroke="#17191b" stroke-width="2"/></svg><span><b>Find the remote's (+) wire with a meter,</b> battery in. The wire under the red probe when the reading is positive is (+). Reversed, the remote acts as if its button is held. Wire colours do not tell you. On the BFT remote this was built around, the black wire is (+).</span></p>
-    <p class="note"><svg viewBox="0 0 22 22" aria-hidden="true"><path class="tri" d="M11 2 21 20H1z"/><path d="M11 8v6M11 16v2" stroke="#17191b" stroke-width="2"/></svg><span><b>Lay the MOSFET flat with its print facing the board.</b> With the print up, G and S swap in these holes and the remote will not press.</span></p>
+    <p class="note"><svg viewBox="0 0 22 22" aria-hidden="true"><path class="tri" d="M11 2 21 20H1z"/><path d="M11 8v6M11 16v2" stroke="#17191b" stroke-width="2"/></svg><span><b>Lay the MOSFET flat, print up, on a strip of tape.</b> Its metal tab is the drain. The first unit was built print down with different wiring, so never flip a MOSFET on a board wired for the other way, or the remote will not press.</span></p>
     <p class="note"><svg viewBox="0 0 22 22" aria-hidden="true"><path class="tri" d="M11 2 21 20H1z"/><path d="M11 8v6M11 16v2" stroke="#17191b" stroke-width="2"/></svg><span><b>Keep to the pins below.</b> GPIO 18 to 23 are pulled up during reset, which could press the remote at every ignition. A button on GPIO 9 that is held at power-on stops the unit starting.</span></p>
   </div>
 
@@ -1053,7 +1053,7 @@ python tools/yg_logs.py replay logs/&lt;file&gt;.ndjson --trip 12 --set motion_a
         <tr class="gh"><td colspan="2">The hardware</td></tr>
         <tr><td>Red double blink, or a motion sensor warning on the page</td><td>The unit is on the fixed threshold. The page says whether the sensor is not found, giving wrong readings, not answering or frozen. Check its four wires. It recovers by itself after 5&nbsp;s of good readings.</td></tr>
         <tr><td>The remote's LED stays on</td><td>Its (+) and (&minus;) wires are swapped, so the MOSFET's internal diode is holding the button. Swap them.</td></tr>
-        <tr><td>Press the remote does nothing to the remote</td><td>Check the resistors are not swapped, and that the MOSFET is mounted with its print facing the board. With the unit powered, its gate should reach about 3.2&nbsp;V during a press.</td></tr>
+        <tr><td>Press the remote does nothing to the remote</td><td>Check the resistors are not swapped, and that the MOSFET lies the way its board is wired for: print up on boards built to the current layout, print down on the first unit. With the unit powered, its gate should reach about 3.2&nbsp;V during a press.</td></tr>
         <tr><td>Pairing by holding close keeps timing out</td><td>The beacon must read at least &minus;45&nbsp;dBm and beat every other beacon by 15&nbsp;dB for 2&nbsp;s. Hold it right against the unit, or type its MAC instead.</td></tr>
         <tr><td>No beep when the gate opens</td><td>That is correct. It only sounds when someone does something on the unit, or when something is wrong.</td></tr>
         <tr><td>The buzzer is silent</td><td>Try Beep on the System tab. Check Buzzer is on and Buzzer type is active in Settings, and restart if it ever beeped as passive.</td></tr>
@@ -1092,6 +1092,7 @@ python tools/yg_logs.py replay logs/&lt;file&gt;.ndjson --trip 12 --set motion_a
     </ul></div>
     <div class="tile"><b>Not tested</b><ul>
       <li>A real press opening the gate, and how far the remote reaches from the glove box</li>
+      <li>The board layout of 5 November 2026, for the next units: the MOSFET print up with its gate wiring changed, and the motion sensor and buzzer one column over. Nothing has been built to it yet, and the first unit keeps the earlier layout</li>
       <li>Starting reliably on a phone charger, over many drives. On the first day, on a car screen's USB port, 4 of 6 power-ups failed 15 to 117 times first, as brownouts. In a later test the screen's ports failed up to 7 times, and a good charger none of 4 starts, only one of them with the engine. No voltage was measured</li>
       <li>Holding the real button for 15&nbsp;s, and hearing its sound on the buzzer. On the bench the hold was faked in firmware</li>
       <li>The targets below: one day is far too few, and door slams have not been counted. On the first drives, pull-outs were detected about 4&nbsp;s after the car moved</li>
@@ -1453,20 +1454,21 @@ rerun(false);
 
 /* The board picture. Holes are (column, row), the same as hardware/board-layout.html. */
 const WIRES = [
-  { step:4, net:"nsda", pts:["G2",[2,6],[8,6],"E8"] },
-  { step:4, net:"nscl", pts:["G3",[4,6.45],[6.6,6.45],"E7"] },
-  { step:5, net:"ngnd", pts:["G1",[1.5,5.6],[5.4,5.6],"E6"] },
-  { step:5, net:"n3v3", pts:["Q2",[2.5,16],[2.5,6.6],"E5"] },
-  { step:6, net:"ng1", pts:["S12","Q11"] },
-  { step:7, net:"ng1", pts:["S8","T9"] },
-  { step:8, net:"ng1", pts:["T10","T9"] },
-  { step:8, net:"ngnd", pts:["X10","X9"] },
-  { step:9, net:"ngnd", pts:["V9","W9","X9"] },
-  { step:9, net:"ngnd", pts:["Q1","V9"] },
-  { step:11, net:"ng2", pts:["Q12",[12.5,16],[16,8],"C18"] },
-  { step:11, net:"ngnd", pts:["G14","C15"] },
+  { step:4, net:"nsda", pts:["G2",[2,6],[7,6],"E7"] },
+  { step:4, net:"nscl", pts:["G3",[4,6.45],[5.6,6.45],"E6"] },
+  { step:5, net:"ngnd", pts:["G1",[1.5,5.6],[4.4,5.6],"E5"] },
+  { step:5, net:"n3v3", pts:["Q2",[2.5,16],[2.5,6.6],"E4"] },
+  { step:6, net:"ng1", pts:["R11","Q11"] },
+  { step:7, net:"ng1", pts:["V11","V9"] },
+  { step:8, net:"ng1", pts:["W9","V9"] },
+  { step:8, net:"ngnd", pts:["W13","X13"] },
+  { step:9, net:"ngnd", pts:["X9","X10","X11","X12","X13"] },
+  { step:9, net:"ngnd", pts:["Q1","T9"] },
+  { step:9, net:"ngnd", pts:["T9",[7.6,20.4],[7.6,23.6],"X9"] },
+  { step:11, net:"ng2", pts:["Q12",[12.5,16],[16,8],"C17"] },
+  { step:11, net:"ngnd", pts:["G14","C14"] },
   { step:12, net:"nbtn", pts:["Q7",[7,17.5],[15.5,17.5],"R16"] },
-  { step:12, net:"ngnd", pts:["U18",[17,22],[10.5,22],"W9"] },
+  { step:12, net:"ngnd", pts:["U18",[17,23.5],[13.5,23.5],"X13"] },
   { step:13, net:"nrem", pts:["U9",[7,23],[7,26.28]], end:"remote +", endRight:true },
   { step:13, net:"ngnd", pts:["X9",[9,26.28]], end:"remote −" },
 ];
@@ -1502,27 +1504,29 @@ function drawBoard() {
   /* Pins that carry something, on both rows. */
   for (let c = 1; c <= 15; c++) [7, 17].forEach(r => { parts += `<circle cx="${X(c)}" cy="${Y(r)}" r="3.4" fill="#e3e6e8" stroke="#0e1620"/>`; });
 
-  parts += rect(4.37, -.9, 12.63, 5.43, "#1864ab", `rx="3" stroke="#0b3c6e" stroke-width="1.5"`);
-  parts += rect(7.2, .1, 9.8, 2.7, "#17191b", `rx="1"`);
-  parts += text(8.5, 3.45, "MPU6050 motion sensor", 10.5, "#ffffff");
-  for (let c = 5; c <= 12; c++) parts += `<circle cx="${X(c)}" cy="${Y(5)}" r="3.2" fill="#e3e6e8" stroke="#0b3c6e"/>`;
-  ["VCC", "GND", "SCL", "SDA"].forEach((n, i) => { parts += text(5 + i, 4.3, n, 7.5, "#d6e9fb", "middle", 400); });
+  parts += rect(3.37, -.9, 11.63, 5.43, "#1864ab", `rx="3" stroke="#0b3c6e" stroke-width="1.5"`);
+  parts += rect(6.2, .1, 8.8, 2.7, "#17191b", `rx="1"`);
+  parts += text(7.5, 3.45, "MPU6050 motion sensor", 10.5, "#ffffff");
+  for (let c = 4; c <= 11; c++) parts += `<circle cx="${X(c)}" cy="${Y(5)}" r="3.2" fill="#e3e6e8" stroke="#0b3c6e"/>`;
+  ["VCC", "GND", "SCL", "SDA"].forEach((n, i) => { parts += text(4 + i, 4.3, n, 7.5, "#d6e9fb", "middle", 400); });
 
-  parts += `<circle cx="${X(16.5)}" cy="${Y(3)}" r="${2.46 * P}" fill="#17191b" stroke="#55595e" stroke-width="2"/><circle cx="${X(16.5)}" cy="${Y(3)}" r="6" fill="#55595e"/>`;
-  parts += text(16.5, 4.3, "Buzzer", 10.5, "#ffffff");
+  parts += `<circle cx="${X(15.5)}" cy="${Y(3)}" r="${2.46 * P}" fill="#17191b" stroke="#55595e" stroke-width="2"/><circle cx="${X(15.5)}" cy="${Y(3)}" r="6" fill="#55595e"/>`;
+  parts += text(15.5, 4.3, "Buzzer", 10.5, "#ffffff");
 
   const resistor = (c1, r1, c2, r2, bodyFill, label, labelAt) => {
     const lead = (a, b, c, d) => `<line x1="${X(a)}" y1="${Y(b)}" x2="${X(c)}" y2="${Y(d)}" stroke="#d0d4d8" stroke-width="2"/>`;
     return lead(c1, r1, c2, r2) + rect(bodyFill[0], bodyFill[1], bodyFill[2], bodyFill[3], bodyFill[4], `rx="4" stroke="#6f5a35"`) + text(labelAt[0], labelAt[1], label, 9.5, "#ffffff");
   };
-  parts += resistor(8, 19, 12, 19, [8.76, 18.51, 11.24, 19.49, "#d9b98a"], "220 &Omega;", [10, 18.05]);
-  parts += resistor(10, 20, 10, 24, [9.51, 20.76, 10.49, 23.24, "#d9b98a"], "10 k&Omega;", [11.6, 23]);
+  parts += resistor(11, 18, 11, 22, [10.51, 18.76, 11.49, 21.24, "#d9b98a"], "220 &Omega;", [12.9, 20]);
+  parts += resistor(9, 23, 13, 23, [9.76, 22.51, 12.24, 23.49, "#d9b98a"], "10 k&Omega;", [14.4, 22.2]);
 
-  parts += rect(.77, 19, 6.87, 23, "#a9afb5", `rx="3" stroke="#60656a"`) + `<circle cx="${X(2.03)}" cy="${Y(21)}" r="${.71 * P}" fill="#2d7a57" stroke="#60656a"/>`;
+  /* Print up, on tape: the metal tab sticks out past the black plastic at the column 01 end. */
+  parts += rect(.77, 19, 3.25, 23, "#a9afb5", `rx="3" stroke="#60656a"`) + `<circle cx="${X(2.03)}" cy="${Y(21)}" r="${.71 * P}" fill="#2d7a57" stroke="#60656a"/>`;
+  parts += rect(3.25, 19, 6.87, 23, "#1f2225", `rx="3" stroke="#0e1012"`);
   [20, 21, 22].forEach((r, i) => {
-    parts += `<line x1="${X(6.87)}" y1="${Y(r)}" x2="${X(9)}" y2="${Y(r)}" stroke="#d0d4d8" stroke-width="3"/>` + text(7.9, r - .5, "GDS"[i], 9.5, "#ffffff");
+    parts += `<line x1="${X(6.87)}" y1="${Y(r)}" x2="${X(9)}" y2="${Y(r)}" stroke="#d0d4d8" stroke-width="3"/>` + text(7.9, r - .5, "SDG"[i], 9.5, "#ffffff");
   });
-  parts += text(4.4, 20.6, "MOSFET", 11, "#17191b") + text(4.4, 21.8, "print down", 9, "#2a2d30", "middle", 400);
+  parts += text(5.06, 20.6, "MOSFET", 11, "#ffffff") + text(5.06, 21.8, "print up", 9, "#c9ced3", "middle", 400);
 
   parts += rect(15.82, 18.32, 18.18, 20.68, "#2b2e32", `rx="2" stroke="#101214"`) + `<circle cx="${X(17)}" cy="${Y(19.5)}" r="${.69 * P}" fill="#5a5f64" stroke="#101214"/>`;
   parts += text(15.5, 19.5, "Button", 10.5, "#ffffff", "end");

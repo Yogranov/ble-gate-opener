@@ -17,6 +17,7 @@ Sizes are the owner's measurements, except the buzzer, which is estimated from a
 | 10 kΩ resistor | | Gate pull-down |
 | Active buzzer | About 12.5 across | Beeps, on by default |
 | Tactile button, through-hole | 6.5 × 6, 6 tall | Same gestures as BOOT |
+| Kapton or electrical tape | About 12 × 18 | Keeps the MOSFET's metal tab off the pads |
 | BFT MITTO B RCB02 remote, on its own battery | 64 × 40 × 17 | Sends the gate signal |
 
 ### Details of the real parts
@@ -101,13 +102,13 @@ The remote's current is not published, and is estimated at tens of mA. At that l
 
 **Nothing under the C6 except its headers.** The owner's choice. The C6 sits across the middle of the board, leaving room above and below it, and it can be removed without disturbing anything. Wires may still pass under it on the solder side.
 
-**MPU6050 and buzzer above the C6.** SDA and SCL are on row G, so the MPU6050's wires stay short. It starts at column 05 rather than 01 to keep it about 12.5 mm from the antenna, which leaves room for the buzzer to its right, with a gap of about 3.6 mm. This gives the parts below the C6 more room, and the buzzer takes its ground from G14 beside it. Its signal wire is longer, because GPIO11 is on row Q. Being this close to the motion sensor should not matter, because the buzzer's tone is far above the sensor's 10 Hz filter.
+**MPU6050 and buzzer above the C6.** SDA and SCL are on row G, so the MPU6050's wires stay short. It starts at column 04, about 10.5 mm from the antenna, which leaves room for the buzzer to its right, with a gap of about 3.6 mm. The buzzer sits one column in from the board's edge, about 3.5 mm from it and clear of the corner hole. The first unit has both one column further toward the USB end, which left its buzzer about 1 mm from the edge. This gives the parts below the C6 more room, and the buzzer takes its ground from G14, straight below it. Its signal wire is longer, because GPIO11 is on row Q. Being this close to the motion sensor should not matter, because the buzzer's tone is far above the sensor's 10 Hz filter.
 
-**MOSFET and resistors below the C6, next to GPIO10.** The resistors' own leads make the links from GPIO10 to the gate, so that path has no separate wires to break. Each resistor spans four holes, because a body of about 6.3 mm does not fit flat across two. The MOSFET's legs need about 4.3 mm before they can bend, so their holes are in column 09. These positions follow a dry fit on the real board.
+**MOSFET and resistors below the C6, next to GPIO10.** The resistors' own leads make the links from GPIO10 to the gate, so that path has no separate wires to break. Each resistor spans four holes, because a body of about 6.3 mm does not fit flat across two. The MOSFET's legs need about 4.3 mm before they can bend, so their holes are in column 09. The 220 Ω runs down column 11, so its lead goes straight up to Q11 and stays clear of Q10, which is GPIO8. These positions follow a dry fit on the real board.
 
 **The two resistors must not be swapped.** They form a divider on the gate. With 220 Ω in series and 10 kΩ to ground, the gate reaches about 3.2 V. Swapped, it reaches under 0.1 V, and with 10 kΩ in both places it reaches about 1.65 V, so the remote will not press reliably. Use a meter to tell them apart. The owner's beige resistor with 4 bands is 10 kΩ. The blue one with 5 bands reads as 220 Ω from one end and 10 kΩ from the other, and measured about 220 Ω on the meter.
 
-**MOSFET lies flat with the print facing the board.** The metal tab is the drain, so it must not rest on the pads. With the print up, G and S would swap in these holes, and the remote would not press. Lying flat also keeps it low and stops vibration working on its legs.
+**MOSFET lies flat, print up, on tape.** Print up, its marking can be read and its legs checked by eye, which is easier to get right than a pen mark on a part lying face down. Its metal tab is the drain and faces the board, so a strip of tape goes under it. Only unused pads lie under it, but a drain touching ground would hold the remote's button down, and the firmware's time limit on a press cannot stop that. Print up, S lands in T9 and G in V9, so the gate network was laid out for that on 2026-11-05. The first unit was built print down, with the earlier wiring that puts G in T9, and stays as it is. Never flip a MOSFET on a board wired for the other way, or the remote will not press. Lying flat also keeps it low and stops vibration working on its legs.
 
 ## 3. Circuit
 
@@ -154,14 +155,14 @@ Of the two USB ports, the one marked ESP32C6, near row G, is the native USB port
 | Part | Holes | Notes |
 |---|---|---|
 | Female headers | Rows G and Q, columns 01-15 | |
-| MPU6050 | Row E: VCC E5, GND E6, SCL E7, SDA E8, XDA E9, XCL E10, AD0 E11, INT E12 | Chip side up, body toward row A. Long pin ends down, trimmed after soldering. Solder all 8 pins for strength. A dab of glue under the far edge |
-| 220 Ω resistor | S8 to S12 | Lying flat |
-| MOSFET | G T9, D U9, S V9 | Print facing the board, legs toward column 09, body toward column 01. Glue it down |
-| 10 kΩ resistor | T10 to X10 | Lying flat |
-| Buzzer | + C18, − C15 | The + is on the outside, nearest the board's edge |
+| MPU6050 | Row E: VCC E4, GND E5, SCL E6, SDA E7, XDA E8, XCL E9, AD0 E10, INT E11 | Chip side up, body toward row A. Long pin ends down, trimmed after soldering. Solder all 8 pins for strength. A dab of glue under the far edge |
+| 220 Ω resistor | R11 to V11 | Lying flat, along column 11 |
+| MOSFET | S T9, D U9, G V9 | Print up, on a strip of tape, legs toward column 09, body toward column 01. Glue it down at its edges |
+| 10 kΩ resistor | W9 to W13 | Lying flat, along row W |
+| Buzzer | + C17, − C14 | The + is on the outside, nearest the board's edge |
 | Button | R16, R18, U16, U18 | Stem up. 4 holes from row R to row U, and 3 holes from column 16 to column 18 |
 
-Mark the gate leg with a pen before bending, just past the wide part of the legs. With the print facing you and the legs down, the order is G, D, S from the left. As fitted, you see its metal back and cannot read the print, and G is the leg nearest the C6. With the print up, G and S swap in these holes, G lands on V9, which is ground, and the remote will not press.
+Stick the tape down first, over columns 01 to 07 of rows S to W. Bend the legs back, away from the print, just past their wide part. With the print facing you and the legs down, the order is G, D, S from the left. As fitted, print up, S is the leg nearest the C6 and G the one nearest row X. Lying print down in these holes, G would land on T9, which is ground, and the remote would not press.
 
 ## 6. Solder side
 
@@ -169,20 +170,21 @@ Use thin insulated wire, except where bare offcuts or part leads are noted.
 
 | From | To | Net | Notes |
 |---|---|---|---|
-| G2 | E8 | SDA | Crosses SCL, which is fine |
-| G3 | E7 | SCL | |
-| G1 | E6 | MPU GND | |
-| Q2 | E5 | MPU VCC | Up under the C6, between columns 02 and 03 |
-| S12 | Q11 | GPIO10 to the 220 Ω | The resistor's lead. Do not touch Q10 or Q12 |
-| S8 | T9 | The 220 Ω to the gate | The resistor's lead |
-| T10 | T9 | The 10 kΩ to the gate | The resistor's lead |
-| X10 | X9 | The 10 kΩ to ground | The resistor's lead |
-| V9 | X9 | Ground, through W9 | Bare offcut, soldered at all three holes |
-| Q1 | V9 | GND to the source | |
-| Q12 | C18 | GPIO11 to buzzer + | Up under the C6 and past the end of row G |
-| G14 | C15 | Buzzer − to GND | Do not touch G15, which is 5V |
+| G2 | E7 | SDA | Crosses SCL, which is fine |
+| G3 | E6 | SCL | |
+| G1 | E5 | MPU GND | |
+| Q2 | E4 | MPU VCC | Up under the C6, between columns 02 and 03 |
+| R11 | Q11 | GPIO10 to the 220 Ω | The resistor's lead, straight up. Do not touch Q10 or Q12 |
+| V11 | V9 | The 220 Ω to the gate | The resistor's lead, along row V. Do not touch U9 |
+| W9 | V9 | The 10 kΩ to the gate | The resistor's lead |
+| W13 | X13 | The 10 kΩ to ground | The resistor's lead |
+| X9 | X13 | Ground, through X10 to X12 | Bare offcut, soldered at all five holes |
+| Q1 | T9 | GND to the source | |
+| T9 | X9 | The source to ground | Beside column 09, clear of U9 and V9 |
+| Q12 | C17 | GPIO11 to buzzer + | Up under the C6 and past the end of row G |
+| G14 | C14 | Buzzer − to GND | Do not touch G15, which is 5V |
 | Q7 | R16 | GPIO7 to button | Along the gap between rows Q and R |
-| U18 | W9 | Button to GND | R16 and U18 are diagonally opposite legs |
+| U18 | X13 | Button to GND | R16 and U18 are diagonally opposite legs |
 | U9 | Remote (+) | MOSFET drain | Through the oval pad at column 07, by the bottom edge. Those pads have no hole, so tack the wire down with glue |
 | X9 | Remote (−) | MOSFET source | Through the oval pad at column 09, by the bottom edge. Same glue |
 
@@ -196,9 +198,9 @@ Add a dab of hot glue at two header corners, or the USB cable and vibration will
 
 - The C6 fits: pin rows in rows G and Q, columns 01-15, and row Q reads as in section 4.
 - With the C6 on its headers, the USB cable plugs into both ports without touching anything.
-- On 3.3 V, the buzzer beeps steadily, which shows it is active, and draws under about 20 mA. Jumpered to GPIO11, it is loud enough with the glove box closed. Its pins fit C15 and C18.
+- On 3.3 V, the buzzer beeps steadily, which shows it is active, and draws under about 20 mA. Jumpered to GPIO11, it is loud enough with the glove box closed. Its pins fit C14 and C17.
 - The button's legs fit R16, R18, U16 and U18, and once soldered, it measures about 6.5 mm from the board's top to the top of its stem. If not, change `btn_h` in [the case](case/README.md).
-- A meter confirms the resistors: about 220 Ω for row S, and about 10 kΩ for column 10.
+- A meter confirms the resistors: about 220 Ω for column 11, and about 10 kΩ for row W.
 - Before it is glued, the meter proves the MOSFET's legs. Touch all three together, then hold it with the print facing you and the legs down. On diode test, red on the right leg and black on the middle leg reads about 0.5 to 0.7 V, and the left leg reads open to the middle leg both ways. That makes the left leg G.
 - With 3.3 V on G and GND on S, D to S reads about 0 Ω. With G joined to S, it reads open. The meter's red probe goes on D and black on S.
 - Held against the back of the board, in the glove box, the remote opens the gate reliably from the parking spot.
@@ -209,10 +211,11 @@ Add a dab of hot glue at two header corners, or the USB cable and vibration will
 - Q1 to Q2 (GND to 3V3) is not shorted.
 - Q10 to Q11 is not shorted. GPIO8 is pulled up on the C6, so a bridge here could press the remote at every start.
 - These neighbours are not shorted either: G1 to G2, G2 to G3, G3 to G4, G13 to G14, Q2 to Q3, Q6 to Q7, Q7 to Q8, Q11 to Q12 and Q12 to Q13.
-- E5 to E6 (MPU6050 VCC to GND) is not shorted.
-- S8 to S12 reads about 220 Ω.
+- E4 to E5 (MPU6050 VCC to GND) is not shorted.
+- R11 to V11 reads about 220 Ω.
 - T9 to V9 reads about 10 kΩ.
-- V9 to Q1 reads about 0 Ω.
+- T9 to Q1, and X9 to Q1, read about 0 Ω.
+- With red on U9 and black on T9, it reads open. Near 0 Ω means the MOSFET's tab is touching something, which would hold the remote's button down.
 - With the remote connected and its battery in, its LED is off. If it is on, (+) and (−) are swapped.
 
 **With the C6 plugged in:**
@@ -220,7 +223,7 @@ Add a dab of hot glue at two header corners, or the USB cable and vibration will
 - Before connecting USB, Q15 to Q1 (5V to GND) is not shorted.
 - Flash the current firmware, because older builds don't read the button on GPIO7. An old build folder needs `idf.py reconfigure` once.
 - Power cycle the unit several times. The remote LED must stay off at every start.
-- Press the remote from the page. Its LED lights for the press, and U9 to V9 reads under about 50 mV.
+- Press the remote from the page. Its LED lights for the press, and U9 to T9 reads under about 50 mV.
 - Use the Beep button on the page. The buzzer is on and set to active by default. If it ever beeped as the passive type, restart the unit first, or it stays silent.
 - Click the external button once. It presses the remote.
 - The page shows the motion sensor as found.

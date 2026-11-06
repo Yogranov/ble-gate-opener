@@ -114,10 +114,10 @@ GND    ────────────────────────�
       <li><b>C6 fit.</b> Push the header pins into the board, without solder. The pin rows should land in rows G and Q, from column 01 to column 15, with the antenna past the column 01 edge and the USB ports at the column 18 edge. Row Q should read from the left: GND, 3V3, RST, 4, 5, 6, 7, 0, 1, 8, 10, 11, 12, 13, 5V.</li>
       <li><b>USB ports.</b> With the C6 on its headers, the USB cable should plug into both ports without touching anything.</li>
       <li><b>Active buzzer.</b> Put the meter on mA between 3.3 V and buzzer +, with buzzer − to GND. An active buzzer beeps steadily, and a passive one only clicks. It should read under about 20 mA. Then jumper it to GPIO11 and GND, set its type to active on the unit's web page, and use the Beep button. It should be loud enough with the glove box closed.</li>
-      <li><b>Buzzer pins.</b> Its pins should fit holes C15 and C18, with 2 holes between them.</li>
+      <li><b>Buzzer pins.</b> Its pins should fit holes C14 and C17, with 2 holes between them.</li>
       <li><b>Remote range.</b> Hold the remote against the back of the board and press its button by hand from the parking spot, with the board in the glove box. If the gate doesn't open reliably, keep the remote off the board on longer wires. Everything else stays the same.</li>
       <li><b>Button pins.</b> Its legs span 4 holes one way, with 2 holes between them, and 3 holes the other way, with 1 between them. Turn it so its legs go in R16, R18, U16 and U18: 4 holes from row R to row U, and 3 holes from column 16 to column 18. Once soldered, it should measure about 6.5 mm from the board's top to the top of its stem, which is what the case allows for.</li>
-      <li><b>Resistors.</b> Use a meter, because the blue resistor's bands read as 220 Ω from one end and 10 kΩ from the other. The one for row S must read about 220 Ω, and the one for column 10 about 10 kΩ. Anything else there, and the remote will not press reliably.</li>
+      <li><b>Resistors.</b> Use a meter, because the blue resistor's bands read as 220 Ω from one end and 10 kΩ from the other. The one for column 11 must read about 220 Ω, and the one for row W about 10 kΩ. Anything else there, and the remote will not press reliably.</li>
       <li><b>MOSFET.</b> Before gluing it, prove which leg is which. Touch all three legs together, then hold it with the print facing you and the legs down. On diode test, red on the right leg and black on the middle leg reads about 0.5 to 0.7 V. The left leg reads open to the middle leg, both ways. That makes the left leg G. Then connect 3.3 V to G and GND to S. With red on D and black on S, it should read about 0 Ω. Join G to S, and it should read open.</li>
     </ol>
     <p class="sub" style="margin-top:12px">If check 2, 3, 5 or 7 fails, stop before soldering, because the layout has to change. If the buzzer in check 4 is too quiet or draws too much, the firmware can first raise the pin's drive to 40 mA.</p>
@@ -157,13 +157,14 @@ GND    ────────────────────────�
         <li>1 × 220 Ω and 1 × 10 kΩ resistor</li>
         <li>2 × 15-pin female headers, 2 × 15-pin male headers for the C6, 1 × 8-pin male header for the MPU6050</li>
         <li>1 × 6.5 × 6 mm tactile button, 6 mm tall</li>
+        <li>A strip of Kapton or electrical tape, about 12 × 18 mm, for under the MOSFET</li>
         <li>Thin insulated wire, hot glue</li>
       </ul>
     </div>
     <div>
       <h2>MOSFET legs</h2>
-      <p>With the print facing you and the legs down, the order is G, D, S from the left. Mark G with a pen, then bend the legs just past their wide part. The MOSFET lies with its print facing the board, because the metal tab is the drain and must not rest on the pads. <b>With the print up, G and S swap in these holes, and the remote will not press.</b> As fitted, you cannot read the print, and G is the leg nearest the C6.</p>
-      <svg class="legs" viewBox="0 0 470 200" role="img" aria-label="Left: the MOSFET with its print facing you and legs down, G, D, S from the left. Right: flipped with its metal side up and legs to the right, G in T9 at the top, D in U9, S in V9.">
+      <p>With the print facing you and the legs down, the order is G, D, S from the left. Bend the legs back, away from the print, just past their wide part. The MOSFET lies print up, so you can read it, on a strip of tape, because its metal tab is the drain and rests on the board. As fitted, S is the leg nearest the C6 and G the one nearest row X. <b>The first unit was built print down, with the gate wired to T9. Never flip a MOSFET on a board wired for the other way, or the remote will not press.</b></p>
+      <svg class="legs" viewBox="0 0 470 200" role="img" aria-label="Left: the MOSFET with its print facing you and legs down, G, D, S from the left. Right: as fitted, print up with its legs to the right, S in T9 at the top, D in U9, G in V9.">
         <text x="95" y="14" class="lbl" text-anchor="middle">1. Print facing you</text>
         <rect x="60" y="24" width="70" height="30" rx="2" class="tab"/>
         <circle cx="95" cy="39" r="9" class="mount"/>
@@ -173,17 +174,18 @@ GND    ────────────────────────�
         <text x="72" y="188" class="tb" text-anchor="middle" style="fill:var(--ng1)">G</text>
         <text x="95" y="188" class="tb" text-anchor="middle" style="fill:var(--nrem)">D</text>
         <text x="118" y="188" class="tb" text-anchor="middle" style="fill:var(--ngnd)">S</text>
-        <text x="320" y="14" class="lbl" text-anchor="middle">2. Flipped, as fitted, from above</text>
-        <rect x="210" y="40" width="130" height="80" rx="2" class="tab"/>
-        <circle cx="240" cy="80" r="11" class="mount"/>
-        <text x="295" y="77" class="note" text-anchor="middle">metal up,</text>
-        <text x="295" y="92" class="note" text-anchor="middle">print down</text>
+        <text x="320" y="14" class="lbl" text-anchor="middle">2. Print up, as fitted, from above</text>
+        <rect x="210" y="40" width="52" height="80" rx="2" class="tab"/>
+        <circle cx="236" cy="80" r="11" class="mount"/>
+        <rect x="262" y="40" width="78" height="80" rx="2" class="part"/>
+        <text x="301" y="80" class="note" text-anchor="middle" transform="rotate(-90 301 80)">P30N06LE</text>
         <path d="M340 57H400M340 80H400M340 103H400" class="lead"/>
         <circle cx="400" cy="57" r="4" class="pad"/><circle cx="400" cy="80" r="4" class="pad"/><circle cx="400" cy="103" r="4" class="pad"/>
-        <text x="410" y="61" class="tb" style="fill:var(--ng1)">G in T9</text>
+        <text x="410" y="61" class="tb" style="fill:var(--ngnd)">S in T9</text>
         <text x="410" y="84" class="tb" style="fill:var(--nrem)">D in U9</text>
-        <text x="410" y="107" class="tb" style="fill:var(--ngnd)">S in V9</text>
-        <text x="320" y="146" class="note" text-anchor="middle">The C6 is above this view, so G is the leg nearest it.</text>
+        <text x="410" y="107" class="tb" style="fill:var(--ng1)">G in V9</text>
+        <text x="320" y="146" class="note" text-anchor="middle">The C6 is above this view, so S is the leg nearest it.</text>
+        <text x="320" y="164" class="note" text-anchor="middle">Tape goes under the whole part, metal tab included.</text>
       </svg>
     </div>
   </section>
@@ -196,10 +198,11 @@ GND    ────────────────────────�
         <li>Q1 to Q2 (GND to 3V3) is not shorted.</li>
         <li>Q10 to Q11 is not shorted. GPIO8 is pulled up on the C6, so a bridge here could press the remote at every start.</li>
         <li>These neighbours are not shorted either: G1 to G2, G2 to G3, G3 to G4, G13 to G14, Q2 to Q3, Q6 to Q7, Q7 to Q8, Q11 to Q12 and Q12 to Q13.</li>
-        <li>E5 to E6 (MPU6050 VCC to GND) is not shorted.</li>
-        <li>S8 to S12 reads about 220 Ω.</li>
+        <li>E4 to E5 (MPU6050 VCC to GND) is not shorted.</li>
+        <li>R11 to V11 reads about 220 Ω.</li>
         <li>T9 to V9 reads about 10 kΩ.</li>
-        <li>V9 to Q1 reads about 0 Ω.</li>
+        <li>T9 to Q1, and X9 to Q1, read about 0 Ω.</li>
+        <li>With red on U9 and black on T9, it reads open. Near 0 Ω means the MOSFET's tab is touching something, which would hold the remote's button down.</li>
         <li>With the remote connected and its battery in, its LED is off. If it is on, (+) and (−) are swapped.</li>
       </ul>
     </div>
@@ -209,7 +212,7 @@ GND    ────────────────────────�
         <li>Before connecting USB, Q15 to Q1 (5V to GND) is not shorted.</li>
         <li>Flash the current firmware, because older builds don't read the button on GPIO7. An old build folder needs <code>idf.py reconfigure</code> once.</li>
         <li>Power cycle several times. The remote LED must stay off at every start.</li>
-        <li>Press the remote from the unit's web page. Its LED lights, and U9 to V9 reads under about 50 mV. The remote really transmits, so test away from the gate.</li>
+        <li>Press the remote from the unit's web page. Its LED lights, and U9 to T9 reads under about 50 mV. The remote really transmits, so test away from the gate.</li>
         <li>On the unit's web page, turn the buzzer on, set its type to active, and then use the Beep button. If it already beeped as the passive type, restart the unit first, or it stays silent.</li>
         <li>Click the external button once. It presses the remote.</li>
         <li>The unit's web page shows the motion sensor as found.</li>
@@ -288,6 +291,10 @@ const J1NET = { 1:"ngnd", 2:"n3v3", 7:"nbtn", 11:"ng1", 12:"ng2" };
 const J3NET = { 1:"ngnd", 2:"nsda", 3:"nscl" };
 const MPU = ["VCC","GND","SCL","SDA","XDA","XCL","AD0","INT"];
 const MPUNET = { SDA:"nsda", SCL:"nscl", GND:"ngnd", VCC:"n3v3" };
+const MPU_COLUMN = 4;   /* VCC's hole in row E. The other pins follow to the right. */
+/* The MOSFET's legs in T9, U9 and V9. It lies print up, so S is nearest the C6. */
+const MOSFET_LEGS = "SDG";
+const LEG_NET = { G:"ng1", D:"nrem", S:"ngnd" };
 
 /* Sizes are in holes (2.54 mm), from the owner's measurements and photos. */
 const C6 = { l:.53, r:18.27, usb:18.7, ant:-2.15, t:6.49, b:17.51, modT:8.5, modB:15.5, modR:7.5 };
@@ -324,40 +331,41 @@ function drawTop(v) {
   J3.forEach((n, i) => { const net = J3NET[i + 1]; v.tx(i + 1, 7.85, n, net ? "tb" : "t", "middle", net); });
   J1.forEach((n, i) => { const net = J1NET[i + 1]; v.tx(i + 1, 16.15, n, net ? "tb" : "t", "middle", net); });
 
-  v.rect(4.37, -.9, 12.63, 5.43, "part");
+  v.rect(MPU_COLUMN - .63, -.9, MPU_COLUMN + 7.63, 5.43, "part");
   MPU.forEach((n, i) => {
-    v.pad(5 + i, 5);
-    v.tx(5 + i, 4.15, n, MPUNET[n] ? "tb" : "t", "middle", MPUNET[n]);
+    v.pad(MPU_COLUMN + i, 5);
+    v.tx(MPU_COLUMN + i, 4.15, n, MPUNET[n] ? "tb" : "t", "middle", MPUNET[n]);
   });
-  v.tx(8.5, 1.1, "MPU6050", "lbl", "middle");
-  v.tx(8.5, 2.1, "chip side up", "note", "middle");
+  v.tx(MPU_COLUMN + 3.5, 1.1, "MPU6050", "lbl", "middle");
+  v.tx(MPU_COLUMN + 3.5, 2.1, "chip side up", "note", "middle");
 
-  v.line(["S8", "S12"], "lead");
-  v.rect(8.76, 18.51, 11.24, 19.49, "res");
-  v.pad(8, 19); v.pad(12, 19);
-  v.tx(10, 19, "220 Ω", "tb", "middle", "nres");
-  v.line(["T10", "X10"], "lead");
-  v.rect(9.51, 20.76, 10.49, 23.24, "res");
-  v.pad(10, 20); v.pad(10, 24);
-  v.tx(10, 22, "10k", "tb", "middle", "nres");
+  v.line(["R11", "V11"], "lead");
+  v.rect(10.51, 18.76, 11.49, 21.24, "res");
+  v.pad(11, 18); v.pad(11, 22);
+  v.tx(11, 20, "220", "tb", "middle", "nres");
+  v.line(["W9", "W13"], "lead");
+  v.rect(9.76, 22.51, 12.24, 23.49, "res");
+  v.pad(9, 23); v.pad(13, 23);
+  v.tx(11, 23, "10 kΩ", "tb", "middle", "nres");
 
-  /* Print down, so this view shows its metal back and not its markings. */
-  v.rect(.77, 19, 6.87, 23, "tab");
+  /* Print up, on tape. The metal tab sticks out past the plastic at the column 01 end. */
+  v.rect(.77, 19, 3.25, 23, "tab");
   v.circle(2.03, 21, .71 * P, "mount");
+  v.rect(3.25, 19, 6.87, 23, "part");
   [20, 21, 22].forEach((r, i) => {
     v.line([[6.87, r], [9, r]], "lead");
     v.pad(9, r);
-    v.tx(7.9, r - .55, "GDS"[i], "tb", "middle", ["ng1", "nrem", "ngnd"][i]);
+    v.tx(7.9, r - .55, MOSFET_LEGS[i], "tb", "middle", LEG_NET[MOSFET_LEGS[i]]);
   });
-  v.tx(4.9, 20.2, "MOSFET", "lbl", "middle");
-  v.tx(4.9, 21.2, "metal up,", "note", "middle");
-  v.tx(4.9, 22, "print down", "note", "middle");
+  v.tx(5.06, 20.2, "MOSFET", "lbl", "middle");
+  v.tx(5.06, 21.2, "print up,", "note", "middle");
+  v.tx(5.06, 22, "on tape", "note", "middle");
 
-  v.circle(16.5, 3, 2.46 * P, "part");
-  v.pad(15, 3); v.pad(18, 3);
-  v.tx(15, 2.1, "−", "tb", "middle", "ngnd");
-  v.tx(18, 2.1, "+", "tb", "middle", "ng2");
-  v.tx(16.5, 4.2, "Buzzer", "lbl", "middle");
+  v.circle(15.5, 3, 2.46 * P, "part");
+  v.pad(14, 3); v.pad(17, 3);
+  v.tx(14, 2.1, "−", "tb", "middle", "ngnd");
+  v.tx(17, 2.1, "+", "tb", "middle", "ng2");
+  v.tx(15.5, 4.2, "Buzzer", "lbl", "middle");
 
   v.rect(15.82, 18.32, 18.18, 20.68, "part");
   v.circle(17, 19.5, .69 * P, "ghost2");
@@ -367,20 +375,21 @@ function drawTop(v) {
 
 /* Every wire belongs to a build step, so a table row can pick it out in the drawing. */
 const WIRES = [
-  { step:4, net:"nsda", pts:["G2",[2,6],[8,6],"E8"] },
-  { step:4, net:"nscl", pts:["G3",[4,6.45],[6.6,6.45],"E7"] },
-  { step:5, net:"ngnd", pts:["G1",[1.5,5.6],[5.4,5.6],"E6"] },
-  { step:5, net:"n3v3", pts:["Q2",[2.5,16],[2.5,6.6],"E5"] },
-  { step:6, net:"ng1", pts:["S12","Q11"] },
-  { step:7, net:"ng1", pts:["S8","T9"] },
-  { step:8, net:"ng1", pts:["T10","T9"] },
-  { step:8, net:"ngnd", pts:["X10","X9"] },
-  { step:9, net:"ngnd", pts:["V9","W9","X9"] },
-  { step:9, net:"ngnd", pts:["Q1","V9"] },
-  { step:11, net:"ng2", pts:["Q12",[12.5,16],[16,8],"C18"] },
-  { step:11, net:"ngnd", pts:["G14","C15"] },
+  { step:4, net:"nsda", pts:["G2",[2,6],[7,6],"E7"] },
+  { step:4, net:"nscl", pts:["G3",[4,6.45],[5.6,6.45],"E6"] },
+  { step:5, net:"ngnd", pts:["G1",[1.5,5.6],[4.4,5.6],"E5"] },
+  { step:5, net:"n3v3", pts:["Q2",[2.5,16],[2.5,6.6],"E4"] },
+  { step:6, net:"ng1", pts:["R11","Q11"] },
+  { step:7, net:"ng1", pts:["V11","V9"] },
+  { step:8, net:"ng1", pts:["W9","V9"] },
+  { step:8, net:"ngnd", pts:["W13","X13"] },
+  { step:9, net:"ngnd", pts:["X9","X10","X11","X12","X13"] },
+  { step:9, net:"ngnd", pts:["Q1","T9"] },
+  { step:9, net:"ngnd", pts:["T9",[7.6,20.4],[7.6,23.6],"X9"] },
+  { step:11, net:"ng2", pts:["Q12",[12.5,16],[16,8],"C17"] },
+  { step:11, net:"ngnd", pts:["G14","C14"] },
   { step:12, net:"nbtn", pts:["Q7",[7,17.5],[15.5,17.5],"R16"] },
-  { step:12, net:"ngnd", pts:["U18",[17,22],[10.5,22],"W9"] },
+  { step:12, net:"ngnd", pts:["U18",[17,23.5],[13.5,23.5],"X13"] },
   { step:13, net:"nrem", pts:["U9",[7,23],[7,26.28]], end:"remote +", endRight:true },
   { step:13, net:"ngnd", pts:["X9",[9,26.28]], end:"remote −" },
 ];
@@ -398,18 +407,18 @@ function drawBot(v) {
   for (const c of [7, 9]) v.rect(c - .3, 24.9, c + .3, 26.1, "hdr");
 
   headers(v);
-  for (let c = 5; c <= 12; c++) v.pad(c, 5);
-  for (const h of ["S8","S12","T9","U9","V9","W9","X9","T10","X10","C15","C18","R16","R18","U16","U18"]) { const [c, r] = hole(h); v.pad(c, r); }
+  for (let c = MPU_COLUMN; c < MPU_COLUMN + 8; c++) v.pad(c, 5);
+  for (const h of ["R11","V11","T9","U9","V9","W9","W13","X9","X10","X11","X12","X13","C14","C17","R16","R18","U16","U18"]) { const [c, r] = hole(h); v.pad(c, r); }
 
   /* Parts seen through the board, only as a guide. */
-  v.rect(4.37, -.9, 12.63, 5.43, "ghost2");
-  v.tx(8.5, 1.5, "under: MPU6050", "note", "middle");
-  v.rect(8.76, 18.51, 11.24, 19.49, "ghost2");
-  v.rect(9.51, 20.76, 10.49, 23.24, "ghost2");
+  v.rect(MPU_COLUMN - .63, -.9, MPU_COLUMN + 7.63, 5.43, "ghost2");
+  v.tx(MPU_COLUMN + 3.5, 1.5, "under: MPU6050", "note", "middle");
+  v.rect(10.51, 18.76, 11.49, 21.24, "ghost2");
+  v.rect(9.76, 22.51, 12.24, 23.49, "ghost2");
   v.rect(.77, 19, 6.87, 23, "ghost2");
   v.tx(3, 22.4, "under: MOSFET", "note", "middle");
-  v.circle(16.5, 3, 2.46 * P, "ghost2");
-  v.tx(16.5, 1.5, "under: buzzer", "note", "middle");
+  v.circle(15.5, 3, 2.46 * P, "ghost2");
+  v.tx(15.5, 1.5, "under: buzzer", "note", "middle");
   v.rect(15.82, 18.32, 18.18, 20.68, "ghost2");
   v.tx(17, 19.5, "button", "note", "middle");
 
@@ -432,8 +441,8 @@ function drawBot(v) {
 
   J3.forEach((n, i) => { const net = J3NET[i + 1]; if (net) v.tx(i + 1, 7.85, n, "tb hl", "middle", net); });
   J1.forEach((n, i) => { const net = J1NET[i + 1]; if (net) v.tx(i + 1, 16.15, n, "tb hl", "middle", net); });
-  MPU.forEach((n, i) => { if (MPUNET[n]) v.tx(5 + i, 4.15, n, "tb hl", "middle", MPUNET[n]); });
-  [20, 21, 22].forEach((r, i) => v.tx(8.5, r, "GDS"[i], "tb hl", "middle", ["ng1", "nrem", "ngnd"][i]));
+  MPU.forEach((n, i) => { if (MPUNET[n]) v.tx(MPU_COLUMN + i, 4.15, n, "tb hl", "middle", MPUNET[n]); });
+  [20, 21, 22].forEach((r, i) => v.tx(8.5, r, MOSFET_LEGS[i], "tb hl", "middle", LEG_NET[MOSFET_LEGS[i]]));
 }
 
 /* Side view, in millimetres from the column 01 edge of the board and up from the remote's face. */
@@ -462,8 +471,8 @@ function drawSide() {
   box(2.2, 34.2, 19.9, 37.4, "tab"); lab(11, 35.8, "module", "note");
   box(41, 34.2, 48.37, 37.4, "tab");
   box(48.37, 32.3, 78, 39.3, "ghost"); lab(63, 35.8, "USB plug", "note");
-  box(2.83, 21.6, 18.32, 26.6, "tab"); lab(10.6, 24.1, "MOSFET, metal up", "note");
-  box(36.53, 21.6, 49.03, 31.1, "part"); lab(42.78, 28.3, "buzzer, behind", "note");
+  box(2.83, 21.6, 18.32, 22.9, "tab"); box(9.12, 22.9, 18.32, 26.6, "part"); lab(10.6, 28, "MOSFET, print up", "note");
+  box(33.99, 21.6, 46.49, 31.1, "part"); lab(40.24, 28.3, "buzzer, behind", "note");
   box(41.05, 21.6, 47.05, 25.1, "part"); box(42.3, 25.1, 45.8, 26.6, "tab"); lab(44.05, 23.3, "button", "note");
   add("polyline", { points: `${X(-8)},${Y(0)} ${X(-8)},${Y(37.4)}`, class: "lead" });
   add("text", { x: X(-8.6), y: Y(18.7) + 4, class: "tb", "text-anchor": "end" }, "38 mm");
@@ -485,16 +494,16 @@ LEGEND.forEach(([n, s]) => {
 const STEPS = [
   [1,"C6 pins","Solder the male headers onto the C6 while they are pushed into the female headers, so they line up. The pins point down, out of the side without the module and USB ports.","C6"],
   [2,"Female headers","Rows G and Q, columns 01 to 15. Plug in the C6 to check the fit, with its USB ports at the column 18 edge, then remove it.","Parts"],
-  [3,"MPU6050","Pins in row E, long ends down: VCC E5, GND E6, SCL E7, SDA E8, XDA E9, XCL E10, AD0 E11, INT E12. Chip side up, body toward row A. Solder all 8 for strength, trim the ends, and put a dab of glue under the far edge.","Parts"],
-  [4,"SDA and SCL","G2 to E8, and G3 to E7. The two wires cross, which is fine.","Solder"],
-  [5,"MPU power","GND: G1 to E6. VCC: Q2, up under the C6 between columns 02 and 03, to E5.","Solder"],
-  [6,"220 Ω resistor","S8 to S12, lying flat. Bend the S12 lead over and solder it to Q11, without touching Q10 or Q12. Leave the S8 lead long for step 7.","Parts"],
-  [7,"MOSFET P30N06LE","G T9, D U9, S V9. Print facing the board, so you see its metal back, with legs toward column 09 and body toward column 01. G is the leg nearest the C6. Glue it down. Then bend the S8 lead over and solder it to T9.","Parts"],
-  [8,"10 kΩ resistor","T10 to X10, lying flat. Bend the T10 lead over and solder it to T9, and the X10 lead to X9.","Parts"],
-  [9,"Ground","Bare offcut from V9, through W9, to X9. Wire Q1 to V9.","Solder"],
-  [10,"Active buzzer","+ in C18, on the outside, nearest the board's edge. − in C15. The + is marked on top.","Parts"],
-  [11,"Buzzer wires","Q12, up under the C6 and past the end of row G, to C18. G14 to C15, without touching G15, which is 5V.","Solder"],
-  [12,"Button","Tactile button on the parts side, with its legs in R16, R18, U16 and U18: 4 holes from row R to row U, and 3 holes from column 16 to column 18. Then, on the solder side, wire Q7 to R16 and U18 to W9. R16 and U18 are diagonally opposite, so pressing the button joins them.","Solder"],
+  [3,"MPU6050","Pins in row E, long ends down: VCC E4, GND E5, SCL E6, SDA E7, XDA E8, XCL E9, AD0 E10, INT E11. Chip side up, body toward row A. Solder all 8 for strength, trim the ends, and put a dab of glue under the far edge.","Parts"],
+  [4,"SDA and SCL","G2 to E7, and G3 to E6. The two wires cross, which is fine.","Solder"],
+  [5,"MPU power","GND: G1 to E5. VCC: Q2, up under the C6 between columns 02 and 03, to E4.","Solder"],
+  [6,"220 Ω resistor","R11 to V11, lying flat along column 11. Bend the R11 lead straight up and solder it to Q11, without touching Q10 or Q12. Leave the V11 lead long for step 7.","Parts"],
+  [7,"MOSFET P30N06LE","Stick a strip of tape on the board where it goes, over columns 01 to 07 of rows S to W, because its metal tab is the drain. Bend the legs back, away from the print. Then S in T9, D in U9, G in V9: print up, legs toward column 09 and body toward column 01. S is the leg nearest the C6. Glue it down at its edges. Then bend the V11 lead along row V and solder it to V9, without touching U9.","Parts"],
+  [8,"10 kΩ resistor","W9 to W13, lying flat along row W. Bend the W9 lead up and solder it to V9, and the W13 lead down to X13.","Parts"],
+  [9,"Ground","Bare offcut along row X, from X9 to X13, soldered at all five holes. Wire Q1 to T9, and T9 to X9, beside column 09 and clear of U9 and V9.","Solder"],
+  [10,"Active buzzer","+ in C17, on the outside, nearest the board's edge. − in C14. The + is marked on top.","Parts"],
+  [11,"Buzzer wires","Q12, up under the C6 and past the end of row G, to C17. G14 to C14, without touching G15, which is 5V.","Solder"],
+  [12,"Button","Tactile button on the parts side, with its legs in R16, R18, U16 and U18: 4 holes from row R to row U, and 3 holes from column 16 to column 18. Then, on the solder side, wire Q7 to R16 and U18 to X13. R16 and U18 are diagonally opposite, so pressing the button joins them.","Solder"],
   [13,"Remote","U9 to the (+) button wire, X9 to the (−) wire. Find (+) with a meter: it is under the red probe when the reading is positive. Take U9 to the oval pad at column 07 and X9 to the one at column 09, and join the remote's wires there. Those pads have no hole to anchor them, so tack the wires down with a dab of glue. Leave the wires about 12 cm long, so the case's cover can come off with the remote still connected.","Solder"],
   [14,"Meter checks","Run the checks under Before plugging in the C6.","Solder"],
   [15,"C6 and tests","Plug in the C6, then run the checks under With the C6 plugged in.","Parts"],

@@ -28,6 +28,7 @@ To build it, open [board-layout.html](board-layout.html) in a browser. It needs 
 | 15-pin female headers | | 2 needed |
 | 15-pin male headers, for the C6 | | 2 needed |
 | 8-pin male header, for the MPU6050 | | 1 needed |
+| Kapton or electrical tape, about 12 × 18 mm, for under the MOSFET | | Needed |
 | Thin insulated wire, hot glue | | Needed |
 
 The GPIO for each function is in the [main README](../README.md#hardware).
@@ -48,7 +49,9 @@ Remove each of these once it has been tested.
 
 - **A real press:** on the first drive the unit pressed at the right moments, but the remote's battery was low, so the gate has not yet opened from a press. Holding the external button for 3 s or 15 s is unconfirmed too.
 - **Car power:** on a USB port of the car's multimedia screen, 4 of the first 6 power-ups in the car failed 15 to 117 times before coming up, as brownouts. It never happened on a PC. In a later test the screen's ports failed up to 7 times on firmware 2.0.1, and a good phone charger failed none of 4 starts, only one of them an engine start. So the unit should run from a charger, and that needs more drives to confirm. No voltage was measured. See section 11 of the [design spec](../docs/superpowers/specs/2026-10-31-esp-idf-rewrite-design.md).
+- **Layout for the next units:** on 2026-11-05 the MOSFET changed to lying print up on tape, which re-routes its gate wiring, and the MPU6050 and buzzer moved one column toward the antenna end. Nothing has been built to it yet. The first unit keeps the earlier layout, so never flip its MOSFET.
 - **Remote range:** being against the board could shorten it. If the gate does not open reliably, the remote goes on longer wires, off the board.
 - **Remote:** its button circuit and current are unknown, so only a real press from the unit proves the MOSFET works it.
-- **Buzzer:** it is active and beeps clearly on GPIO11 on the bench, but its loudness in the closed glove box and its current are not measured. If it is too quiet, the firmware can raise the pin's drive to 40 mA. If that is not enough, it needs a MOSFET and 5 V, and the layout changes.- **C6 position:** how far the pins sit from each end of the C6 comes from a photo, so the distances at each edge could be off by about 1 mm.
+- **Buzzer:** it is active and beeps clearly on GPIO11 on the bench, but its loudness in the closed glove box and its current are not measured. If it is too quiet, the firmware can raise the pin's drive to 40 mA. If that is not enough, it needs a MOSFET and 5 V, and the layout changes.
+- **C6 position:** how far the pins sit from each end of the C6 comes from a photo, so the distances at each edge could be off by about 1 mm.
 - **Assumed sizes:** [design.md](design.md#details-of-the-real-parts) lists every size that was assumed rather than measured. Measure those parts before printing the case.

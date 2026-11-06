@@ -19,11 +19,11 @@ MM = 2.54  # Hole spacing. Positions below are in holes, from column 1 and row 1
 # Sizes in mm, measured on the real parts. The buzzer is estimated from a photo.
 BOARD = (1 - 3.41 / MM, 1 - 5.79 / MM, 18 + 3.41 / MM, 24 + 5.79 / MM)
 PARTS = {
-    "MPU6050": (5 - 1.61 / MM, 5 + 1.1 / MM - 16 / MM, 12 + 1.61 / MM, 5 + 1.1 / MM),
+    "MPU6050": (4 - 1.61 / MM, 5 + 1.1 / MM - 16 / MM, 11 + 1.61 / MM, 5 + 1.1 / MM),
     "MOSFET": (9 - 20.9 / MM, 21 - 5.1 / MM, 9 - 5.4 / MM, 21 + 5.1 / MM),
-    "220 ohm": (10 - 3.15 / MM, 19 - 1.25 / MM, 10 + 3.15 / MM, 19 + 1.25 / MM),
-    "10 kohm": (10 - 1.25 / MM, 22 - 3.15 / MM, 10 + 1.25 / MM, 22 + 3.15 / MM),
-    "Buzzer": (16.5 - 6.25 / MM, 3 - 6.25 / MM, 16.5 + 6.25 / MM, 3 + 6.25 / MM),
+    "220 ohm": (11 - 1.25 / MM, 20 - 3.15 / MM, 11 + 1.25 / MM, 20 + 3.15 / MM),
+    "10 kohm": (11 - 3.15 / MM, 23 - 1.25 / MM, 11 + 3.15 / MM, 23 + 1.25 / MM),
+    "Buzzer": (15.5 - 6.25 / MM, 3 - 6.25 / MM, 15.5 + 6.25 / MM, 3 + 6.25 / MM),
     "Button": (17 - 3 / MM, 19.5 - 3 / MM, 17 + 3 / MM, 19.5 + 3 / MM),
     "Top header": (0.5, 6.5, 15.5, 7.5),
     "Bottom header": (0.5, 16.5, 15.5, 17.5),
@@ -33,20 +33,25 @@ C6 = (1 - 1.2 / MM, 7 - 1.3 / MM, 15 + 9.4 / MM, 17 + 1.3 / MM)
 
 # Holes that must end up joined. G1, G14 and Q1 are all GND, but only join on the C6 itself.
 NETS = {
-    "GPIO10 to the 220 ohm": ["Q11", "S12"],
-    "Gate": ["S8", "T9", "T10"],
-    "Source and GND": ["Q1", "V9", "W9", "X9", "X10", "U18", "remote −"],
+    "GPIO10 to the 220 ohm": ["Q11", "R11"],
+    "Gate": ["V11", "V9", "W9"],
+    "Source and GND": ["Q1", "T9", "X9", "X10", "X11", "X12", "X13", "W13", "U18", "remote −"],
     "Drain": ["U9", "remote +"],
-    "GPIO11": ["Q12", "C18"],
-    "Buzzer GND": ["G14", "C15"],
+    "GPIO11": ["Q12", "C17"],
+    "Buzzer GND": ["G14", "C14"],
     "GPIO7": ["Q7", "R16"],
-    "SDA": ["G2", "E8"],
-    "SCL": ["G3", "E7"],
-    "MPU6050 GND": ["G1", "E6"],
-    "3V3": ["Q2", "E5"],
+    "SDA": ["G2", "E7"],
+    "SCL": ["G3", "E6"],
+    "MPU6050 GND": ["G1", "E5"],
+    "3V3": ["Q2", "E4"],
 }
+# Each resistor's holes, and the nets its two ends belong to. Swapped, the remote will not press.
+RESISTORS = {"220 ohm": (("R11", "V11"), ("GPIO10 to the 220 ohm", "Gate")), "10 kohm": (("W9", "W13"), ("Gate", "Source and GND"))}
+# The MOSFET's legs go in these holes, top to bottom. Which leg lands where depends on which way up it lies.
+MOSFET_HOLES = ("T9", "U9", "V9")
+MOSFET_NETS = {"G": "Gate", "D": "Drain", "S": "Source and GND"}
 PINS = {"Q11": "10", "Q12": "11", "Q7": "7", "Q1": "GND", "Q2": "3V3", "G2": "2", "G3": "3", "G1": "GND", "G14": "GND"}
-MPU_HOLES = {"VCC": "E5", "GND": "E6", "SCL": "E7", "SDA": "E8"}
+MPU_HOLES = {"VCC": "E4", "GND": "E5", "SCL": "E6", "SDA": "E7"}
 # Power, USB, reset and strapping pins, which no wire may reach.
 FORBIDDEN = {"5V", "12", "13", "RST", "9", "8", "4", "5", "15"}
 
@@ -114,6 +119,24 @@ def check_circuit(wires, row_g, row_q):
                 fail(f"A wire reaches {hole}, which is pin {pin[hole]}")
 
 
+def check_parts_wiring(page):
+    """The page says which way up the MOSFET lies and where the resistors sit, and both decide the circuit."""
+    legs = re.search(r'const MOSFET_LEGS = "([GDS]{3})"', page)
+    if not legs or sorted(legs.group(1)) != ["D", "G", "S"]:
+        fail("The page does not say which MOSFET leg goes in which hole")
+    else:
+        for leg, hole in zip(legs.group(1), MOSFET_HOLES):
+            if hole not in NETS[MOSFET_NETS[leg]]:
+                fail(f"The MOSFET's {leg} lands in {hole}, which is not on the {MOSFET_NETS[leg]} net")
+    drawn = set(re.findall(r'v\.line\(\["([A-X]\d+)", "([A-X]\d+)"\], "lead"\)', page))
+    for name, (holes, nets) in RESISTORS.items():
+        if holes not in drawn:
+            fail(f"The page does not draw the {name} resistor in {holes[0]} to {holes[1]}")
+        for hole, net in zip(holes, nets):
+            if hole not in NETS[net]:
+                fail(f"The {name} resistor's end in {hole} is not on the {net} net")
+
+
 def overlap(a, pa, b, pb):
     """The buzzer is round, so a part can sit in the corner of the square around it."""
     if not (min(pa[2], pb[2]) > max(pa[0], pb[0]) and min(pa[3], pb[3]) > max(pa[1], pb[1])):
@@ -176,11 +199,13 @@ def main():
     if len(row_q) != 15 or len(row_g) != 15:
         fail("Each C6 pin row should have 15 pins")
     mpu = json_const(page, "MPU")
+    first = re.search(r"const MPU_COLUMN = (\d+);", page)
     for name, hole in MPU_HOLES.items():
-        if f"E{5 + mpu.index(name)}" != hole:
+        if not first or f"E{int(first.group(1)) + mpu.index(name)}" != hole:
             fail(f"MPU6050 {name} should be at {hole}")
 
     check_circuit(wires, row_g, row_q)
+    check_parts_wiring(page)
     check_fit()
     check_design_doc(read("design.md"), wires, row_g, row_q)
 
