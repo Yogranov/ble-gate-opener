@@ -322,6 +322,12 @@ void yg_engine_on_gesture(yg_engine_t *e, uint32_t now, yg_gesture_t g) {
     case YG_GESTURE_HOLD:
         yg_engine_pair_start(e, now, YG_PAIR_AUTO);
         break;
+    case YG_GESTURE_LEARN:
+        /* RF variant only: rf_listen is wired only on that build. */
+        if (e->ops->rf_listen != NULL) {
+            yg_engine_rf_learn_start(e, now);
+        }
+        break;
     case YG_GESTURE_FACTORY_RESET:
         led(e, YG_LED_ERASING);
         buzz(e, YG_BUZZ_ERASE);

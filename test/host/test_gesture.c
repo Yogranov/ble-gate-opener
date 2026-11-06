@@ -54,6 +54,20 @@ static void triple_click(void) {
     CHECK_INT(seen[YG_GESTURE_SINGLE], 0);
 }
 
+static void double_click_then_hold_learns(void) {
+    setup();
+    click();
+    click();
+    /* Hold the third press. Beacon pairing at 3 s must not fire; learn fires at 6 s. */
+    level(true, 3000);
+    CHECK_INT(seen[YG_GESTURE_HOLD], 0);
+    CHECK_INT(seen[YG_GESTURE_LEARN], 0);
+    level(true, 3200);
+    CHECK_INT(seen[YG_GESTURE_LEARN], 1);
+    CHECK_INT(seen[YG_GESTURE_HOLD], 0);
+    CHECK_INT(seen[YG_GESTURE_DOUBLE], 0);
+}
+
 static void hold_fires_once_and_release_adds_no_click(void) {
     setup();
     level(true, 2900);
@@ -151,6 +165,7 @@ int main(void) {
     RUN(single_click_fires_after_the_wait);
     RUN(double_click);
     RUN(triple_click);
+    RUN(double_click_then_hold_learns);
     RUN(hold_fires_once_and_release_adds_no_click);
     RUN(holding_15_s_asks_for_a_factory_reset_once);
     RUN(letting_go_before_15_s_erases_nothing);

@@ -5,6 +5,7 @@
 #define DEBOUNCE_MS  30u
 #define CLICK_GAP_MS 400u
 #define HOLD_MS      3000u
+#define LEARN_MS     6000u
 #define RESET_MS     15000u
 
 void yg_gesture_init(yg_gesture_detector_t *g) {
@@ -31,10 +32,19 @@ yg_gesture_t yg_gesture_update(yg_gesture_detector_t *g, uint32_t now, bool pres
         }
     }
     if (g->stable) {
-        if (!g->hold_fired && now - g->press_start >= HOLD_MS) {
-            g->hold_fired = true;
-            g->clicks = 0;
-            return YG_GESTURE_HOLD;
+        if (!g->hold_fired) {
+            /* Two clicks then a hold learns an RF remote; a plain hold pairs a beacon. */
+            if (g->clicks == 2) {
+                if (now - g->press_start >= LEARN_MS) {
+                    g->hold_fired = true;
+                    g->clicks = 0;
+                    return YG_GESTURE_LEARN;
+                }
+            } else if (now - g->press_start >= HOLD_MS) {
+                g->hold_fired = true;
+                g->clicks = 0;
+                return YG_GESTURE_HOLD;
+            }
         }
         /* A button down since power-on does not count, or a stuck one would wipe the unit at every start. */
         if (g->seen_released && !g->reset_fired && now - g->press_start >= RESET_MS) {

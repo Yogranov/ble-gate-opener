@@ -11,6 +11,7 @@ typedef enum
     YG_GESTURE_DOUBLE,
     YG_GESTURE_TRIPLE,
     YG_GESTURE_HOLD,
+    YG_GESTURE_LEARN,
     YG_GESTURE_FACTORY_RESET,
 } yg_gesture_t;
 
