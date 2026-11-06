@@ -11,6 +11,7 @@
 #include "driver/spi_master.h"
 #include "esp_attr.h"
 #include "esp_log.h"
+#include "esp_rom_sys.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -30,6 +31,9 @@ static const char *TAG = "yg_rf";
 #define CC1101_BURST 0x40
 #define CC1101_REG_VERSION 0x31 /* read as a status register: READ | BURST | addr */
 #define CC1101_REG_PATABLE 0x3E
+#define CC1101_REG_MARCSTATE 0x35 /* a status register, read like VERSION */
+#define CC1101_STATE_RX 0x0D
+#define CC1101_STATE_TX 0x13
 
 /* 1 microsecond per RMT tick keeps OOK timing exact. The 15-bit tick field caps a
  * single level at 32767 us, which is wider than any inter-frame gap we expect. */
@@ -80,6 +84,12 @@ static const uint8_t CC1101_CONFIG[][2] = {
     {0x24, 0x2A}, /* FSCAL2 */
     {0x25, 0x00}, /* FSCAL1 */
     {0x26, 0x1F}, /* FSCAL0 */
+    /* TEST2..0: SmartRF Studio's values for 433.92 MHz at this bandwidth, from the same
+     * export as FSCAL3..0. The datasheet says to take them from it. Reset leaves TEST0's
+     * VCO selection calibration on, which that export turns off. */
+    {0x2C, 0x81},
+    {0x2D, 0x35},
+    {0x2E, 0x09},
 };
 
 static void cc1101_strobe(uint8_t cmd) {
@@ -109,9 +119,23 @@ static uint8_t cc1101_read_status(uint8_t addr) {
     return rx[1];
 }
 
+/* Calibration on the way from idle to RX or TX takes about 0.8 ms, and GDO0 means
+ * nothing until it is done: a transmit started early clips its first frame. */
+static void cc1101_wait_state(uint8_t state) {
+    for (int i = 0; i < 40; i++) {
+        if ((cc1101_read_status(CC1101_REG_MARCSTATE) & 0x1F) == state) {
+            return;
+        }
+        esp_rom_delay_us(50);
+    }
+    ESP_LOGW(TAG, "CC1101 did not reach state 0x%02X", state);
+}
+
 static void cc1101_configure(void) {
     cc1101_strobe(CC1101_SRES);
-    vTaskDelay(pdMS_TO_TICKS(1));
+    /* A busy wait: at the 100 Hz tick, pdMS_TO_TICKS(1) is zero and would not wait at all,
+     * so the configuration could go out while the chip is still resetting. */
+    esp_rom_delay_us(1000);
     for (size_t i = 0; i < sizeof(CC1101_CONFIG) / sizeof(CC1101_CONFIG[0]); i++) {
         cc1101_write(CC1101_CONFIG[i][0], CC1101_CONFIG[i][1]);
     }
@@ -155,10 +179,15 @@ static void rx_task(void *arg) {
         uint16_t count = 0;
         bool first_high = n > 0 && s_rx_symbols[0].level0 != 0;
         for (size_t i = 0; i < n; i++) {
-            durations[count++] = (uint16_t)s_rx_symbols[i].duration0;
-            if (s_rx_symbols[i].duration1 != 0) {
-                durations[count++] = (uint16_t)s_rx_symbols[i].duration1;
+            /* A zero duration is the end marker, in either half of a symbol. */
+            if (s_rx_symbols[i].duration0 == 0) {
+                break;
             }
+            durations[count++] = (uint16_t)s_rx_symbols[i].duration0;
+            if (s_rx_symbols[i].duration1 == 0) {
+                break;
+            }
+            durations[count++] = (uint16_t)s_rx_symbols[i].duration1;
         }
         if (s_listening && s_capture_cb != NULL && count > 0) {
             s_capture_cb(durations, count, first_high);
@@ -213,7 +242,9 @@ void yg_rf_init(void) {
         .gpio_num = CONFIG_YG_PIN_RF_GDO0,
         .clk_src = RMT_CLK_SRC_DEFAULT,
         .resolution_hz = RF_RMT_RES_HZ,
-        .mem_block_symbols = 64,
+        /* One C6 block of 48. The C6 has two TX channels, and 64 would borrow the second,
+         * which the developer LED's led_strip needs. */
+        .mem_block_symbols = 48,
         .trans_queue_depth = 2,
     };
     ESP_ERROR_CHECK(rmt_new_tx_channel(&txc, &s_tx_chan));
@@ -249,7 +280,7 @@ void yg_rf_transmit(const yg_rfcode_t *code, uint32_t ms) {
     if (n == 0) {
         return;
     }
-    static rmt_symbol_word_t symbols[RF_TX_MAX_SYMBOLS * 2];
+    static rmt_symbol_word_t symbols[RF_TX_MAX_SYMBOLS]; /* two durations each */
     uint16_t sym = 0;
     for (uint16_t i = 0; i < n; i += 2) {
         symbols[sym].level0 = 1;
@@ -269,9 +300,13 @@ void yg_rf_transmit(const yg_rfcode_t *code, uint32_t ms) {
     ESP_ERROR_CHECK(rmt_enable(s_tx_chan));
     cc1101_strobe(CC1101_SFTX);
     cc1101_strobe(CC1101_STX);
+    cc1101_wait_state(CC1101_STATE_TX);
     const rmt_transmit_config_t tc = {.loop_count = 0};
     rmt_transmit(s_tx_chan, s_copy_encoder, symbols, (size_t)sym * sizeof(rmt_symbol_word_t), &tc);
-    rmt_tx_wait_all_done(s_tx_chan, -1);
+    /* A hard limit, as the MOSFET press has. The replay runs at most ms and one frame. */
+    if (rmt_tx_wait_all_done(s_tx_chan, (int)ms + 1000) != ESP_OK) {
+        ESP_LOGE(TAG, "transmit overran and was cut off");
+    }
     cc1101_strobe(CC1101_SIDLE);
     rmt_disable(s_tx_chan);
     gpio_output_disable(CONFIG_YG_PIN_RF_GDO0);
@@ -279,6 +314,7 @@ void yg_rf_transmit(const yg_rfcode_t *code, uint32_t ms) {
     if (was_listening) {
         ESP_ERROR_CHECK(rmt_enable(s_rx_chan));
         cc1101_strobe(CC1101_SRX);
+        cc1101_wait_state(CC1101_STATE_RX);
         start_receive();
     }
 }
@@ -291,6 +327,7 @@ void yg_rf_listen(bool on, yg_rf_capture_cb_t cb) {
         cc1101_strobe(CC1101_SIDLE);
         cc1101_strobe(CC1101_SFRX);
         cc1101_strobe(CC1101_SRX);
+        cc1101_wait_state(CC1101_STATE_RX);
         start_receive();
     } else if (!on && s_listening) {
         s_listening = false;
