@@ -14,6 +14,7 @@
 #include "yg_json.h"
 #include "yg_log.h"
 #include "yg_nvs.h"
+#include "sdkconfig.h"
 
 #define JSON_BUF_SIZE 6144
 #define BODY_MAX      1024
@@ -161,6 +162,15 @@ static esp_err_t get_status(httpd_req_t *req) {
     return send_json(req, s_json);
 }
 
+/* There is no MOSFET pin on the RF variant, so it reports the actuator as low. */
+static bool actuator_pin_high(void) {
+#if CONFIG_YG_GATE_DRIVER_RF433
+    return false;
+#else
+    return yg_io_remote_level();
+#endif
+}
+
 static esp_err_t get_system(httpd_req_t *req) {
     uint32_t trip_used, trip_total, cap_used, cap_total;
     yg_log_usage(&trip_used, &trip_total, &cap_used, &cap_total);
@@ -170,7 +180,7 @@ static esp_err_t get_system(httpd_req_t *req) {
              "\"heap_free\":%u,\"partition\":\"%s\",\"remote_pin_high\":%s}",
              (unsigned)trip_used, (unsigned)trip_total, (unsigned)cap_used, (unsigned)cap_total,
              (unsigned)esp_get_free_heap_size(), running != NULL ? running->label : "unknown",
-             yg_io_remote_level() ? "true" : "false");
+             actuator_pin_high() ? "true" : "false");
     return send_json(req, s_json);
 }
 
@@ -343,6 +353,11 @@ static esp_err_t post_call(httpd_req_t *req) {
     yg_app_call((yg_app_fn_t)req->user_ctx, NULL);
     return send_ok(req);
 }
+
+#if CONFIG_YG_GATE_DRIVER_RF433
+static void fn_rf_learn(yg_engine_t *e, uint32_t now, void *arg) { (void)arg; yg_engine_rf_learn_start(e, now); }
+static void fn_rf_forget(yg_engine_t *e, uint32_t now, void *arg) { (void)arg; yg_engine_rf_forget(e, now); }
+#endif
 
 static void fn_candidates(yg_engine_t *e, uint32_t now, void *arg) {
     yg_pairing_candidates_json(&e->pairing, e->s, now, arg, JSON_BUF_SIZE);
@@ -660,6 +675,10 @@ static const httpd_uri_t ROUTES[] = {
     { .uri = "/api/settings/reset", .method = HTTP_POST, .handler = post_settings_reset },
     { .uri = "/api/setpoint", .method = HTTP_POST, .handler = post_setpoint },
     { .uri = "/api/press", .method = HTTP_POST, .handler = post_press },
+#if CONFIG_YG_GATE_DRIVER_RF433
+    { .uri = "/api/rf/learn", .method = HTTP_POST, .handler = post_call, .user_ctx = (void *)fn_rf_learn },
+    { .uri = "/api/rf/forget", .method = HTTP_POST, .handler = post_call, .user_ctx = (void *)fn_rf_forget },
+#endif
     { .uri = "/api/test/led", .method = HTTP_POST, .handler = post_test_led },
     { .uri = "/api/test/beep", .method = HTTP_POST, .handler = post_test_beep },
     { .uri = "/api/pair/auto", .method = HTTP_POST, .handler = post_call, .user_ctx = (void *)fn_pair_auto },

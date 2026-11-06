@@ -17,6 +17,10 @@
 #include "yg_io.h"
 #include "yg_log.h"
 #include "yg_nvs.h"
+#include "sdkconfig.h"
+#if CONFIG_YG_GATE_DRIVER_RF433
+#include "yg_rf.h"
+#endif
 
 #define QUEUE_LENGTH 64
 #define TICK_MS 100u
@@ -176,7 +180,36 @@ void yg_app_trips_restarted(yg_engine_t *e, uint32_t now) {
 }
 
 /* The engine's connection to the hardware. */
-static void op_press(void *ctx, uint32_t ms) { (void)ctx; yg_io_press(ms); }
+#if CONFIG_YG_GATE_DRIVER_RF433
+static yg_rfcode_t s_rf_code; /* the app's copy of the learned code, for transmitting */
+
+typedef struct
+{
+    const uint16_t *durations;
+    uint16_t n;
+    bool first_high;
+} rf_capture_arg_t;
+
+static void do_rf_capture(yg_engine_t *e, uint32_t now, void *arg) {
+    const rf_capture_arg_t *a = arg;
+    yg_engine_on_rf_capture(e, now, a->durations, a->n, a->first_high);
+}
+
+/* Runs in the RF receive task; marshals one burst into the decision task. */
+static void on_rf_capture(const uint16_t *durations, uint16_t n, bool first_high) {
+    rf_capture_arg_t a = { durations, n, first_high };
+    yg_app_call(do_rf_capture, &a);
+}
+#endif
+
+static void op_press(void *ctx, uint32_t ms) {
+    (void)ctx;
+#if CONFIG_YG_GATE_DRIVER_RF433
+    yg_rf_transmit(&s_rf_code, ms);
+#else
+    yg_io_press(ms);
+#endif
+}
 static void op_led(void *ctx, yg_led_event_t e) { (void)ctx; yg_io_led(e); }
 static void op_buzz(void *ctx, yg_buzz_event_t e) { (void)ctx; yg_io_buzz(e, s_settings.buzzer_type); }
 static void op_log(void *ctx, const yg_record_t *r) { (void)ctx; yg_log_trip(r); }
@@ -185,6 +218,19 @@ static void op_scan(void *ctx, yg_scan_mode_t mode, const yg_beacon_t *b, bool s
 static void op_save_beacon(void *ctx, const yg_beacon_t *b) { (void)ctx; yg_nvs_save_beacon(b); }
 static void op_save_settings(void *ctx) { (void)ctx; yg_nvs_save_settings(&s_settings); }
 static void op_save_gyro_zero(void *ctx, const float zero[3]) { (void)ctx; yg_nvs_save_gyro_zero(zero); }
+
+#if CONFIG_YG_GATE_DRIVER_RF433
+static void op_save_rf_code(void *ctx, const yg_rfcode_t *code) {
+    (void)ctx;
+    s_rf_code = *code;
+    yg_nvs_save_rf_code(code);
+}
+
+static void op_rf_listen(void *ctx, bool on) {
+    (void)ctx;
+    yg_rf_listen(on, on_rf_capture);
+}
+#endif
 
 static void op_hotspot(void *ctx, bool on) {
     (void)ctx;
@@ -240,6 +286,10 @@ static const yg_engine_ops_t OPS = {
     .env_finish = op_env_finish,
     .factory_reset = op_factory_reset,
     .save_gyro_zero = op_save_gyro_zero,
+#if CONFIG_YG_GATE_DRIVER_RF433
+    .save_rf_code = op_save_rf_code,
+    .rf_listen = op_rf_listen,
+#endif
 };
 
 static void check_new_firmware(uint32_t now) {
@@ -342,6 +392,9 @@ void yg_app_start(const yg_app_hooks_t *hooks) {
         .reset_reason = (uint8_t)esp_reset_reason(),
         .sensor_id = yg_imu_id(),
         .force_hotspot = s_ota_pending,
+#if CONFIG_YG_GATE_DRIVER_RF433
+        .rf_learned = yg_nvs_load_rf_code(&s_rf_code),
+#endif
     };
     boot.has_gyro_zero = yg_nvs_load_gyro_zero(boot.gyro_zero);
     yg_engine_init(&s_engine, &OPS, &s_settings, &s_beacon, &boot, now_ms());
