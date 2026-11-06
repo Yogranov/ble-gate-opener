@@ -42,6 +42,13 @@ Power the unit from a phone charger in a socket that turns off with the ignition
 
 Fix the unit so it cannot slide or tumble. Any orientation works.
 
+## Board variants
+
+The firmware builds for two boards, chosen in `idf.py menuconfig` under "YogiGate pins", Gate driver:
+
+- **MOSFET** (default, `YG_GATE_DRIVER_MOSFET`): presses a wired remote's button, as above.
+- **RF433** (`YG_GATE_DRIVER_RF433`): no MOSFET and no wired remote. A CC1101 433 MHz transceiver learns a fixed-code remote once and transmits it to open the gate. Wiring and parts are in [hardware/design.md](hardware/design.md) section 9, the design in the [RF variant spec](docs/superpowers/specs/2026-11-06-rf433-board-variant-design.md). The board layout, case and printed manual wait for the real module to be measured.
+
 ## Build and flash
 
 Install ESP-IDF v6.1:

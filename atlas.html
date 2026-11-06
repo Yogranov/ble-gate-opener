@@ -1097,6 +1097,7 @@ python tools/yg_logs.py replay logs/&lt;file&gt;.ndjson --trip 12 --set motion_a
       <li>Holding the real button for 15&nbsp;s, and hearing its sound on the buzzer. On the bench the hold was faked in firmware</li>
       <li>The targets below: one day is far too few, and door slams have not been counted. On the first drives, pull-outs were detected about 4&nbsp;s after the car moved</li>
       <li>The remote's range when it sits against the board</li>
+      <li>The whole RF433 board variant: a CC1101 learns and replays a fixed code instead of a MOSFET pressing a remote. The firmware and page are written but not built or run on hardware. The CC1101 registers and pins are a first guess, and the layout, case and printed manual wait for the real module</li>
       <li>This version of the case, whose stronger hooks, snugger remote clips and 0.5&nbsp;mm button gap have not been printed</li>
       <li>The case in ASA through a summer of heat, and its effect on the signal</li>
       <li>The automatic press being silent, by ear</li>

@@ -93,5 +93,6 @@ Remove each of these once it has been tested.
 - **Slicing:** the files were sliced from Bambu Studio's command line, not its window. Look at the preview before printing, especially the logo's first layers.
 - **Printed manual:** the fit of the folded sheet under the top is calculated, and has not been tried. Nor has the effect of folded paper that close to the C6 on its signal, though it stays off the antenna.
 - **Signal:** compare the beacon's signal with the case and without it, in the car.
+- **RF433 case:** the RF variant drops the remote and MOSFET and adds a CC1101 module and a 17.3 cm antenna, so its case is a different build. It is not designed yet, and waits for the module's measured size and the antenna routing.
 - **Remote range:** if the remote has to move off the board, as in the [board design](../README.md#not-proven-yet), the Cover needs an opening for its wires, and the case can be about 20 mm shorter.
 - **Heat:** ASA in a glove box through a summer, especially the snap hooks and the clamp, which heat slowly relaxes. The sensor already read 48 °C after one parked hour in November.

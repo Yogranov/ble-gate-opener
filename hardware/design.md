@@ -234,3 +234,47 @@ Add a dab of hot glue at two header corners, or the USB cable and vibration will
 - `YG_PIN_BUTTON_EXT` defaults to GPIO7 and is read together with `YG_PIN_BUTTON`.
 - No other pin changes. The buzzer already uses GPIO11, and the MPU6050 already uses GPIO2 and GPIO3.
 - `buzzer_type` defaults to active, because this layout only works with an active buzzer.
+
+## 9. RF433 variant (CC1101)
+
+This variant opens the gate by transmitting a learned fixed code over a CC1101 433 MHz
+transceiver, with no MOSFET and no wired remote. It is the same firmware built with
+`YG_GATE_DRIVER = RF433` (menuconfig, "YogiGate pins"). See the design spec
+[2026-11-06-rf433-board-variant-design.md](../docs/superpowers/specs/2026-11-06-rf433-board-variant-design.md).
+
+**Parts delta from the MOSFET board.** Remove the P30N06LE MOSFET, the 220 Ohm and 10 kOhm
+resistors, and the BFT remote. Add a CC1101 433 MHz module (3.3 V, 8-pin) and a quarter-wave
+antenna, about 17.3 cm of wire at 433.92 MHz. The C6, MPU6050, buzzer, button and LED are
+unchanged.
+
+**Circuit.**
+
+```
+C6 GPIO6  ───────────── CC1101 SCLK
+C6 GPIO4  ───────────── CC1101 MOSI
+C6 GPIO5  ───────────── CC1101 MISO
+C6 GPIO10 ───────────── CC1101 CSn   (driven high at reset, idles deselected)
+C6 GPIO1  ───────────── CC1101 GDO0  (async OOK data, sampled and played by RMT)
+3V3       ───────────── CC1101 VCC
+GND       ───────────── CC1101 GND
+                        CC1101 ANT ── 17.3 cm wire whip
+
+GPIO11 ── buzzer +          (unchanged)
+GPIO7  ── button ── GND     (unchanged)
+GPIO2/3 ─ MPU6050 SDA/SCL   (unchanged)
+```
+
+The pins are provisional, set in `main/Kconfig.projbuild`. Confirm them against the real
+module, keeping CSn and GDO0 off the strapping pins and off GPIO18-23, and GPIO10 free now
+that the MOSFET is gone. A floating SPI bus cannot cause a transmit, because a transmit
+needs an explicit SPI command sequence, which is safer than the MOSFET's pulled-up gate.
+
+**Pending the real module.** The hole-by-hole matrix layout, `board-layout.html`, the atlas
+wiring view and pin table, the case, and the printed manual all need the CC1101 module's
+measured size and the antenna routing, so they are not drawn yet, following the rule to
+measure the real parts first. The firmware and the page are done and build with the RF
+driver; the CC1101 register values and these pins are a first guess to confirm on the bench
+against a HackRF capture, per the spec's test plan.
+
+**Regulatory.** 433.92 MHz is licence-free ISM at low power in region 1, including Israel.
+The CC1101 output near 10 dBm is within typical limits.
