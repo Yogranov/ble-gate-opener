@@ -18,7 +18,9 @@ void yg_rf_init(void);
 /* True if the CC1101 answered its version register over SPI. */
 bool yg_rf_present(void);
 
-/* Transmit the learned code for `ms`, as a held remote button would. */
+/* Transmit the learned code, repeating it for up to `ms` as a held remote button would.
+ * The transmit buffer caps that at about half a second of a typical fixed code, and the
+ * call blocks until it is sent. */
 void yg_rf_transmit(const yg_rfcode_t *code, uint32_t ms);
 
 /* Start or stop OOK receive. While on, each completed burst goes to `cb`. */

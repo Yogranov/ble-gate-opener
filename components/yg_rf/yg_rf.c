@@ -36,7 +36,9 @@ static const char *TAG = "yg_rf";
 #define RF_RX_MAX_SYMBOLS 512
 #define RF_TX_MAX_SYMBOLS 300
 #define RF_RX_IDLE_NS (32 * 1000 * 1000) /* an idle this long ends one capture */
-#define RF_RX_GLITCH_NS 20000
+/* The C6 receive filter counts 80 MHz group-clock ticks in 8 bits, so it tops out at
+ * 3187 ns. rmt_receive refuses anything longer, and then nothing is ever heard. */
+#define RF_RX_GLITCH_NS 3000
 
 static spi_device_handle_t s_spi;
 static bool s_present;
@@ -105,7 +107,12 @@ static void start_receive(void) {
         .signal_range_min_ns = RF_RX_GLITCH_NS,
         .signal_range_max_ns = RF_RX_IDLE_NS,
     };
-    rmt_receive(s_rx_chan, s_rx_symbols, sizeof(s_rx_symbols), &rc);
+    esp_err_t err = rmt_receive(s_rx_chan, s_rx_symbols, sizeof(s_rx_symbols), &rc);
+    /* Invalid state only means a receive is already running. Anything else means learning
+     * cannot hear, so say so rather than time out in silence. */
+    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
+        ESP_LOGE(TAG, "rmt_receive failed: %s", esp_err_to_name(err));
+    }
 }
 
 /* ISR: the received_symbols buffer is our own s_rx_symbols, so just record the
@@ -193,6 +200,9 @@ void yg_rf_init(void) {
         .trans_queue_depth = 2,
     };
     ESP_ERROR_CHECK(rmt_new_tx_channel(&txc, &s_tx_chan));
+    /* A TX channel drives its pin low from creation, even while disabled, but the CC1101
+     * drives GDO0 itself in idle and RX. Let go of the pin until a transmit needs it. */
+    gpio_output_disable(CONFIG_YG_PIN_RF_GDO0);
     const rmt_copy_encoder_config_t enc = {};
     ESP_ERROR_CHECK(rmt_new_copy_encoder(&enc, &s_copy_encoder));
 
@@ -236,8 +246,10 @@ void yg_rf_transmit(const yg_rfcode_t *code, uint32_t ms) {
     if (was_listening) {
         rmt_disable(s_rx_chan);
     }
-    ESP_ERROR_CHECK(rmt_enable(s_tx_chan));
     cc1101_strobe(CC1101_SIDLE);
+    /* Take GDO0 back only for the transmit. STX makes it the CC1101's data input. */
+    ESP_ERROR_CHECK(rmt_tx_switch_gpio(s_tx_chan, CONFIG_YG_PIN_RF_GDO0, false));
+    ESP_ERROR_CHECK(rmt_enable(s_tx_chan));
     cc1101_strobe(CC1101_SFTX);
     cc1101_strobe(CC1101_STX);
     const rmt_transmit_config_t tc = {.loop_count = 0};
@@ -245,6 +257,7 @@ void yg_rf_transmit(const yg_rfcode_t *code, uint32_t ms) {
     rmt_tx_wait_all_done(s_tx_chan, -1);
     cc1101_strobe(CC1101_SIDLE);
     rmt_disable(s_tx_chan);
+    gpio_output_disable(CONFIG_YG_PIN_RF_GDO0);
 
     if (was_listening) {
         ESP_ERROR_CHECK(rmt_enable(s_rx_chan));

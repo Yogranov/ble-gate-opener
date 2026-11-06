@@ -199,6 +199,8 @@ New considerations for a transmitter that reaches the gate from range:
   RF-module health like the existing motion-sensor health.
 - Learn from the real remote, replay, and capture the replay on the HackRF. Compare
   frequency, timing and framing with the golden reference.
+- Count the repeats in one replay. The transmit buffer caps a press at about half a second
+  of a typical fixed code, shorter than `press_ms`; the gate test shows if that is enough.
 
 **Later, with the gate:**
 
