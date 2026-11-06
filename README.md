@@ -102,6 +102,7 @@ A flash keeps the settings stored on a unit, so a changed default only reaches i
 | Single click | Press the remote |
 | Double click | Set the set point from the current signal |
 | Triple click | Start the hotspot |
+| Double-click then hold 6 s | Learn the gate remote (RF variant only) |
 
 ## Sounds
 

@@ -347,8 +347,9 @@ The only way to start the hotspot without USB. Every other action below is also 
 | Single click | Press the remote |
 | Double click | Set point from current signal |
 | Triple click | Start the hotspot |
+| Double-click then hold 6 s | Learn the gate remote (RF variant only) |
 
-A single click waits 400 ms in case it becomes a double click.
+A single click waits 400 ms in case it becomes a double click. On the RF variant, two clicks then a 6 s hold starts learning the gate remote, while a plain 3 s hold still pairs a beacon.
 
 A 15 s hold passes through the 3 s one, so two short beeps sound on the way and pairing starts, and letting go early leaves only that. A button down since power-on does not count towards the 15 s, because a stuck button would otherwise wipe the unit at every start. It still starts pairing, as it always has. The erase runs in the decision task once the sound has ended, so nothing can press the remote or save a setting before the restart. The next start has no beacon, so its one long beep says the reset is done.
 
