@@ -21,7 +21,7 @@ To build it, open [board-layout.html](board-layout.html) in a browser. It needs 
 | MuseLab ESP32-C6 board | 53 × 28 | Have |
 | MPU6050 module | 21 × 16 | Have |
 | P30N06LE MOSFET | | Have |
-| BFT remote, 2 buttons, 12 V 23A battery | 64 × 40 × 17 | Have |
+| BFT MITTO B RCB02 remote ("Type: B RCB" on the case, MITTO12v-UP on the board), 2 buttons, 12 V 23A battery | 64 × 40 × 17 | Have |
 | Active buzzer | About 12.5 across | Have |
 | Tactile button, through-hole | 6.5 × 6, 6 tall | Have |
 | 220 Ω and 10 kΩ resistors, 1 of each | | Have |

@@ -17,7 +17,7 @@ Sizes are the owner's measurements, except the buzzer, which is estimated from a
 | 10 kΩ resistor | | Gate pull-down |
 | Active buzzer | About 12.5 across | Beeps, on by default |
 | Tactile button, through-hole | 6.5 × 6, 6 tall | Same gestures as BOOT |
-| BFT remote, on its own battery | 64 × 40 × 17 | Sends the gate signal |
+| BFT MITTO B RCB02 remote, on its own battery | 64 × 40 × 17 | Sends the gate signal |
 
 ### Details of the real parts
 
