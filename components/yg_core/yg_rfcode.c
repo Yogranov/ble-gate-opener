@@ -1,5 +1,7 @@
 #include "yg_rfcode.h"
 
+#include <string.h>
+
 #define TOL_PERCENT 25u
 #define TOL_FLOOR_US 80u
 
@@ -16,4 +18,42 @@ bool yg_rfcode_frames_match(const uint16_t *a, const uint16_t *b, uint16_t n) {
         if (!close_enough(a[i], b[i])) return false;
     }
     return true;
+}
+
+bool yg_rfcode_learn(const uint16_t *durations, uint16_t n, bool first_high,
+                     uint8_t min_repeats, yg_rfcode_t *out) {
+    uint16_t start[YG_RF_MAX_FRAMES], len[YG_RF_MAX_FRAMES], gap[YG_RF_MAX_FRAMES];
+    uint16_t frames = 0, span = 0;
+    bool high = first_high;
+    for (uint16_t i = 0; i < n; i++) {
+        if (!high && durations[i] >= YG_RF_GAP_MIN_US) { /* a gap ends a frame */
+            if (i > span && frames < YG_RF_MAX_FRAMES) {
+                start[frames] = span;
+                len[frames] = (uint16_t)(i - span);
+                gap[frames] = durations[i];
+                frames++;
+            }
+            span = (uint16_t)(i + 1); /* the next frame starts carrier-on */
+        }
+        high = !high;
+    }
+    if (frames < min_repeats) return false;
+    for (uint16_t f = 0; f + min_repeats <= frames; f++) {
+        if (len[f] == 0 || len[f] > YG_RF_MAX_EDGES) continue;
+        uint16_t agree = 1;
+        for (uint16_t g = f + 1; g < frames; g++) {
+            if (len[g] == len[f] &&
+                yg_rfcode_frames_match(&durations[start[f]], &durations[start[g]], len[f])) {
+                agree++;
+            }
+        }
+        if (agree >= min_repeats) {
+            out->learned = true;
+            out->count = len[f];
+            memcpy(out->edges, &durations[start[f]], (size_t)len[f] * sizeof(uint16_t));
+            out->gap_us = gap[f];
+            return true;
+        }
+    }
+    return false;
 }

@@ -5,7 +5,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#define YG_RF_MAX_EDGES 300u /* durations in one frame */
+#define YG_RF_MAX_EDGES 300u   /* durations in one frame */
+#define YG_RF_MAX_FRAMES 64u   /* frames examined in one capture */
+#define YG_RF_GAP_MIN_US 3000u /* a carrier-off period this long separates frames */
 
 typedef struct
 {
@@ -17,3 +19,10 @@ typedef struct
 
 /* True if every duration in a and b is within tolerance (25% or an 80 us floor). */
 bool yg_rfcode_frames_match(const uint16_t *a, const uint16_t *b, uint16_t n);
+
+/* Split a raw capture into frames at long carrier-off gaps, and return a frame that
+ * repeats at least `min_repeats` times within tolerance. first_high is true if
+ * durations[0] is carrier-on. Returns false if too few frames agree, which is what a
+ * rolling or noisy code looks like. */
+bool yg_rfcode_learn(const uint16_t *durations, uint16_t n, bool first_high,
+                     uint8_t min_repeats, yg_rfcode_t *out);
