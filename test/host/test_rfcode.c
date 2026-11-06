@@ -78,12 +78,29 @@ static void tolerates_jitter(void) {
     CHECK_INT(out.count, 5);
 }
 
+static void replays_for_the_press_duration(void) {
+    yg_rfcode_t code = {.learned = true, .count = 4, .gap_us = 10000};
+    uint16_t f[] = {300, 900, 300, 900};
+    memcpy(code.edges, f, sizeof(f));
+    uint16_t out[512];
+    /* frame = 2400us, cycle = 12400us; a 300ms press fits about 24 cycles. */
+    uint16_t w = yg_rfcode_replay(&code, 300, out, 512);
+    CHECK(w > 0);
+    CHECK_INT(out[0], 300);
+    CHECK(w >= 4 * 20);
+    uint16_t cap = yg_rfcode_replay(&code, 300, out, 10); /* respect max */
+    CHECK(cap <= 10);
+    yg_rfcode_t none = {0};
+    CHECK_INT(yg_rfcode_replay(&none, 300, out, 512), 0);
+}
+
 int main(void) {
     frames_match_within_tolerance();
     learns_a_repeating_frame();
     rejects_too_few_repeats();
     rejects_rolling_code();
     tolerates_jitter();
+    replays_for_the_press_duration();
     printf("%d checks, %d failures\n", yg_test_checks, yg_test_failures);
     return yg_test_failures != 0;
 }

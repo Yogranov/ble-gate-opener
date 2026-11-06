@@ -57,3 +57,20 @@ bool yg_rfcode_learn(const uint16_t *durations, uint16_t n, bool first_high,
     }
     return false;
 }
+
+uint16_t yg_rfcode_replay(const yg_rfcode_t *code, uint32_t ms, uint16_t *out, uint16_t max) {
+    if (!code->learned || code->count == 0) return 0;
+    uint32_t frame_us = 0;
+    for (uint16_t i = 0; i < code->count; i++) frame_us += code->edges[i];
+    uint32_t cycle_us = frame_us + code->gap_us;
+    uint32_t budget_us = ms * 1000u;
+    uint32_t elapsed = 0;
+    uint16_t w = 0;
+    while (w + code->count <= max) {
+        for (uint16_t i = 0; i < code->count; i++) out[w++] = code->edges[i];
+        elapsed += cycle_us;
+        if (elapsed >= budget_us) break;
+        if (w < max) out[w++] = code->gap_us;
+    }
+    return w;
+}

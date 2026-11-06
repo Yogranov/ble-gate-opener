@@ -26,3 +26,7 @@ bool yg_rfcode_frames_match(const uint16_t *a, const uint16_t *b, uint16_t n);
  * rolling or noisy code looks like. */
 bool yg_rfcode_learn(const uint16_t *durations, uint16_t n, bool first_high,
                      uint8_t min_repeats, yg_rfcode_t *out);
+
+/* Write the on/off durations to transmit for `ms`, repeating frame+gap. Returns the
+ * count written (<= max). out[0] is carrier-on. Zero if nothing is learned. */
+uint16_t yg_rfcode_replay(const yg_rfcode_t *code, uint32_t ms, uint16_t *out, uint16_t max);
