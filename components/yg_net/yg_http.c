@@ -301,14 +301,17 @@ static esp_err_t post_setpoint(httpd_req_t *req) {
     return arg.ok ? send_ok(req) : send_error(req, "400 Bad Request", "nothing heard or out of range");
 }
 
+/* Leaves NULL if the press started, or says why it did not. */
 static void fn_press(yg_engine_t *e, uint32_t now, void *arg) {
-    *(bool *)arg = yg_engine_press(e, now, YG_PRESS_WEB);
+    if (!yg_engine_press(e, now, YG_PRESS_WEB)) {
+        *(const char **)arg = yg_engine_remote_ready(e) ? "already pressing" : "no remote learned";
+    }
 }
 
 static esp_err_t post_press(httpd_req_t *req) {
-    bool started = false;
-    yg_app_call(fn_press, &started);
-    return started ? send_ok(req) : send_error(req, "409 Conflict", "already pressing");
+    const char *refused = NULL;
+    yg_app_call(fn_press, &refused);
+    return refused == NULL ? send_ok(req) : send_error(req, "409 Conflict", refused);
 }
 
 static esp_err_t post_test_led(httpd_req_t *req) {

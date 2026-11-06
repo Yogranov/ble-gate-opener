@@ -528,7 +528,7 @@ async function poll() {
 }
 $("press").addEventListener("click", act(() => post("/api/press"), "Pressing the remote"));
 $("rfLearn").addEventListener("click", act(() => post("/api/rf/learn"), "Listening for your remote"));
-$("rfForget").addEventListener("click", act(() => post("/api/rf/forget"), "Forgetting the remote"));
+$("rfForget").addEventListener("click", () => { if (confirm("Forget the gate remote? The gate will stop opening until you learn it again.")) act(() => post("/api/rf/forget"), "Forgetting the remote")(); });
 
 /* Beacon */
 let lastPairMode = "idle", pairStartSaves = 0;

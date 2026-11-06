@@ -131,6 +131,7 @@ typedef struct
     bool sensor_sounded;
     uint16_t pair_saves;
     bool learning;
+    bool learn_rejected; /* the rejected cue already played this learn session */
     uint32_t learn_started;
     bool rf_learned;
     uint32_t recent_time[YG_ENGINE_RECENT_ADVERTS];
@@ -168,11 +169,13 @@ void yg_engine_hotspot_request(yg_engine_t *e, uint32_t now);
 bool yg_engine_simulate_motion(yg_engine_t *e, uint32_t now);   /* Debug flag only. */
 bool yg_engine_capture_now(yg_engine_t *e, uint32_t now);       /* Debug flag only. */
 
-/* RF variant: learn the gate remote's fixed code, cancel, or forget it. Unused on the
- * MOSFET build. yg_engine_on_rf_capture feeds one captured burst to the learner. */
+/* RF variant: learn the gate remote's fixed code, or forget it. Learning ends by itself,
+ * on a stable code or at the pair timeout. Unused on the MOSFET build.
+ * yg_engine_on_rf_capture feeds one captured burst to the learner. */
 void yg_engine_rf_learn_start(yg_engine_t *e, uint32_t now);
-void yg_engine_rf_learn_cancel(yg_engine_t *e, uint32_t now);
 void yg_engine_rf_forget(yg_engine_t *e, uint32_t now);
+/* False only on the RF variant before a remote is learned, when a press has nothing to send. */
+bool yg_engine_remote_ready(const yg_engine_t *e);
 void yg_engine_on_rf_capture(yg_engine_t *e, uint32_t now, const uint16_t *durations, uint16_t n, bool first_high);
 
 /* Call after a setting changes. The value is logged, never for the password. */

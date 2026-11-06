@@ -69,16 +69,19 @@ static int cmd_pair(int argc, char **argv) {
     return 0;
 }
 
+/* Leaves NULL if the press started, or says why it did not. */
 static void do_press(yg_engine_t *e, uint32_t now, void *arg) {
-    *(bool *)arg = yg_engine_press(e, now, YG_PRESS_WEB);
+    if (!yg_engine_press(e, now, YG_PRESS_WEB)) {
+        *(const char **)arg = yg_engine_remote_ready(e) ? "Already pressing" : "No remote learned";
+    }
 }
 
 static int cmd_press(int argc, char **argv) {
     (void)argc;
     (void)argv;
-    bool started = false;
-    yg_app_call(do_press, &started);
-    printf(started ? "Pressing\n" : "Already pressing\n");
+    const char *refused = NULL;
+    yg_app_call(do_press, &refused);
+    printf("%s\n", refused == NULL ? "Pressing" : refused);
     return 0;
 }
 

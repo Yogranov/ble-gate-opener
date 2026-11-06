@@ -6,6 +6,7 @@
 #define CLICK_GAP_MS 400u
 #define HOLD_MS      3000u
 #define LEARN_MS     6000u
+#define LEARN_PRESS_MS 1000u /* after two clicks, a press this long is the learn hold, not a click */
 #define RESET_MS     15000u
 
 void yg_gesture_init(yg_gesture_detector_t *g) {
@@ -27,8 +28,14 @@ yg_gesture_t yg_gesture_update(yg_gesture_detector_t *g, uint32_t now, bool pres
             g->hold_fired = false;
             g->reset_fired = false;
         } else if (!g->hold_fired) {
-            g->clicks++;
-            g->last_release = now;
+            if (g->clicks == 2 && now - g->press_start >= LEARN_PRESS_MS) {
+                /* The learn hold, let go early. Counted as a third click it would start
+                 * the hotspot, so it is dropped. */
+                g->clicks = 0;
+            } else {
+                g->clicks++;
+                g->last_release = now;
+            }
         }
     }
     if (g->stable) {

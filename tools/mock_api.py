@@ -179,6 +179,9 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"ok": False, "error": "missing X-YogiGate header"}, 403)
             return
         if path == "/api/press":
+            if state["driver"] == "rf433" and not state["rf_learned"]:
+                self.send_json({"ok": False, "error": "no remote learned"}, 409)
+                return
             state["pressing_until"] = time.time() + 2
         elif path == "/api/rf/learn":
             state["rf_learned"] = True

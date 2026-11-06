@@ -68,6 +68,35 @@ static void double_click_then_hold_learns(void) {
     CHECK_INT(seen[YG_GESTURE_DOUBLE], 0);
 }
 
+/* Giving up on the learn hold must not count as a third click and start the hotspot,
+ * nor leave two clicks behind to set the set point. After two clicks, anything over
+ * a second is the hold, not a click. */
+static void giving_up_on_the_learn_hold_does_nothing(void) {
+    static const uint32_t HELD_MS[] = {1500, 4000};
+    for (unsigned i = 0; i < sizeof(HELD_MS) / sizeof(HELD_MS[0]); i++) {
+        setup();
+        click();
+        click();
+        level(true, HELD_MS[i]);
+        level(false, 1000);
+        CHECK_INT(seen[YG_GESTURE_TRIPLE], 0);
+        CHECK_INT(seen[YG_GESTURE_DOUBLE], 0);
+        CHECK_INT(seen[YG_GESTURE_LEARN], 0);
+        CHECK_INT(seen[YG_GESTURE_HOLD], 0);
+        /* And the next gesture starts clean. */
+        click();
+        level(false, 500);
+        CHECK_INT(seen[YG_GESTURE_SINGLE], 1);
+    }
+    /* A brisk third click is still a triple. */
+    setup();
+    click();
+    click();
+    level(true, 300);
+    level(false, 500);
+    CHECK_INT(seen[YG_GESTURE_TRIPLE], 1);
+}
+
 static void hold_fires_once_and_release_adds_no_click(void) {
     setup();
     level(true, 2900);
@@ -166,6 +195,7 @@ int main(void) {
     RUN(double_click);
     RUN(triple_click);
     RUN(double_click_then_hold_learns);
+    RUN(giving_up_on_the_learn_hold_does_nothing);
     RUN(hold_fires_once_and_release_adds_no_click);
     RUN(holding_15_s_asks_for_a_factory_reset_once);
     RUN(letting_go_before_15_s_erases_nothing);

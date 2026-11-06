@@ -323,9 +323,13 @@ void yg_engine_on_gesture(yg_engine_t *e, uint32_t now, yg_gesture_t g) {
         yg_engine_pair_start(e, now, YG_PAIR_AUTO);
         break;
     case YG_GESTURE_LEARN:
-        /* RF variant only: rf_listen is wired only on that build. */
+        /* RF variant only: rf_listen is wired only on that build. Elsewhere the gesture
+         * is refused out loud, as the buzzer answers whoever is at the button. */
         if (e->ops->rf_listen != NULL) {
             yg_engine_rf_learn_start(e, now);
+        } else {
+            led(e, YG_LED_REJECTED);
+            buzz(e, YG_BUZZ_REJECTED);
         }
         break;
     case YG_GESTURE_FACTORY_RESET:
@@ -407,7 +411,7 @@ void yg_engine_tick(yg_engine_t *e, uint32_t now) {
         if (e->ops->rf_listen != NULL) {
             e->ops->rf_listen(e->ops->ctx, false);
         }
-        led_idle(e);
+        led(e, YG_LED_REJECTED);
         buzz(e, YG_BUZZ_REJECTED);
     }
 
@@ -450,7 +454,18 @@ void yg_engine_tick(yg_engine_t *e, uint32_t now) {
     }
 }
 
+bool yg_engine_remote_ready(const yg_engine_t *e) {
+    /* rf_listen is wired only on the RF build, which has nothing to send until a remote is learned. */
+    return e->ops->rf_listen == NULL || e->rf_learned;
+}
+
 bool yg_engine_press(yg_engine_t *e, uint32_t now, yg_press_reason_t reason) {
+    /* With nothing to send, the press sound would tell the person it worked. */
+    if (!yg_engine_remote_ready(e)) {
+        led(e, YG_LED_REJECTED);
+        buzz(e, YG_BUZZ_REJECTED);
+        return false;
+    }
     yg_press_reason_t started = yg_trigger_manual(&e->trigger, now, reason);
     if (started == YG_PRESS_NONE) {
         return false;
@@ -764,24 +779,13 @@ int yg_engine_debug_json(const yg_engine_t *e, uint32_t now, char *buf, size_t l
 
 void yg_engine_rf_learn_start(yg_engine_t *e, uint32_t now) {
     e->learning = true;
+    e->learn_rejected = false;
     e->learn_started = now;
     if (e->ops->rf_listen != NULL) {
         e->ops->rf_listen(e->ops->ctx, true);
     }
     led(e, YG_LED_PAIRING);
     buzz(e, YG_BUZZ_PAIRING);
-}
-
-void yg_engine_rf_learn_cancel(yg_engine_t *e, uint32_t now) {
-    (void)now;
-    if (!e->learning) {
-        return;
-    }
-    e->learning = false;
-    if (e->ops->rf_listen != NULL) {
-        e->ops->rf_listen(e->ops->ctx, false);
-    }
-    led_idle(e);
 }
 
 void yg_engine_on_rf_capture(yg_engine_t *e, uint32_t now, const uint16_t *durations, uint16_t n, bool first_high) {
@@ -801,7 +805,10 @@ void yg_engine_on_rf_capture(yg_engine_t *e, uint32_t now, const uint16_t *durat
         }
         led(e, YG_LED_SAVED);
         buzz(e, YG_BUZZ_SAVED);
-    } else {
+    } else if (!e->learn_rejected) {
+        /* Once per session. A busy 433 MHz band can hand over burst after burst that is
+         * not a remote, and a cue for each would never stop. Learning keeps listening. */
+        e->learn_rejected = true;
         led(e, YG_LED_REJECTED);
         buzz(e, YG_BUZZ_REJECTED);
     }

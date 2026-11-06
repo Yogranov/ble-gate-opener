@@ -318,7 +318,8 @@ An upload that goes silent is abandoned after 30 s, so a phone dropping off Wi-F
 | `GET`, `POST /api/settings` | Read, or partly update, settings |
 | `POST /api/settings/reset` | Put every setting back to its default |
 | `POST /api/setpoint` | `{"here":true}`, `{"dbm":-85}` or `{"any":true}` |
-| `POST /api/press` | Press the remote |
+| `POST /api/press` | Press the remote. 409 while already pressing, or on the RF variant before a remote is learned |
+| `POST /api/rf/learn`, `/forget` | RF variant only: listen for the gate remote until a stable code is heard or the pair timeout ends, or forget the learned one |
 | `POST /api/test/led`, `/api/test/beep` | Output tests. They work whatever the settings say. A beep can name a sound, as `{"sound":"error"}` |
 | `POST /api/pair/auto`, `/scan`, `/cancel`, `/forget` | Pairing control |
 | `GET /api/pair/candidates` | Live candidate list |
@@ -349,7 +350,7 @@ The only way to start the hotspot without USB. Every other action below is also 
 | Triple click | Start the hotspot |
 | Double-click then hold 6 s | Learn the gate remote (RF variant only) |
 
-A single click waits 400 ms in case it becomes a double click. On the RF variant, two clicks then a 6 s hold starts learning the gate remote, while a plain 3 s hold still pairs a beacon.
+A single click waits 400 ms in case it becomes a double click. On the RF variant, two clicks then a 6 s hold starts learning the gate remote, while a plain 3 s hold still pairs a beacon. After two clicks, a third press over 1 s is that hold, and letting go of it before 6 s does nothing, rather than counting as a third click that would start the hotspot. On the MOSFET build the learn gesture is refused with two rattles.
 
 A 15 s hold passes through the 3 s one, so two short beeps sound on the way and pairing starts, and letting go early leaves only that. A button down since power-on does not count towards the 15 s, because a stuck button would otherwise wipe the unit at every start. It still starts pairing, as it always has. The erase runs in the decision task once the sound has ended, so nothing can press the remote or save a setting before the restart. The next start has no beacon, so its one long beep says the reset is done.
 
@@ -359,10 +360,10 @@ A 15 s hold passes through the 3 s one, so two short beeps sound on the way and 
 |---|---|---|
 | Automatic press | White during the press | None |
 | Press by hand, from the button or page | White during the press | One short |
-| Pairing | Fast blue blink | Two short, when holding close starts |
+| Pairing, or learning the gate remote (RF variant) | Fast blue blink | Two short, when holding close or learning starts |
 | Hotspot requested | Cyan for 2 s | Three short |
-| Pair saved, set point set here, or settings reset to defaults | Green for 2 s | Short, short, long |
-| Pair timeout or set point rejected | Three red blinks | Two rattles |
+| Pair saved, set point set here, gate remote learned or forgotten, or settings reset to defaults | Green for 2 s | Short, short, long |
+| Pair or learn timeout, set point rejected, a remote that cannot be learned (once per learn, as a busy band can bring many), a press by hand on an RF unit with no remote learned, or the learn gesture on a unit without the radio | Three red blinks | Two rattles |
 | Sensor failed | Red double blink every 10 s | Three long, at most once per trip, and not if the sensor is turned off |
 | Unpaired | Slow amber blink, first 30 s after boot | One long, at power-on |
 | Factory reset, from a 15 s hold | Magenta until the restart | Five short, one long |

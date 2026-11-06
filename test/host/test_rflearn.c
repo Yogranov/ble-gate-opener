@@ -9,10 +9,11 @@ static struct {
     int rf_saves;
     yg_rfcode_t last_saved;
     bool listening;
+    int presses;
     int beeps[YG_BUZZ_COUNT];
 } fake;
 
-static void op_press(void *c, uint32_t ms) { (void)c; (void)ms; }
+static void op_press(void *c, uint32_t ms) { (void)c; (void)ms; fake.presses++; }
 static void op_led(void *c, yg_led_event_t e) { (void)c; (void)e; }
 static void op_buzz(void *c, yg_buzz_event_t e) { (void)c; fake.beeps[e]++; }
 static void op_log(void *c, const yg_record_t *r) { (void)c; (void)r; }
@@ -39,7 +40,15 @@ static yg_engine_t *e;
 static yg_settings_t s;
 static const yg_addr_t GATE = {{0xC5, 0xB0, 0xE6, 0x53, 0x59, 0x02}, YG_ADDR_TYPE_RANDOM};
 
-static uint32_t boot_engine(bool rf_learned) {
+/* The MOSFET build wires no RF ops. */
+static yg_engine_ops_t mosfet_ops(void) {
+    yg_engine_ops_t ops = OPS;
+    ops.save_rf_code = NULL;
+    ops.rf_listen = NULL;
+    return ops;
+}
+
+static uint32_t boot_with(const yg_engine_ops_t *ops, bool rf_learned) {
     yg_beacon_t b = {true, GATE};
     yg_boot_info_t info = {0};
     info.trip = 1;
@@ -51,8 +60,12 @@ static uint32_t boot_engine(bool rf_learned) {
     if (e == NULL) e = calloc(1, sizeof(*e));
     yg_settings_defaults(&s);
     memset(&fake, 0, sizeof(fake));
-    yg_engine_init(e, &OPS, &s, &b, &info, now);
+    yg_engine_init(e, ops, &s, &b, &info, now);
     return now;
+}
+
+static uint32_t boot_engine(bool rf_learned) {
+    return boot_with(&OPS, rf_learned);
 }
 
 /* reps copies of frame (odd len) each followed by a long gap. */
@@ -110,8 +123,55 @@ static void rejects_rolling_and_keeps_listening(void) {
     yg_engine_on_rf_capture(e, now, buf, w, true);
     CHECK_INT(fake.rf_saves, 0);
     CHECK(fake.listening);
-    CHECK(fake.beeps[YG_BUZZ_REJECTED] >= 1);
+    CHECK_INT(fake.beeps[YG_BUZZ_REJECTED], 1);
+    /* A busy band can hand over burst after burst. One cue per session is enough. */
+    yg_engine_on_rf_capture(e, now + 500, buf, w, true);
+    yg_engine_on_rf_capture(e, now + 900, buf, w, true);
+    CHECK(fake.listening);
+    CHECK_INT(fake.beeps[YG_BUZZ_REJECTED], 1);
+    /* A new session may say it again. */
+    yg_engine_rf_learn_start(e, now + 1000);
+    yg_engine_on_rf_capture(e, now + 1500, buf, w, true);
+    CHECK_INT(fake.beeps[YG_BUZZ_REJECTED], 2);
     status_has("\"rf_learned\":false");
+}
+
+/* Nothing learned means nothing to send, so a person pressing hears it refused. */
+static void refuses_a_press_with_nothing_learned(void) {
+    uint32_t now = boot_engine(false);
+    CHECK(!yg_engine_remote_ready(e));
+    CHECK(!yg_engine_press(e, now, YG_PRESS_BUTTON));
+    CHECK_INT(fake.presses, 0);
+    CHECK_INT(fake.beeps[YG_BUZZ_PRESS], 0);
+    CHECK_INT(fake.beeps[YG_BUZZ_REJECTED], 1);
+
+    now = boot_engine(true);
+    CHECK(yg_engine_remote_ready(e));
+    CHECK(yg_engine_press(e, now, YG_PRESS_BUTTON));
+    CHECK_INT(fake.presses, 1);
+    CHECK_INT(fake.beeps[YG_BUZZ_PRESS], 1);
+
+    /* The MOSFET build has no code to learn and always presses. */
+    yg_engine_ops_t mosfet = mosfet_ops();
+    now = boot_with(&mosfet, false);
+    CHECK(yg_engine_remote_ready(e));
+    CHECK(yg_engine_press(e, now, YG_PRESS_BUTTON));
+    CHECK_INT(fake.presses, 1);
+}
+
+static void learn_gesture(void) {
+    uint32_t now = boot_engine(false);
+    yg_engine_on_gesture(e, now, YG_GESTURE_LEARN);
+    CHECK(fake.listening);
+    CHECK_INT(fake.beeps[YG_BUZZ_PAIRING], 1);
+
+    /* Without the radio the gesture is refused out loud, not ignored. */
+    yg_engine_ops_t mosfet = mosfet_ops();
+    now = boot_with(&mosfet, false);
+    yg_engine_on_gesture(e, now, YG_GESTURE_LEARN);
+    CHECK(!fake.listening);
+    CHECK_INT(fake.beeps[YG_BUZZ_PAIRING], 0);
+    CHECK_INT(fake.beeps[YG_BUZZ_REJECTED], 1);
 }
 
 static void times_out(void) {
@@ -121,6 +181,7 @@ static void times_out(void) {
     uint32_t t = now + (uint32_t)s.pair_timeout_s * 1000u + 100u;
     yg_engine_tick(e, t);
     CHECK(!fake.listening);
+    CHECK_INT(fake.beeps[YG_BUZZ_REJECTED], 1);
 }
 
 static void forgets(void) {
@@ -135,6 +196,8 @@ static void forgets(void) {
 int main(void) {
     learns_and_saves();
     rejects_rolling_and_keeps_listening();
+    refuses_a_press_with_nothing_learned();
+    learn_gesture();
     times_out();
     forgets();
     printf("%d checks, %d failures\n", yg_test_checks, yg_test_failures);
